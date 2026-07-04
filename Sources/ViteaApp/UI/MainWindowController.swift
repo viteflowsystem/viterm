@@ -43,6 +43,8 @@ final class MainWindowController: NSWindowController {
         }
         sidebar.onAddRepository = { [weak self] in self?.addRepository(nil) }
         sidebar.onNewWorktree = { [weak self] in self?.newWorktree(nil) }
+        sidebar.onNewSession = { [weak self] in self?.newSession(nil) }
+        sidebar.onShowPalette = { [weak self] in self?.showPalette(nil) }
         sidebar.onAddSession = { [weak self] worktreePath in
             self?.selectedWorktreePath = worktreePath
             self?.startDefaultSession(in: worktreePath)

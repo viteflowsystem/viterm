@@ -10,6 +10,8 @@ final class SidebarViewController: NSViewController {
     var onSelectWorktree: ((String) -> Void)?
     var onAddRepository: (() -> Void)?
     var onNewWorktree: (() -> Void)?
+    var onNewSession: (() -> Void)?
+    var onShowPalette: (() -> Void)?
     /// 「＋ セッションを追加」行のクリック(引数は worktree パス)。
     var onAddSession: ((String) -> Void)?
 
@@ -70,16 +72,16 @@ final class SidebarViewController: NSViewController {
         emptyState.addArrangedSubview(emptyButton)
         emptyState.isHidden = true
 
-        // 下部アクションバー(UIモックの sb-actions 相当)。幅が狭くても切れないよう縦並び。
+        // 下部アクションバー(UIモックの sb-actions 準拠: 薄いテキスト行のヒント兼ボタン)。
         let actionBar = NSStackView()
         actionBar.orientation = .vertical
         actionBar.alignment = .leading
-        actionBar.spacing = 2
-        actionBar.edgeInsets = NSEdgeInsets(top: 6, left: 8, bottom: 8, right: 8)
-        let addWorktreeButton = sidebarActionButton("＋ worktree  ⌘N", action: #selector(didTapNewWorktree))
-        let addRepoButton = sidebarActionButton("＋ リポジトリ", action: #selector(didTapAddRepository))
-        actionBar.addArrangedSubview(addWorktreeButton)
-        actionBar.addArrangedSubview(addRepoButton)
+        actionBar.spacing = 3
+        actionBar.edgeInsets = NSEdgeInsets(top: 8, left: 14, bottom: 10, right: 8)
+        actionBar.addArrangedSubview(actionRow(hint: "⌘N", title: "新規 worktree", action: #selector(didTapNewWorktree)))
+        actionBar.addArrangedSubview(actionRow(hint: "⌘T", title: "新規セッション", action: #selector(didTapNewSession)))
+        actionBar.addArrangedSubview(actionRow(hint: "⌘K", title: "コマンドパレット", action: #selector(didTapShowPalette)))
+        actionBar.addArrangedSubview(actionRow(hint: "＋", title: "リポジトリを追加", action: #selector(didTapAddRepository)))
 
         let separator = NSBox()
         separator.boxType = .separator
@@ -102,15 +104,30 @@ final class SidebarViewController: NSViewController {
         view = container
     }
 
-    private func sidebarActionButton(_ title: String, action: Selector) -> NSButton {
-        let button = NSButton(title: title, target: self, action: action)
-        button.bezelStyle = .accessoryBarAction
-        button.font = .systemFont(ofSize: 11)
+    /// sb-actions の1行: 「⌘N 新規 worktree」のような、ヒント(等幅・薄)+ラベルのテキスト行。
+    /// ボタンだが装飾は付けない(モック準拠)。
+    private func actionRow(hint: String, title: String, action: Selector) -> NSButton {
+        let attributed = NSMutableAttributedString()
+        attributed.append(NSAttributedString(string: hint.padding(toLength: max(hint.count, 2), withPad: " ", startingAt: 0), attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
+            .foregroundColor: NSColor.tertiaryLabelColor,
+        ]))
+        attributed.append(NSAttributedString(string: "  " + title, attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]))
+        let button = NSButton(title: "", target: self, action: action)
+        button.attributedTitle = attributed
+        button.isBordered = false
+        button.alignment = .left
+        button.setContentHuggingPriority(.defaultLow, for: .horizontal)
         return button
     }
 
     @objc private func didTapAddRepository() { onAddRepository?() }
     @objc private func didTapNewWorktree() { onNewWorktree?() }
+    @objc private func didTapNewSession() { onNewSession?() }
+    @objc private func didTapShowPalette() { onShowPalette?() }
 
     func set(viewModel: SidebarViewModel, selectedWorktreePath: String? = nil) {
         self.viewModel = viewModel

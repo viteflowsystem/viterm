@@ -14,6 +14,11 @@ final class SidebarViewController: NSViewController {
     var onShowPalette: (() -> Void)?
     /// 「＋ セッションを追加」行のクリック(引数は worktree パス)。
     var onAddSession: ((String) -> Void)?
+    // コンテキストメニュー(右クリック)のアクション。
+    var onRenameSession: ((AgentSession.ID, String) -> Void)?
+    var onTerminateSession: ((AgentSession.ID) -> Void)?
+    var onMergeWorktree: ((String) -> Void)?
+    var onRemoveWorktree: ((String) -> Void)?
 
     private let outlineView = NSOutlineView()
     private let scrollView = NSScrollView()
@@ -54,6 +59,9 @@ final class SidebarViewController: NSViewController {
         outlineView.dataSource = self
         outlineView.target = self
         outlineView.action = #selector(didClickRow)
+        let contextMenu = NSMenu()
+        contextMenu.delegate = self
+        outlineView.menu = contextMenu
 
         scrollView.documentView = outlineView
         scrollView.hasVerticalScroller = true
@@ -354,6 +362,44 @@ extension SidebarViewController: NSOutlineViewDelegate {
         didClickRow()
     }
 
+    // MARK: - コンテキストメニュー
+
+    private func clickedNode() -> Node? {
+        let row = outlineView.clickedRow
+        guard row >= 0 else { return nil }
+        return outlineView.item(atRow: row) as? Node
+    }
+
+    @objc private func menuRenameSession(_ sender: NSMenuItem) {
+        guard let node = clickedNode(), case let .session(s) = node.kind else { return }
+        onRenameSession?(s.id, s.session.displayName)
+    }
+
+    @objc private func menuTerminateSession(_ sender: NSMenuItem) {
+        guard let node = clickedNode(), case let .session(s) = node.kind else { return }
+        onTerminateSession?(s.id)
+    }
+
+    @objc private func menuAddSession(_ sender: NSMenuItem) {
+        guard let node = clickedNode(), case let .worktree(wt) = node.kind else { return }
+        onAddSession?(wt.id)
+    }
+
+    @objc private func menuMergeWorktree(_ sender: NSMenuItem) {
+        guard let node = clickedNode(), case let .worktree(wt) = node.kind else { return }
+        onMergeWorktree?(wt.id)
+    }
+
+    @objc private func menuRemoveWorktree(_ sender: NSMenuItem) {
+        guard let node = clickedNode(), case let .worktree(wt) = node.kind else { return }
+        onRemoveWorktree?(wt.id)
+    }
+
+    @objc private func menuRevealWorktree(_ sender: NSMenuItem) {
+        guard let node = clickedNode(), case let .worktree(wt) = node.kind else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: wt.id)])
+    }
+
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
         let rowView = AccentBarRowView()
         // 2つ目以降のリポジトリ行の上にボーダーを引く(UIモックの .repo-sep 相当)。
@@ -362,6 +408,33 @@ extension SidebarViewController: NSOutlineViewDelegate {
             rowView.drawsTopSeparator = true
         }
         return rowView
+    }
+}
+
+extension SidebarViewController: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        guard let node = clickedNode() else { return }
+        switch node.kind {
+        case .session:
+            menu.addItem(makeItem("リネーム…", #selector(menuRenameSession(_:))))
+            menu.addItem(.separator())
+            menu.addItem(makeItem("セッションを終了", #selector(menuTerminateSession(_:))))
+        case .worktree:
+            menu.addItem(makeItem("セッションを追加", #selector(menuAddSession(_:))))
+            menu.addItem(makeItem("Finder で表示", #selector(menuRevealWorktree(_:))))
+            menu.addItem(.separator())
+            menu.addItem(makeItem("デフォルトブランチにマージ…", #selector(menuMergeWorktree(_:))))
+            menu.addItem(makeItem("worktree を削除…", #selector(menuRemoveWorktree(_:))))
+        case .repository, .addSession:
+            break
+        }
+    }
+
+    private func makeItem(_ title: String, _ action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        return item
     }
 }
 

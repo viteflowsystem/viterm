@@ -49,6 +49,14 @@ final class MainWindowController: NSWindowController {
             self?.selectedWorktreePath = worktreePath
             self?.startDefaultSession(in: worktreePath)
         }
+        sidebar.onRenameSession = { [weak self] sessionID, currentName in
+            self?.renameSession(sessionID, currentName: currentName)
+        }
+        sidebar.onTerminateSession = { [weak self] sessionID in
+            self?.terminateSession(sessionID)
+        }
+        sidebar.onMergeWorktree = { [weak self] path in self?.mergeWorktree(at: path) }
+        sidebar.onRemoveWorktree = { [weak self] path in self?.removeWorktreeFlow(at: path) }
         stateMonitor.onStateChange = { [weak self] sessionID, newState in
             self?.handleStateChange(sessionID: sessionID, newState: newState)
         }
@@ -129,6 +137,8 @@ final class MainWindowController: NSWindowController {
         statusBar.update(sidebar: appModel.sidebar)
         let selectedID = appModel.sidebar.selectedSessionID
         terminalHost.show(selectedID.flatMap { sessionManager.surface(for: $0) })
+        // 表示中セッションは高頻度、非表示は間引きで状態監視(P1)。
+        stateMonitor.setVisibleSession(selectedID)
     }
 
     func refreshAndRender() {
@@ -394,8 +404,15 @@ final class MainWindowController: NSWindowController {
 
     /// 選択中 worktree をデフォルトブランチへマージして後始末(T11)。
     @objc func mergeCurrentWorktree(_ sender: Any?) {
-        guard let selected = appModel.sidebar.selectedSession?.session.worktreePath,
-              let worktree = appModel.worktrees.first(where: { $0.path == selected }),
+        guard let selected = appModel.sidebar.selectedSession?.session.worktreePath ?? selectedWorktreePath else {
+            NSSound.beep()
+            return
+        }
+        mergeWorktree(at: selected)
+    }
+
+    func mergeWorktree(at path: String) {
+        guard let worktree = appModel.worktrees.first(where: { $0.path == path }),
               let repository = appModel.repositories.first(where: { $0.path == worktree.repositoryPath }),
               let window else {
             NSSound.beep()
@@ -443,8 +460,15 @@ final class MainWindowController: NSWindowController {
 
     /// 選択中 worktree を削除(dirty なら確認、T11)。
     @objc func removeCurrentWorktree(_ sender: Any?) {
-        guard let selected = appModel.sidebar.selectedSession?.session.worktreePath,
-              let worktree = appModel.worktrees.first(where: { $0.path == selected }),
+        guard let selected = appModel.sidebar.selectedSession?.session.worktreePath ?? selectedWorktreePath else {
+            NSSound.beep()
+            return
+        }
+        removeWorktreeFlow(at: selected)
+    }
+
+    func removeWorktreeFlow(at path: String) {
+        guard let worktree = appModel.worktrees.first(where: { $0.path == path }),
               let window else {
             NSSound.beep()
             return
@@ -470,6 +494,46 @@ final class MainWindowController: NSWindowController {
             } catch {
                 Self.presentError(error, in: window)
             }
+        }
+    }
+
+    // MARK: - セッション操作(コンテキストメニュー)
+
+    private func renameSession(_ sessionID: AgentSession.ID, currentName: String) {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "セッションをリネーム"
+        let field = NSTextField(string: currentName)
+        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
+        alert.accessoryView = field
+        alert.addButton(withTitle: "リネーム")
+        alert.addButton(withTitle: "キャンセル")
+        alert.window.initialFirstResponder = field
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            let newName = field.stringValue.trimmingCharacters(in: .whitespaces)
+            guard !newName.isEmpty else { return }
+            self.appModel.renameSession(sessionID, to: newName)
+            self.render()
+            self.persistSessions()
+        }
+    }
+
+    private func terminateSession(_ sessionID: AgentSession.ID) {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "セッションを終了"
+        alert.informativeText = "実行中のプロセスは終了され、スクロールバックも破棄されます。"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "終了")
+        alert.addButton(withTitle: "キャンセル")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            self.stateMonitor.unwatch(sessionID: sessionID)
+            self.sessionManager.terminate(sessionID: sessionID)
+            self.appModel.removeSession(sessionID)
+            self.render()
+            self.persistSessions()
         }
     }
 

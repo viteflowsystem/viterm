@@ -4,8 +4,9 @@ import ViteaCore
 /// コマンドパレット(⌘K)のオーバーレイ。
 ///
 /// `NSPanel` ベースの borderless / 半透明パネルとして、親ウィンドウの中央上部に表示する。
-/// 見た目は docs/ui-mock.html の Screen 02 に準拠(固定のダークカラーを用いる。
-/// システムのライト/ダークに追従させるのではなく、mock 通りの配色で常に表示する)。
+/// 見た目は docs/ui-mock.html の Screen 02 に準拠する(ダークモードでは mock の固定色をそのまま
+/// 用いる)。ライトモードでは同じ役割の色を明色側で再構成し、`NSColor(name:dynamicProvider:)` に
+/// よる dynamic color で `effectiveAppearance` の変化に自動追従する。
 ///
 /// `AppModel` には依存しない self-contained なコンポーネント。コマンド一覧(`PaletteCommand`)と
 /// 確定時のコールバックを外から渡すだけで動作する。MainWindowController からの ⌘K 配線・
@@ -40,14 +41,51 @@ public final class PalettePanel: NSObject {
     private static let maxVisibleRows = 8
     private static let topInset: CGFloat = 88
 
-    // MARK: - 配色(docs/ui-mock.html の CSS 変数に合わせた固定値)
+    // MARK: - 配色(docs/ui-mock.html の CSS 変数をベースにした dynamic color)
+    //
+    // ダークモードの値は mock の固定色そのもの。ライトモードは同じ役割(パネル背景・境界線・
+    // 区切り線・本文/補助テキスト・アクセント・選択行)を明色側で再構成した値。
+    // `dynamicColor(dark:light:)` で作った色は `effectiveAppearance` の変化に自動追従する。
 
-    private static let colorPanelBackground = NSColor(red: 0x1b / 255, green: 0x1f / 255, blue: 0x27 / 255, alpha: 1)
-    private static let colorBorder = NSColor(red: 0x31 / 255, green: 0x38 / 255, blue: 0x48 / 255, alpha: 1)
-    private static let colorLine = NSColor(red: 0x26 / 255, green: 0x2b / 255, blue: 0x36 / 255, alpha: 1)
-    private static let colorText = NSColor(red: 0xe8 / 255, green: 0xea / 255, blue: 0xf0 / 255, alpha: 1)
-    private static let colorFaint = NSColor(red: 0x56 / 255, green: 0x60 / 255, blue: 0x72 / 255, alpha: 1)
-    private static let colorAccent = NSColor(red: 0x56 / 255, green: 0xc2 / 255, blue: 0xb6 / 255, alpha: 1)
+    private static func dynamicColor(dark: NSColor, light: NSColor) -> NSColor {
+        NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        }
+    }
+
+    private static let colorPanelBackground = dynamicColor(
+        dark: NSColor(red: 0x1b / 255, green: 0x1f / 255, blue: 0x27 / 255, alpha: 1),
+        light: NSColor(red: 0xf3 / 255, green: 0xf4 / 255, blue: 0xf6 / 255, alpha: 1)
+    )
+    private static let colorBorder = dynamicColor(
+        dark: NSColor(red: 0x31 / 255, green: 0x38 / 255, blue: 0x48 / 255, alpha: 1),
+        light: NSColor(red: 0xdc / 255, green: 0xdf / 255, blue: 0xe4 / 255, alpha: 1)
+    )
+    private static let colorLine = dynamicColor(
+        dark: NSColor(red: 0x26 / 255, green: 0x2b / 255, blue: 0x36 / 255, alpha: 1),
+        light: NSColor(red: 0xe8 / 255, green: 0xea / 255, blue: 0xed / 255, alpha: 1)
+    )
+    // 以下4色は同ファイル内の `PaletteRowView` / `PaletteRowCellView` からも参照するため fileprivate。
+    fileprivate static let colorText = dynamicColor(
+        dark: NSColor(red: 0xe8 / 255, green: 0xea / 255, blue: 0xf0 / 255, alpha: 1),
+        light: NSColor(red: 0x1c / 255, green: 0x1f / 255, blue: 0x26 / 255, alpha: 1)
+    )
+    fileprivate static let colorFaint = dynamicColor(
+        dark: NSColor(red: 0x56 / 255, green: 0x60 / 255, blue: 0x72 / 255, alpha: 1),
+        light: NSColor(red: 0x6b / 255, green: 0x72 / 255, blue: 0x80 / 255, alpha: 1)
+    )
+    fileprivate static let colorMuted = dynamicColor(
+        dark: NSColor(red: 0x8b / 255, green: 0x93 / 255, blue: 0xa5 / 255, alpha: 1),
+        light: NSColor(red: 0x52 / 255, green: 0x59 / 255, blue: 0x66 / 255, alpha: 1)
+    )
+    fileprivate static let colorAccent = dynamicColor(
+        dark: NSColor(red: 0x56 / 255, green: 0xc2 / 255, blue: 0xb6 / 255, alpha: 1),
+        light: NSColor(red: 0x17 / 255, green: 0x8f / 255, blue: 0x83 / 255, alpha: 1)
+    )
+    fileprivate static let colorSelectionRow = dynamicColor(
+        dark: NSColor(red: 0x23 / 255, green: 0x2a / 255, blue: 0x36 / 255, alpha: 1),
+        light: NSColor(red: 0xe1 / 255, green: 0xf3 / 255, blue: 0xf0 / 255, alpha: 1)
+    )
     private static let colorDim = NSColor(white: 0, alpha: 0.55)
 
     // MARK: - 状態
@@ -59,7 +97,7 @@ public final class PalettePanel: NSObject {
 
     private var dimWindow: NSWindow?
     private var panelWindow: NSPanel?
-    private let containerView = NSView()
+    private let containerView = PaletteContainerView()
     private let inputRow = NSView()
     private let scrollView = NSScrollView()
     private let searchField = NSTextField()
@@ -175,11 +213,11 @@ public final class PalettePanel: NSObject {
         guard containerView.subviews.isEmpty else { return }
 
         containerView.wantsLayer = true
-        containerView.layer?.backgroundColor = PalettePanel.colorPanelBackground.cgColor
         containerView.layer?.cornerRadius = 10
         containerView.layer?.borderWidth = 1
-        containerView.layer?.borderColor = PalettePanel.colorBorder.cgColor
         containerView.layer?.masksToBounds = true
+        containerView.backgroundDynamicColor = PalettePanel.colorPanelBackground
+        containerView.borderDynamicColor = PalettePanel.colorBorder
 
         // 入力欄
         let bottomLine = NSBox()
@@ -412,14 +450,47 @@ private final class PaletteDimWindow: NSWindow {
     }
 }
 
-/// 選択行のハイライトを mock の配色(`#232a36`)に合わせてカスタム描画する行ビュー。
+/// 選択行のハイライトを `PalettePanel.colorSelectionRow` に合わせてカスタム描画する行ビュー。
 private final class PaletteRowView: NSTableRowView {
     override func drawSelection(in dirtyRect: NSRect) {
         guard isSelected else { return }
         let selectionRect = bounds.insetBy(dx: 6, dy: 1)
         let path = NSBezierPath(roundedRect: selectionRect, xRadius: 6, yRadius: 6)
-        NSColor(red: 0x23 / 255, green: 0x2a / 255, blue: 0x36 / 255, alpha: 1).setFill()
+        PalettePanel.colorSelectionRow.setFill()
         path.fill()
+    }
+
+    // `drawSelection` はカスタム描画(生の CGColor 経由ではなく都度 `setFill` で解決する dynamic
+    // color)なので本来は自動追従するが、システム外観の切り替え時に再描画がスケジュールされる
+    // 保証がないため明示的に invalidate する。
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
+/// パレットパネル本体のコンテナビュー。レイヤーの背景色・境界線色は `CGColor` の固定スナップ
+/// ショットになり `NSColor(name:dynamicProvider:)` の自動追従が効かないため、外観変化時に
+/// `performAsCurrentDrawingAppearance` で明示的に解決し直す。
+private final class PaletteContainerView: NSView {
+    var backgroundDynamicColor: NSColor? {
+        didSet { updateLayerColors() }
+    }
+    var borderDynamicColor: NSColor? {
+        didSet { updateLayerColors() }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateLayerColors()
+    }
+
+    private func updateLayerColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance { [weak self] in
+            guard let self else { return }
+            layer?.backgroundColor = backgroundDynamicColor?.cgColor
+            layer?.borderColor = borderDynamicColor?.cgColor
+        }
     }
 }
 
@@ -458,14 +529,9 @@ private final class PaletteRowCellView: NSTableCellView {
         titleLabel.stringValue = title
         trailingLabel.stringValue = trailing ?? ""
 
-        let accent = NSColor(red: 0x56 / 255, green: 0xc2 / 255, blue: 0xb6 / 255, alpha: 1)
-        let text = NSColor(red: 0xe8 / 255, green: 0xea / 255, blue: 0xf0 / 255, alpha: 1)
-        let muted = NSColor(red: 0x8b / 255, green: 0x93 / 255, blue: 0xa5 / 255, alpha: 1)
-        let faint = NSColor(red: 0x56 / 255, green: 0x60 / 255, blue: 0x72 / 255, alpha: 1)
-
-        categoryLabel.textColor = isSelected ? accent : faint
-        titleLabel.textColor = isSelected ? text : muted
-        trailingLabel.textColor = faint
+        categoryLabel.textColor = isSelected ? PalettePanel.colorAccent : PalettePanel.colorFaint
+        titleLabel.textColor = isSelected ? PalettePanel.colorText : PalettePanel.colorMuted
+        trailingLabel.textColor = PalettePanel.colorFaint
     }
 
     override func layout() {

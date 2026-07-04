@@ -277,6 +277,23 @@ public final class AppModel {
         await sessionLauncher.switchToWorktree(worktreePath)
     }
 
+    /// セッションの表示名を変更する。
+    public func renameSession(_ sessionID: AgentSession.ID, to newName: String) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
+              !newName.isEmpty else { return }
+        sessions[index].displayName = newName
+        rebuildSidebar()
+    }
+
+    /// セッションを一覧から取り除く(PTY/サーフェスの破棄は呼び出し側 = SessionManager の責務)。
+    public func removeSession(_ sessionID: AgentSession.ID) {
+        sessions.removeAll { $0.id == sessionID }
+        if sidebar.selectedSessionID == sessionID {
+            sidebar.select(sessionID: nil)
+        }
+        rebuildSidebar()
+    }
+
     /// セッション状態変化の受け口。`SessionStateMachine` 等が確定させた新状態を渡す。
     /// 状態が実際に変わっていれば `AgentSession` を更新し、`StatusChangeHookRunner` を発火する。
     public func sessionStateChanged(sessionID: AgentSession.ID, newState: AgentSession.State, at date: Date = Date()) {

@@ -17,6 +17,25 @@ final class GhosttySurfaceView: NSView {
     /// 蓄積し、まとめて sendKey に渡す(実装リファレンス: SurfaceView_AppKit.swift の同名の仕組み)。
     private var keyTextAccumulator: [String]?
 
+    // MARK: - OSC 通知(GhosttyRuntime.action_cb から呼ばれる)
+    //
+    // libghostty がターミナル出力中の OSC シーケンス(デスクトップ通知は OSC 9/777、pwd は OSC 7 等)
+    // を解釈すると action_cb が呼ばれ、GhosttyRuntime が対応するサーフェスの本コールバックを
+    // 発火する。状態検出の一次シグナルとして SessionStateMonitor 等から利用する想定
+    // (docs/ghostty-integration.md 参照)。
+
+    /// OSC 9 / OSC 777 によるデスクトップ通知(`GHOSTTY_ACTION_DESKTOP_NOTIFICATION`)を受信した。
+    var onDesktopNotification: ((_ title: String, _ body: String) -> Void)?
+
+    /// ベル(`GHOSTTY_ACTION_RING_BELL`)を受信した。
+    var onBell: (() -> Void)?
+
+    /// OSC 0/1/2 等によるタイトル変更(`GHOSTTY_ACTION_SET_TITLE`)を受信した。
+    var onTitleChange: ((_ title: String) -> Void)?
+
+    /// OSC 7 によるカレントディレクトリ変更(`GHOSTTY_ACTION_PWD`)を受信した。
+    var onPwdChange: ((_ pwd: String) -> Void)?
+
     /// - Parameters:
     ///   - command: 起動コマンド。nil ならユーザーのデフォルトシェル。
     ///   - workingDirectory: 作業ディレクトリ。nil ならホーム。

@@ -19,6 +19,51 @@ final class GhosttyRuntime {
         return Unmanaged<GhosttySurfaceView>.fromOpaque(userdata).takeUnretainedValue()
     }
 
+    /// action_cb は(他のコールバックと異なり)userdata を直接渡してくれないため、
+    /// `ghostty_target_s` が指すサーフェスから `ghostty_surface_userdata` 経由で
+    /// 対応する `GhosttySurfaceView` を逆引きする(実装リファレンス: Ghostty.App.swift の
+    /// `surfaceView(from:)`)。
+    private static func surfaceView(from target: ghostty_target_s) -> GhosttySurfaceView? {
+        guard target.tag == GHOSTTY_TARGET_SURFACE, let surface = target.target.surface else { return nil }
+        return view(from: ghostty_surface_userdata(surface))
+    }
+
+    /// libghostty の `apprt.Action`(OSC 由来のデスクトップ通知・ベル・タイトル・pwd 等)を処理する。
+    /// 状態検出(SessionStateMonitor)のテキストパターン検出より優先される一次シグナルとして、
+    /// 対応する `GhosttySurfaceView` のコールバックへ中継するだけに徹する
+    /// (通知UI・状態遷移の判断はコールバックの呼び出し側の責務)。
+    ///
+    /// ここで扱わないアクション(ウィンドウ/タブ/スプリット操作等、vitea は独自の
+    /// ウィンドウ管理を持つため libghostty 側の apprt アクションには乗らない)は false を返す。
+    private static func handleAction(target: ghostty_target_s, action: ghostty_action_s) -> Bool {
+        guard let view = surfaceView(from: target) else { return false }
+
+        switch action.tag {
+        case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
+            let n = action.action.desktop_notification
+            guard let titlePtr = n.title, let bodyPtr = n.body else { return false }
+            view.onDesktopNotification?(String(cString: titlePtr), String(cString: bodyPtr))
+            return true
+
+        case GHOSTTY_ACTION_RING_BELL:
+            view.onBell?()
+            return true
+
+        case GHOSTTY_ACTION_SET_TITLE:
+            guard let titlePtr = action.action.set_title.title else { return false }
+            view.onTitleChange?(String(cString: titlePtr))
+            return true
+
+        case GHOSTTY_ACTION_PWD:
+            guard let pwdPtr = action.action.pwd.pwd else { return false }
+            view.onPwdChange?(String(cString: pwdPtr))
+            return true
+
+        default:
+            return false
+        }
+    }
+
     private init() {
         var initError: UnsafeMutablePointer<CChar>? = nil
         _ = ghostty_init(0, &initError)
@@ -35,9 +80,8 @@ final class GhosttyRuntime {
                 GhosttyRuntime.shared.tick()
             }
         }
-        runtime.action_cb = { _, _, _ in
-            // スパイク段階ではアクション(タイトル変更、ベル等)は処理しない。
-            false
+        runtime.action_cb = { _, target, action in
+            GhosttyRuntime.handleAction(target: target, action: action)
         }
         runtime.read_clipboard_cb = { userdata, _, state in
             guard let view = GhosttyRuntime.view(from: userdata),

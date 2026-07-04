@@ -12,7 +12,22 @@ final class MainWindowController: NSWindowController {
     let sessionManager: SessionManager
 
     private let sidebar = SidebarViewController()
-    private let terminalHost = TerminalHostView()
+    private let splitHost = SplitHostView()
+    /// ペインが1つも無いときに表示するプレースホルダ。
+    private let placeholderView: NSView = {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
+        let label = NSTextField(labelWithString: "⌘T でセッションを起動 / ⌘N で worktree を作成")
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+        ])
+        return view
+    }()
     private let statusBar = StatusBarView()
     private let splitView = NSSplitView()
     private let stateMonitor = SessionStateMonitor()
@@ -109,8 +124,17 @@ final class MainWindowController: NSWindowController {
         let sidebarView = sidebar.view
         sidebarView.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
         splitView.addArrangedSubview(sidebarView)
-        splitView.addArrangedSubview(terminalHost)
+        splitView.addArrangedSubview(splitHost)
         splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+
+        // ペインのフォーカス移動をサイドバー選択に同期する。
+        splitHost.onActivePaneChanged = { [weak self] contentView in
+            guard let self, let contentView,
+                  let sessionID = self.sessionManager.sessionID(for: contentView),
+                  self.appModel.sidebar.selectedSessionID != sessionID else { return }
+            self.appModel.selectSession(sessionID)
+            self.render()
+        }
 
         let root = NSView()
         splitView.translatesAutoresizingMaskIntoConstraints = false
@@ -139,7 +163,20 @@ final class MainWindowController: NSWindowController {
         sidebar.set(viewModel: appModel.sidebar, selectedWorktreePath: selectedWorktreePath)
         statusBar.update(sidebar: appModel.sidebar)
         let selectedID = appModel.sidebar.selectedSessionID
-        terminalHost.show(selectedID.flatMap { sessionManager.surface(for: $0) })
+        let surface = selectedID.flatMap { sessionManager.surface(for: $0) }
+        if let surface {
+            // 既にペインに表示中ならフォーカスのみ。分割中は選択セッションをアクティブペインへ、
+            // 単一ペインなら丸ごと差し替え。
+            if !splitHost.focusPane(containing: surface) {
+                if splitHost.hostedViews.count > 1 {
+                    splitHost.replaceActive(with: surface)
+                } else {
+                    splitHost.showRoot(surface)
+                }
+            }
+        } else if splitHost.hostedViews.isEmpty || splitHost.hostedViews == [placeholderView] {
+            splitHost.showRoot(placeholderView)
+        }
         // 表示中セッションは高頻度、非表示は間引きで状態監視(P1)。
         stateMonitor.setVisibleSession(selectedID)
     }
@@ -268,6 +305,56 @@ final class MainWindowController: NSWindowController {
     /// ⌘B サイドバー表示切替。
     @objc func toggleSidebar2(_ sender: Any?) {
         sidebar.view.isHidden.toggle()
+    }
+
+    // MARK: - ペイン分割(T16)
+
+    /// ⌘D 右に分割 / ⌘⇧D 下に分割。現在の worktree に新規セッションを起動して新ペインに配置する。
+    @objc func splitPaneRight(_ sender: Any?) { splitPane(vertically: true) }
+    @objc func splitPaneDown(_ sender: Any?) { splitPane(vertically: false) }
+
+    private func splitPane(vertically: Bool) {
+        let worktreePath = appModel.sidebar.selectedSession?.session.worktreePath
+            ?? selectedWorktreePath
+            ?? appModel.worktrees.first?.path
+        guard let worktreePath else {
+            NSSound.beep()
+            return
+        }
+        Task { @MainActor in
+            do {
+                let session = try await appModel.startSession(
+                    worktreePath: worktreePath,
+                    presetName: appModel.config.defaultPreset ?? "shell"
+                )
+                watchSession(session)
+                guard let surface = sessionManager.surface(for: session.id) else { return }
+                if splitHost.hostedViews.isEmpty || splitHost.hostedViews == [placeholderView] {
+                    splitHost.showRoot(surface)
+                } else {
+                    splitHost.splitActive(surface, vertically: vertically)
+                }
+                appModel.selectSession(session.id)
+                render()
+                persistSessions()
+            } catch {
+                Self.presentError(error, in: window)
+            }
+        }
+    }
+
+    /// ⌘⇧W ペインを閉じる(セッションはバックグラウンドで生存し、サイドバーから戻れる)。
+    @objc func closePane(_ sender: Any?) {
+        guard splitHost.closeActivePane() != nil else {
+            NSSound.beep()
+            return
+        }
+        render()
+    }
+
+    /// ⌘] 次のペインへフォーカス移動。
+    @objc func focusNextPane(_ sender: Any?) {
+        splitHost.focusNextPane()
     }
 
     /// ⌘K コマンドパレット(T12b)。

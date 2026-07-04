@@ -21,6 +21,11 @@ final class SessionManager {
         surfaces[sessionID]
     }
 
+    /// サーフェスビューからセッション ID を逆引きする(ペインのフォーカス同期用)。
+    func sessionID(for view: NSView) -> UUID? {
+        surfaces.first { $0.value === view }?.key
+    }
+
     func terminate(sessionID: UUID) {
         // ビューの解放で deinit → ghostty_surface_free が走り、子プロセスも終了する。
         surfaces[sessionID]?.removeFromSuperview()

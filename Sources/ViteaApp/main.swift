@@ -65,6 +65,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionMenu.addItem(jump)
 
         sessionMenu.addItem(.separator())
+        let splitRight = NSMenuItem(title: "右に分割", action: #selector(MainWindowController.splitPaneRight(_:)), keyEquivalent: "d")
+        splitRight.target = controller
+        sessionMenu.addItem(splitRight)
+        let splitDown = NSMenuItem(title: "下に分割", action: #selector(MainWindowController.splitPaneDown(_:)), keyEquivalent: "d")
+        splitDown.keyEquivalentModifierMask = [.command, .shift]
+        splitDown.target = controller
+        sessionMenu.addItem(splitDown)
+        let closePane = NSMenuItem(title: "ペインを閉じる", action: #selector(MainWindowController.closePane(_:)), keyEquivalent: "w")
+        closePane.keyEquivalentModifierMask = [.command, .shift]
+        closePane.target = controller
+        sessionMenu.addItem(closePane)
+        let nextPane = NSMenuItem(title: "次のペイン", action: #selector(MainWindowController.focusNextPane(_:)), keyEquivalent: "]")
+        nextPane.target = controller
+        sessionMenu.addItem(nextPane)
+
+        sessionMenu.addItem(.separator())
         for number in 1...9 {
             let item = NSMenuItem(
                 title: "セッション \(number)",

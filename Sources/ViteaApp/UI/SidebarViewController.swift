@@ -117,10 +117,9 @@ final class SidebarViewController: NSViewController {
         emptyState.isHidden = !viewModel.repositories.isEmpty
         rootNodes = viewModel.repositories.map { repo in
             Node(kind: .repository(repo), children: repo.worktrees.map { wt in
-                var children = wt.sessions.map { Node(kind: .session($0)) }
-                if children.isEmpty {
-                    children.append(Node(kind: .addSession(worktreePath: wt.id)))
-                }
+                // セッション数に関係なく、末尾に「＋ セッションを追加」行を常設する。
+                let children = wt.sessions.map { Node(kind: .session($0)) }
+                    + [Node(kind: .addSession(worktreePath: wt.id))]
                 return Node(kind: .worktree(wt), children: children)
             })
         }
@@ -221,10 +220,6 @@ extension SidebarViewController: NSOutlineViewDelegate {
             if git.isEmpty && !wt.worktree.isDirty { git.append("clean") }
             if wt.worktree.isDirty { git.append("●") }
             stack.addArrangedSubview(label(git.joined(separator: " "), size: 10, color: .tertiaryLabelColor, mono: true))
-            // セッションが既にある worktree にはセッション追加の「＋」ボタンを常設。
-            if !wt.sessions.isEmpty {
-                stack.addArrangedSubview(addButton(worktreePath: wt.id))
-            }
 
         case let .session(s):
             stack.addArrangedSubview(stateDot(for: s.session.state))
@@ -300,22 +295,6 @@ extension SidebarViewController: NSOutlineViewDelegate {
             dot.layer?.borderWidth = 1.5
         }
         return dot
-    }
-
-    /// worktree 行の「＋」(セッション追加)ボタン。
-    private func addButton(worktreePath: String) -> NSButton {
-        let button = NSButton(title: "＋", target: self, action: #selector(didTapRowAddSession(_:)))
-        button.bezelStyle = .accessoryBarAction
-        button.font = .systemFont(ofSize: 10, weight: .semibold)
-        button.toolTip = "このworktreeにセッションを追加"
-        button.identifier = NSUserInterfaceItemIdentifier(worktreePath)
-        button.setContentHuggingPriority(.required, for: .horizontal)
-        return button
-    }
-
-    @objc private func didTapRowAddSession(_ sender: NSButton) {
-        guard let path = sender.identifier?.rawValue else { return }
-        onAddSession?(path)
     }
 
     /// waiting 数のバッジ(青いピル)。UIモックの .badge 相当。

@@ -130,10 +130,15 @@ final class MainWindowController: NSWindowController {
             await appModel.refresh()
             sessionManager.presets = appModel.config.presets
             render()
+            // デバッグ再現用: VITEA_AUTOSTART_SESSION=1 で起動直後にセッションを開く。
+            if ProcessInfo.processInfo.environment["VITEA_AUTOSTART_SESSION"] != nil {
+                newSession(nil)
+            }
         }
     }
 
     private func select(sessionID: AgentSession.ID) {
+        guard appModel.sidebar.selectedSessionID != sessionID else { return }
         selectedWorktreePath = nil
         appModel.selectSession(sessionID)
         render()

@@ -120,7 +120,13 @@ final class SidebarViewController: NSViewController {
         syncSelection()
     }
 
+    /// プログラムからの選択反映中は selectionDidChange をコールバックに再入させない
+    /// (render → syncSelection → didChange → render… の無限再帰防止)。
+    private var isSyncingSelection = false
+
     private func syncSelection() {
+        isSyncingSelection = true
+        defer { isSyncingSelection = false }
         guard let selected = viewModel.selectedSessionID else {
             outlineView.deselectAll(nil)
             return
@@ -299,6 +305,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
     }
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
+        guard !isSyncingSelection else { return }
         didClickRow()
     }
 }

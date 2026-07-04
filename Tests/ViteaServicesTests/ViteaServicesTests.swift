@@ -431,3 +431,181 @@ struct StubError: Error, CustomStringConvertible {
         #expect(FileManager.default.fileExists(atPath: featurePath.path) == false)
     }
 }
+
+// MARK: - RepositoryDiscovery
+
+/// `<directory>/.git` をディレクトリとして作る(= 本物のリポジトリを模す)。実 git は不要。
+private func makeFakeRepositoryMarker(at directory: URL) throws {
+    try FileManager.default.createDirectory(
+        at: directory.appendingPathComponent(".git"),
+        withIntermediateDirectories: true
+    )
+}
+
+/// `<directory>/.git` をファイルとして作る(= worktree チェックアウト先を模す)。
+private func makeFakeWorktreeCheckoutMarker(at directory: URL) throws {
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try "gitdir: /somewhere/.git/worktrees/x\n".write(
+        to: directory.appendingPathComponent(".git"),
+        atomically: true,
+        encoding: .utf8
+    )
+}
+
+@Test func discover_findsRepositoriesAtVariousDepths() async throws {
+    try await withTemporaryDirectory { dir in
+        let root = dir.appendingPathComponent("root")
+        try makeFakeRepositoryMarker(at: root.appendingPathComponent("project-a"))
+        try makeFakeRepositoryMarker(at: root.appendingPathComponent("group/project-b"))
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("group/not-a-repo"),
+            withIntermediateDirectories: true
+        )
+
+        let discovery = RepositoryDiscovery()
+        let repositories = discovery.discover(rootDirectory: root)
+        let names = Set(repositories.map(\.name))
+
+        #expect(names == ["project-a", "project-b"])
+        let expectedPath = root.appendingPathComponent("project-a").resolvingSymlinksInPath().path
+        #expect(repositories.contains { URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path == expectedPath })
+    }
+}
+
+@Test func discover_excludesWorktreeCheckoutDirectories() async throws {
+    try await withTemporaryDirectory { dir in
+        let root = dir.appendingPathComponent("root")
+        try makeFakeRepositoryMarker(at: root.appendingPathComponent("project-a"))
+        try makeFakeWorktreeCheckoutMarker(at: root.appendingPathComponent("project-a-worktree"))
+
+        let discovery = RepositoryDiscovery()
+        let repositories = discovery.discover(rootDirectory: root)
+
+        #expect(repositories.map(\.name) == ["project-a"])
+    }
+}
+
+@Test func discover_excludesConfiguredDirectoryNames() async throws {
+    try await withTemporaryDirectory { dir in
+        let root = dir.appendingPathComponent("root")
+        try makeFakeRepositoryMarker(at: root.appendingPathComponent("node_modules/nested-repo"))
+        try makeFakeRepositoryMarker(at: root.appendingPathComponent("real-project"))
+
+        let discovery = RepositoryDiscovery()
+        let repositories = discovery.discover(rootDirectory: root)
+
+        #expect(repositories.map(\.name) == ["real-project"])
+    }
+}
+
+@Test func discover_respectsMaxDepth() async throws {
+    try await withTemporaryDirectory { dir in
+        let root = dir.appendingPathComponent("root")
+        // root/a/b/c/d/e/deep-project は root から見て depth 6。
+        try makeFakeRepositoryMarker(at: root.appendingPathComponent("a/b/c/d/e/deep-project"))
+
+        let shallow = RepositoryDiscovery(maxDepth: 4)
+        #expect(shallow.discover(rootDirectory: root).isEmpty)
+
+        let deep = RepositoryDiscovery(maxDepth: 6)
+        #expect(deep.discover(rootDirectory: root).map(\.name) == ["deep-project"])
+    }
+}
+
+@Test func discover_doesNotDescendIntoFoundRepository() async throws {
+    try await withTemporaryDirectory { dir in
+        let root = dir.appendingPathComponent("root")
+        try makeFakeRepositoryMarker(at: root.appendingPathComponent("project-a"))
+        // project-a の内部にネストしたリポジトリ(vendor 済み等)があっても二重登録しない。
+        try makeFakeRepositoryMarker(at: root.appendingPathComponent("project-a/vendor/nested-repo"))
+
+        let discovery = RepositoryDiscovery()
+        let repositories = discovery.discover(rootDirectory: root)
+
+        #expect(repositories.map(\.name) == ["project-a"])
+    }
+}
+
+@Test func discover_emptyRootReturnsEmpty() async throws {
+    try await withTemporaryDirectory { dir in
+        let root = dir.appendingPathComponent("empty-root")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let discovery = RepositoryDiscovery()
+        #expect(discovery.discover(rootDirectory: root).isEmpty)
+    }
+}
+
+// MARK: - StatusChangeHookRunner
+
+@Test func notify_configuredState_invokesHookWithExpectedEnvironment() async throws {
+    let recorder = CallRecorder()
+    let runner = StatusChangeHookRunner(
+        config: StatusChangeHookConfig(onWaitingInput: "notify-waiting"),
+        hookRunner: { command, environment in
+            await recorder.recordHook(command: command, environment: environment)
+        }
+    )
+
+    let task = runner.notify(
+        sessionName: "claude-1",
+        worktreePath: "/repo/worktrees/feature",
+        oldState: .busy,
+        newState: .waitingInput
+    )
+    #expect(task != nil)
+    await task?.value
+
+    let invocations = await recorder.hookInvocations
+    #expect(invocations.count == 1)
+    #expect(invocations[0].command == "notify-waiting")
+    #expect(invocations[0].environment["VITEA_SESSION_NAME"] == "claude-1")
+    #expect(invocations[0].environment["VITEA_WORKTREE_PATH"] == "/repo/worktrees/feature")
+    #expect(invocations[0].environment["VITEA_OLD_STATE"] == "busy")
+    #expect(invocations[0].environment["VITEA_NEW_STATE"] == "waitingInput")
+}
+
+@Test func notify_oldStateNil_setsEmptyStringForOldState() async throws {
+    let recorder = CallRecorder()
+    let runner = StatusChangeHookRunner(
+        config: StatusChangeHookConfig(onIdle: "notify-idle"),
+        hookRunner: { command, environment in
+            await recorder.recordHook(command: command, environment: environment)
+        }
+    )
+
+    let task = runner.notify(sessionName: "s", worktreePath: "/p", oldState: nil, newState: .idle)
+    await task?.value
+
+    let invocations = await recorder.hookInvocations
+    #expect(invocations[0].environment["VITEA_OLD_STATE"] == "")
+}
+
+@Test func notify_unconfiguredState_returnsNilAndDoesNotInvoke() async throws {
+    let recorder = CallRecorder()
+    let runner = StatusChangeHookRunner(
+        config: StatusChangeHookConfig(onBusy: "notify-busy"),
+        hookRunner: { command, environment in
+            await recorder.recordHook(command: command, environment: environment)
+        }
+    )
+
+    // onWaitingInput / onIdle は未設定なので busy 以外では何も起きない。
+    let task = runner.notify(sessionName: "s", worktreePath: "/p", oldState: .busy, newState: .idle)
+    #expect(task == nil)
+
+    let invocations = await recorder.hookInvocations
+    #expect(invocations.isEmpty)
+}
+
+@Test func notify_defaultHookRunner_actuallyExecutesCommand() async throws {
+    try await withTemporaryDirectory { dir in
+        let marker = dir.appendingPathComponent("hook-ran")
+        let runner = StatusChangeHookRunner(config: StatusChangeHookConfig(onBusy: "touch '\(marker.path)'"))
+
+        let task = runner.notify(sessionName: "s", worktreePath: "/p", oldState: nil, newState: .busy)
+        await task?.value
+
+        #expect(FileManager.default.fileExists(atPath: marker.path))
+    }
+}

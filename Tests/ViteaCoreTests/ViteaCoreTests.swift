@@ -1,6 +1,8 @@
 import Testing
 @testable import ViteaCore
 
+// スモークテスト。詳細なテストは WorktreePathTemplateTests / ViteaConfigTests /
+// ConfigLoaderTests / ModelsTests を参照。
 @Test func scaffoldBuilds() {
-    #expect(ViteaCore.version == "0.1.0")
+    #expect(ViteaConfig.default.defaultPreset == "claude")
 }

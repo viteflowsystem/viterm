@@ -1,4 +1,3 @@
-// ViteaCore: ドメインモデル・設定(T4 で実装)
-public enum ViteaCore {
-    public static let version = "0.1.0"
-}
+// ViteaCore: ドメインモデル(Repository/Worktree/AgentSession/SessionPreset)・
+// 設定ロード(ViteaConfig/ConfigLoader)・worktree パステンプレート展開(WorktreePathTemplate)。
+// UI 非依存。実装は Models/ と Config/ を参照。

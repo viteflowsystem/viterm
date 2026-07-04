@@ -15,7 +15,7 @@ struct ModelsTests {
 
     @Test("Worktree は Codable で往復でき、既定値は0/非dirty")
     func worktreeRoundTripAndDefaults() throws {
-        let worktree = Worktree(path: "/repo/vitea/wt/feat-foo", branch: "feat/foo")
+        let worktree = Worktree(path: "/repo/vitea/wt/feat-foo", repositoryPath: "/repo/vitea", branch: "feat/foo")
         #expect(worktree.ahead == 0)
         #expect(worktree.behind == 0)
         #expect(worktree.diffStat == Worktree.DiffStat(added: 0, removed: 0))
@@ -24,6 +24,7 @@ struct ModelsTests {
 
         let full = Worktree(
             path: "/repo/vitea/wt/feat-foo",
+            repositoryPath: "/repo/vitea",
             branch: "feat/foo",
             ahead: 3,
             behind: 1,

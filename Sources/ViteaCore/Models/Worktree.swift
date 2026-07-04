@@ -4,6 +4,8 @@ import Foundation
 public struct Worktree: Codable, Sendable, Hashable, Identifiable {
     /// worktree の絶対パス。
     public var path: String
+    /// 紐付く `Repository.id`(= リポジトリルートの絶対パス)への参照。
+    public var repositoryPath: String
     /// チェックアウト中のブランチ名。
     public var branch: String
     /// 親ブランチに対する ahead コミット数。
@@ -17,6 +19,7 @@ public struct Worktree: Codable, Sendable, Hashable, Identifiable {
 
     public init(
         path: String,
+        repositoryPath: String,
         branch: String,
         ahead: Int = 0,
         behind: Int = 0,
@@ -24,6 +27,7 @@ public struct Worktree: Codable, Sendable, Hashable, Identifiable {
         isDirty: Bool = false
     ) {
         self.path = path
+        self.repositoryPath = repositoryPath
         self.branch = branch
         self.ahead = ahead
         self.behind = behind

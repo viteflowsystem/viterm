@@ -16,9 +16,18 @@ ccmanager にはない差別化点。背景・要件の詳細は [docs/requireme
   コピー、post-creation hook、削除(dirty チェック付き確認)、マージ支援(merge `--no-ff` / rebase →
   `--ff-only` の2モード、完了後の worktree 後始末)
 - **1 worktree : N セッション**: 任意コマンド(`claude` / `codex` / シェル等)を PTY 上で起動するエージェント
-  プリセットを設定可能
+  プリセットを設定可能。既定プリセット(`defaultPreset`)は特に設定しなければ `shell`
 - **サイドバー**: リポジトリ → worktree → セッション の3階層ツリー。worktree 行にブランチ・ahead/behind、
-  セッション行に状態インジケータ(`●` busy / `◐` waiting / `○` idle)と未読バッジ
+  セッション行に状態インジケータ(`●` busy / `◐` waiting / `○` idle)と未読バッジ。セッションが無い
+  worktree には「＋ セッションを追加」行が常設され、クリックで既定プリセットのセッションを起動する
+- **右クリックメニュー**: セッション行(リネーム / セッションを終了)、worktree 行(セッションを追加 /
+  Finder で表示 / デフォルトブランチにマージ… / worktree を削除…)
+- **セッション構成の自動保存・復元**: 起動中のセッション構成(worktree とプリセットの組)・選択中セッションを
+  `~/Library/Application Support/vitea/sessions.json` に自動保存し、次回起動時に自動復元する。復元時は
+  PTY を新規に起動し直すため、スクロールバックや実行中プロセスの状態そのものは引き継がれない
+- **設定シート(⌘,)**: `worktreePathTemplate` / `defaultPreset` / `copySessionDataByDefault` /
+  `discoveryRoots` を GUI から編集し、グローバル設定(`~/.config/vitea/config.json`)へ保存。
+  それ以外のキー(`presets` / `statusHooks` 等)は保全されたまま
 - **ステータスバー**: リポジトリ横断の状態集計(`● N busy` `◐ N waiting` `○ N idle`)
 - キーボード中心の操作(下記キーマップ参照)
 
@@ -56,15 +65,18 @@ open .build/vitea.app     # バンドルとして起動する場合
 | `⌘⇧U` | 最新の入力待ち(waiting_input)セッションへジャンプ(リポジトリ横断) |
 | `⌘B` | サイドバー表示切替 |
 | `⌘K` | コマンドパレット(worktree 作成・マージ・削除・セッション起動・リポジトリ追加をファジー検索で実行) |
+| `⌘,` | 設定シート(`worktreePathTemplate` / `defaultPreset` / `copySessionDataByDefault` / `discoveryRoots` を編集) |
 
-worktree のマージ(デフォルトブランチへ)・削除は、現時点では `Worktree` メニューからのみ実行可能
-(ショートカット未割り当て)。
+worktree のマージ(デフォルトブランチへ)・削除は、`Worktree` メニューまたはサイドバーの worktree 行の
+右クリックメニューから実行可能(ショートカット未割り当て)。
 
 ## 設定
 
 グローバル設定(`~/.config/vitea/config.json`)とプロジェクト別設定(`<リポジトリルート>/.vitea.json`)を
 マージして使う。キー一覧・マージ規則・パステンプレートの展開規則などの詳細は
-[docs/configuration.md](docs/configuration.md) を参照。最小サンプル:
+[docs/configuration.md](docs/configuration.md) を参照。主要なキー(`worktreePathTemplate` /
+`defaultPreset` / `copySessionDataByDefault` / `discoveryRoots`)は `⌘,` の設定シートからも編集できる
+(それ以外のキーは `config.json` を直接編集する)。最小サンプル:
 
 ```json
 {

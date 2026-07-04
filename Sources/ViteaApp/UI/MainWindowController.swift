@@ -483,14 +483,25 @@ final class MainWindowController: NSWindowController {
         }
     }
 
-    /// ⌘, 設定シート。保存後は設定を読み直して反映する。
+    private var settingsWindow: NSWindow?
+
+    /// ⌘, 設定ウィンドウ(cmux 同様の独立ウィンドウ)。保存後は設定を読み直して反映する。
     @objc func showSettings(_ sender: Any?) {
-        guard let window else { return }
-        let sheet = SettingsSheet(config: appModel.config) { [weak self] in
+        // 既に開いていれば前面に出すだけ。
+        if let settingsWindow, settingsWindow.isVisible {
+            settingsWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+        let controller = SettingsSheet(config: appModel.config) { [weak self] in
             self?.refreshAndRender()
         }
-        let panel = NSWindow(contentViewController: sheet)
-        window.beginSheet(panel, completionHandler: nil)
+        let window = NSWindow(contentViewController: controller)
+        window.title = "vitea 設定"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        settingsWindow = window
     }
 
     /// リポジトリ追加(ディレクトリ選択、T15)。

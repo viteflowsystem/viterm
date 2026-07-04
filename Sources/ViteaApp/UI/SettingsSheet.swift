@@ -171,8 +171,11 @@ final class SettingsSheet: NSViewController {
     }
 
     private func dismissSheet() {
-        if let sheetWindow = view.window, let parent = sheetWindow.sheetParent {
-            parent.endSheet(sheetWindow)
+        guard let window = view.window else { return }
+        if let parent = window.sheetParent {
+            parent.endSheet(window)
+        } else {
+            window.close()
         }
     }
 }

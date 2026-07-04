@@ -97,10 +97,18 @@ final class SidebarViewController: NSViewController {
         let container = NSStackView()
         container.orientation = .vertical
         container.spacing = 0
+        // 縦スタックの既定 alignment は centerX で、フッターがブロックごと中央に寄ってしまう。
+        // 全子要素を横幅いっぱいに揃えて、行の左寄せはactionBar内で行う(UIモック準拠)。
+        container.alignment = .leading
         container.addArrangedSubview(scrollView)
         container.addArrangedSubview(separator)
         container.addArrangedSubview(actionBar)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            scrollView.widthAnchor.constraint(equalTo: container.widthAnchor),
+            separator.widthAnchor.constraint(equalTo: container.widthAnchor),
+            actionBar.widthAnchor.constraint(equalTo: container.widthAnchor),
+        ])
 
         emptyState.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(emptyState)

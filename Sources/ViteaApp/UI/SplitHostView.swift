@@ -185,6 +185,30 @@ final class SplitHostView: NSView {
         return false
     }
 
+    /// `view` を中身に持つペインを閉じ、View を取り外して返す(破棄はしない)。
+    /// 該当ペインが無ければ何もせず `nil`。プロセス終了したセッションの後始末用。
+    @discardableResult
+    func closePane(containing view: NSView) -> NSView? {
+        var leaves: [PaneNode] = []
+        collectLeaves(root, into: &leaves)
+        guard let node = leaves.first(where: { node in
+            if case .leaf(let container) = node.kind { return container.content === view }
+            return false
+        }) else { return nil }
+        let previousActive = activeNode
+        activeNode = node
+        let removed = closeActivePane()
+        // 閉じたのが非アクティブペインだった場合、可能なら元のアクティブを維持する。
+        if let previousActive, previousActive !== node {
+            var remaining: [PaneNode] = []
+            collectLeaves(root, into: &remaining)
+            if remaining.contains(where: { $0 === previousActive }) {
+                setActive(previousActive, notify: true)
+            }
+        }
+        return removed
+    }
+
     /// フォーカス中ペインの中身を `newView` に差し替え、外した View を返す(破棄はしない)。
     /// ペインが無い場合は `showRoot(newView)` 相当。
     @discardableResult
@@ -286,9 +310,15 @@ final class SplitHostView: NSView {
         }
         activeNode = node
 
+        // フォーカス枠は「どのペインがアクティブか」の区別が必要な分割時のみ表示する
+        // (単一ペインで常時枠が出ると、ただの飾り枠に見えてしまう)。
+        var leaves: [PaneNode] = []
+        collectLeaves(root, into: &leaves)
+        let showsFocusRing = leaves.count > 1
+
         var contentView: NSView?
         if let node, case .leaf(let container) = node.kind {
-            container.isActive = true
+            container.isActive = showsFocusRing
             contentView = container.content
             if let contentView {
                 window?.makeFirstResponder(contentView)

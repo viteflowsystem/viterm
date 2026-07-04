@@ -77,7 +77,13 @@ final class MainWindowController: NSWindowController {
             self?.handleStateChange(sessionID: sessionID, newState: newState)
         }
         // サイドバーの git 情報(ahead/behind・diffstat・dirty)を30秒周期で自動更新。
-        appModel.onRefreshCompleted = { [weak self] in self?.render() }
+        appModel.onRefreshCompleted = { [weak self] in
+            guard let self else { return }
+            self.sessionManager.worktreeBranches = Dictionary(
+                uniqueKeysWithValues: self.appModel.worktrees.map { ($0.path, $0.branch) }
+            )
+            self.render()
+        }
         appModel.startAutoRefresh()
         if notificationsAvailable {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
@@ -123,6 +129,22 @@ final class MainWindowController: NSWindowController {
             self.appModel.sessionStateChanged(sessionID: sessionID, newState: .busy)
             self.render()
         }
+        // 子プロセスが exit したらセッションも消す(確認なし。ユーザーが exit したのだから)。
+        surfaceView.onSurfaceClose = { [weak self] in
+            self?.cleanUpSession(sessionID)
+        }
+    }
+
+    /// セッションの後始末: 監視解除 → ペインから外す → サーフェス破棄 → 一覧から削除。
+    private func cleanUpSession(_ sessionID: AgentSession.ID) {
+        stateMonitor.unwatch(sessionID: sessionID)
+        if let surface = sessionManager.surface(for: sessionID) {
+            splitHost.closePane(containing: surface)
+        }
+        sessionManager.terminate(sessionID: sessionID)
+        appModel.removeSession(sessionID)
+        render()
+        persistSessions()
     }
 
     private func displayName(of sessionID: AgentSession.ID) -> String {
@@ -237,6 +259,9 @@ final class MainWindowController: NSWindowController {
         Task { @MainActor in
             await appModel.refresh()
             sessionManager.presets = appModel.config.presets
+            sessionManager.worktreeBranches = Dictionary(
+                uniqueKeysWithValues: appModel.worktrees.map { ($0.path, $0.branch) }
+            )
             render()
             await restoreSessionsIfNeeded()
             // デバッグ再現用: VITEA_AUTOSTART_SESSION=1 で起動直後にセッションを開く。
@@ -670,12 +695,8 @@ final class MainWindowController: NSWindowController {
         alert.addButton(withTitle: "終了")
         alert.addButton(withTitle: "キャンセル")
         alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn, let self else { return }
-            self.stateMonitor.unwatch(sessionID: sessionID)
-            self.sessionManager.terminate(sessionID: sessionID)
-            self.appModel.removeSession(sessionID)
-            self.render()
-            self.persistSessions()
+            guard response == .alertFirstButtonReturn else { return }
+            self?.cleanUpSession(sessionID)
         }
     }
 

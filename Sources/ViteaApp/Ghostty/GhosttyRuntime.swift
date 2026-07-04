@@ -125,7 +125,15 @@ final class GhosttyRuntime {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(String(cString: data), forType: .string)
         }
-        runtime.close_surface_cb = { _, _ in }
+        // 子プロセス終了(wait_after_command=false)等でサーフェスがクローズを要求したとき。
+        // 第2引数は「プロセスがまだ生きているか(確認が必要か)」だが、vitea では
+        // どちらもセッション終了として扱い、後始末はホスト側コールバックに委ねる。
+        runtime.close_surface_cb = { userdata, _ in
+            guard let view = GhosttyRuntime.view(from: userdata) else { return }
+            DispatchQueue.main.async {
+                view.onSurfaceClose?()
+            }
+        }
 
         app = ghostty_app_new(&runtime, config)
         ghostty_config_free(config)

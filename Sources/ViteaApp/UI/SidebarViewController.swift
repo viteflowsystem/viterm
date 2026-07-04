@@ -115,14 +115,19 @@ final class SidebarViewController: NSViewController {
     /// sb-actions の1行: 「⌘N 新規 worktree」のような、ヒント(等幅・薄)+ラベルのテキスト行。
     /// ボタンだが装飾は付けない(モック準拠)。
     private func actionRow(hint: String, title: String, action: Selector) -> NSButton {
+        // NSButton は attributedTitle を既定で中央揃えにするため、段落スタイルで左寄せを明示する。
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .left
         let attributed = NSMutableAttributedString()
         attributed.append(NSAttributedString(string: hint.padding(toLength: max(hint.count, 2), withPad: " ", startingAt: 0), attributes: [
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
             .foregroundColor: NSColor.tertiaryLabelColor,
+            .paragraphStyle: paragraph,
         ]))
         attributed.append(NSAttributedString(string: "  " + title, attributes: [
             .font: NSFont.systemFont(ofSize: 11),
             .foregroundColor: NSColor.secondaryLabelColor,
+            .paragraphStyle: paragraph,
         ]))
         let button = NSButton(title: "", target: self, action: action)
         button.attributedTitle = attributed
@@ -264,13 +269,31 @@ extension SidebarViewController: NSOutlineViewDelegate {
             if let n = s.shortcutNumber {
                 stack.addArrangedSubview(label("⌘\(n)", size: 10, color: .tertiaryLabelColor, mono: true))
             }
+            // セッション行はホバーでゴミ箱(終了)ボタンを出すセルにする。
+            let sessionID = s.id
+            return makeCell(stack: stack, hoverTrash: { [weak self] in
+                self?.onTerminateSession?(sessionID)
+            })
 
         case .addSession:
             stack.addArrangedSubview(label("＋ セッションを追加", size: 11, color: .secondaryLabelColor))
             stack.addArrangedSubview(spacer())
         }
 
-        let cell = NSTableCellView()
+        return makeCell(stack: stack, hoverTrash: nil)
+    }
+
+    /// 行のスタックをセルに包む。`hoverTrash` を渡すとホバー時にゴミ箱ボタンを表示する。
+    private func makeCell(stack: NSStackView, hoverTrash: (() -> Void)?) -> NSTableCellView {
+        let cell: NSTableCellView
+        if let hoverTrash {
+            let hoverCell = HoverTrashCellView()
+            hoverCell.onTrash = hoverTrash
+            stack.addArrangedSubview(hoverCell.trashButton)
+            cell = hoverCell
+        } else {
+            cell = NSTableCellView()
+        }
         stack.translatesAutoresizingMaskIntoConstraints = false
         cell.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -408,6 +431,61 @@ extension SidebarViewController: NSOutlineViewDelegate {
             rowView.drawsTopSeparator = true
         }
         return rowView
+    }
+}
+
+/// ホバー時のみゴミ箱(セッション終了)ボタンを表示するセッション行セル。
+private final class HoverTrashCellView: NSTableCellView {
+    var onTrash: (() -> Void)?
+
+    let trashButton: NSButton = {
+        let button = NSButton()
+        button.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "セッションを終了")
+        button.isBordered = false
+        button.imageScaling = .scaleProportionallyDown
+        button.contentTintColor = .secondaryLabelColor
+        button.toolTip = "セッションを終了"
+        button.isHidden = true
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        return button
+    }()
+
+    private var trackingArea: NSTrackingArea?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        trashButton.target = self
+        trashButton.action = #selector(didTapTrash)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    @objc private func didTapTrash() {
+        onTrash?()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        trashButton.isHidden = false
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        trashButton.isHidden = true
     }
 }
 

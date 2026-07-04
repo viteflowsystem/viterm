@@ -36,6 +36,10 @@ final class GhosttySurfaceView: NSView {
     /// OSC 7 によるカレントディレクトリ変更(`GHOSTTY_ACTION_PWD`)を受信した。
     var onPwdChange: ((_ pwd: String) -> Void)?
 
+    /// 子プロセスの終了等で libghostty がサーフェスのクローズを要求した(`close_surface_cb` 経由)。
+    /// セッションの後始末(一覧からの削除・ペインのクローズ)は呼び出し側の責務。
+    var onSurfaceClose: (() -> Void)?
+
     /// コマンド終了(`GHOSTTY_ACTION_COMMAND_FINISHED`)を受信した。OSC 133 のセマンティック
     /// プロンプト(`end_input_start_output` → `end_command`)由来で、シェル統合が有効な場合のみ
     /// 発火する(docs/ghostty-integration.md 参照。vitea は現状シェル統合リソースを配布して

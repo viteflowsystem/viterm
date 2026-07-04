@@ -12,9 +12,12 @@ import ViteaServices
 final class SessionManager {
     /// プリセット解決に使う現在の設定。AppModel の refresh 後に更新される。
     var presets: [SessionPreset] = []
+    /// worktree パス → ブランチ名。既定セッション名("{branch} #n")の解決に使う。
+    /// AppModel の refresh 後に更新される(未登録時はパス末尾で代用)。
+    var worktreeBranches: [String: String] = [:]
 
     private var surfaces: [UUID: GhosttySurfaceView] = [:]
-    /// worktree+preset ごとの連番("claude #2" の 2)。セッション終了後も番号は再利用しない。
+    /// worktree ごとの連番("feat-x #2" の 2)。セッション終了後も番号は再利用しない。
     private var counters: [String: Int] = [:]
 
     func surface(for sessionID: UUID) -> GhosttySurfaceView? {
@@ -44,14 +47,17 @@ final class SessionManager {
         }
         let commandLine = ([preset.command] + arguments).joined(separator: " ")
 
-        let counterKey = "\(worktreePath)|\(preset.name)"
-        let number = (counters[counterKey] ?? 0) + 1
-        counters[counterKey] = number
+        let number = (counters[worktreePath] ?? 0) + 1
+        counters[worktreePath] = number
 
+        // 既定名はブランチ名ベース("feat-x #2")。ブランチ名は `/` を `-` に正規化して短く保つ。
+        let branch = (worktreeBranches[worktreePath]
+            ?? URL(fileURLWithPath: worktreePath).lastPathComponent)
+            .replacingOccurrences(of: "/", with: "-")
         let session = AgentSession(
             worktreePath: worktreePath,
             presetName: preset.name,
-            displayName: "\(preset.name) #\(number)",
+            displayName: "\(branch) #\(number)",
             state: .idle,
             stateChangedAt: Date()
         )

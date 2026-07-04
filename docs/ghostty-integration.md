@@ -149,3 +149,76 @@ return String(cString: text.text).split(separator: "\n", omittingEmptySubsequenc
 ```
 
 実装: `Sources/ViteaApp/Sessions/SessionStateMonitor.swift`(T13b)。
+
+## OSC 通知の一次シグナル化(P7 向け)
+
+要件定義(docs/requirements.md 3.2)は「状態検出は OSC シーケンス優先、テキストパターンはフォールバック」の
+二段構えを想定しているが、T3 スパイク時点では `GhosttyRuntime` の `action_cb` は全アクションを無視して
+`false` を返すだけだった。ここでは `ghostty_action_tag_e` / `ghostty_target_s` を調査し、対応する
+`GhosttySurfaceView` へ中継する仕組みを実装した内容を記録する。
+
+### action_cb のシグネチャと他コールバックとの違い
+
+```c
+typedef bool (*ghostty_runtime_action_cb)(ghostty_app_t, ghostty_target_s, ghostty_action_s);
+```
+
+`read_clipboard_cb` 等の他のコールバックは第1引数が `void* userdata`(サーフェス生成時に
+`ghostty_surface_config_s.userdata` へ設定した値がそのまま返ってくる)だが、`action_cb` だけは
+**userdata を直接もらえない**。代わりに `ghostty_target_s`(`tag: GHOSTTY_TARGET_APP` /
+`GHOSTTY_TARGET_SURFACE`、`target.surface: ghostty_surface_t`)経由でどのサーフェス(または
+アプリ全体)向けのアクションかを知る形になっている。
+
+「どのサーフェスか」を `GhosttySurfaceView` に逆引きするには、`ghostty_surface_t` から
+`void* ghostty_surface_userdata(ghostty_surface_t)` を呼ぶ(サーフェス生成時に設定した userdata が
+そのまま返る)。実装リファレンス: `macos/Sources/Ghostty/Ghostty.App.swift` の
+`surfaceView(from:)`/`action(_:target:action:)`。vitea 側の実装は
+`Sources/ViteaApp/Ghostty/GhosttyRuntime.swift` の `surfaceView(from target:)` / `handleAction(target:action:)`。
+
+```swift
+private static func surfaceView(from target: ghostty_target_s) -> GhosttySurfaceView? {
+    guard target.tag == GHOSTTY_TARGET_SURFACE, let surface = target.target.surface else { return nil }
+    return view(from: ghostty_surface_userdata(surface))
+}
+```
+
+### 対応した ghostty_action_tag_e とペイロード
+
+`ghostty_action_tag_e` は67種類(ウィンドウ/タブ/スプリット操作、検索、レンダラ健全性等、vitea が
+独自のウィンドウ管理を持つため乗らないものが大半)。このうち「セッション状態把握に使える」もの・
+「デスクトップ通知(OSC 9/777)」を実装した。
+
+| tag | ペイロード(`ghostty_action_u` のメンバ) | 由来 | 用途 |
+|---|---|---|---|
+| `GHOSTTY_ACTION_DESKTOP_NOTIFICATION` | `desktop_notification: { title: const char*, body: const char* }` | OSC 9 / OSC 777 | エージェントからのデスクトップ通知。状態検出の一次シグナル(cmux方式) |
+| `GHOSTTY_ACTION_RING_BELL` | (ペイロードなし、tag のみ) | BEL (`\a`) | 注意喚起。ツール依存のアラート検出に使える |
+| `GHOSTTY_ACTION_SET_TITLE` | `set_title: { title: const char* }` | OSC 0/1/2 | ウィンドウ/タブタイトル変更。実行中コマンド名の推測等に使える |
+| `GHOSTTY_ACTION_PWD` | `pwd: { pwd: const char* }` | OSC 7 | カレントディレクトリ変更 |
+
+上記以外(`GHOSTTY_ACTION_COMMAND_FINISHED`(終了コード・実行時間つき)、`GHOSTTY_ACTION_PROGRESS_REPORT`
+(OSC 9;4 のプログレスバー)なども状態検出に使えそうだが今回はスコープ外。ウィンドウ/タブ/スプリット系
+(`GHOSTTY_ACTION_NEW_SPLIT` 等)は vitea が libghostty の apprt レベルのウィンドウ管理に乗っていない
+(自前の `SplitHostView` を使う)ため、`handleAction` は該当しないアクションをすべて `false`
+(未処理)で返す。
+
+### GhosttySurfaceView 側の公開 API
+
+`Sources/ViteaApp/Ghostty/GhosttySurfaceView.swift` に以下のコールバックプロパティを追加した。
+`GhosttyRuntime.handleAction` が対応するサーフェスの該当コールバックを呼ぶだけで、通知UIの表示や
+状態遷移の判断はコールバックの呼び出し側(`SessionStateMonitor` / `MainWindowController` 側の配線)
+の責務とする。
+
+```swift
+var onDesktopNotification: ((_ title: String, _ body: String) -> Void)?
+var onBell: (() -> Void)?
+var onTitleChange: ((_ title: String) -> Void)?
+var onPwdChange: ((_ pwd: String) -> Void)?
+```
+
+### Swift 6 の注意点
+
+`action_cb` は他の apprt コールバック(`read_clipboard_cb` 等)と同様、`@MainActor` な
+`GhosttyRuntime` の static メソッドを直接呼ぶクロージャとして代入しているが、これは libghostty が
+これらのコールバックを常に `ghostty_app_tick` 呼び出し元(= main queue に async 済みの `tick()`)と
+同じスレッド(メインスレッド)から呼ぶ設計になっているため成立している。既存の `read_clipboard_cb` 等
+と同じ流儀を踏襲した。

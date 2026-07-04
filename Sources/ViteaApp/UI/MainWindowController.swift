@@ -89,6 +89,45 @@ final class MainWindowController: NSWindowController {
     private func watchSession(_ session: AgentSession) {
         guard let surfaceView = sessionManager.surface(for: session.id) else { return }
         stateMonitor.watch(sessionID: session.id, surfaceView: surfaceView, toolName: session.presetName)
+
+        // OSC 9/777 のデスクトップ通知と BEL を一次シグナルとして扱う(cmux 方式)。
+        // エージェント自身が「注意が必要」と宣言したタイミングなので、テキストパターン検出を
+        // 待たず即座に waitingInput へ遷移させ、通知はエージェントのメッセージをそのまま使う。
+        let sessionID = session.id
+        surfaceView.onDesktopNotification = { [weak self] title, body in
+            guard let self else { return }
+            self.appModel.sessionStateChanged(sessionID: sessionID, newState: .waitingInput)
+            self.render()
+            self.postNotification(
+                title: title.isEmpty ? "通知: \(self.displayName(of: sessionID))" : title,
+                body: body,
+                sessionID: sessionID
+            )
+        }
+        surfaceView.onBell = { [weak self] in
+            guard let self, self.appModel.sidebar.selectedSessionID != sessionID else { return }
+            self.appModel.sessionStateChanged(sessionID: sessionID, newState: .waitingInput)
+            self.render()
+            NSApp.requestUserAttention(.informationalRequest)
+        }
+    }
+
+    private func displayName(of sessionID: AgentSession.ID) -> String {
+        appModel.sessions.first { $0.id == sessionID }?.displayName ?? "セッション"
+    }
+
+    private func postNotification(title: String, body: String, sessionID: AgentSession.ID) {
+        NSApp.requestUserAttention(.informationalRequest)
+        guard notificationsAvailable else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        let request = UNNotificationRequest(
+            identifier: "\(sessionID.uuidString)-\(Date().timeIntervalSince1970)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     private func handleStateChange(sessionID: AgentSession.ID, newState: AgentSession.State) {

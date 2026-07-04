@@ -10,6 +10,8 @@ final class SidebarViewController: NSViewController {
     var onSelectWorktree: ((String) -> Void)?
     var onAddRepository: (() -> Void)?
     var onNewWorktree: (() -> Void)?
+    /// 「＋ セッションを追加」行のクリック(引数は worktree パス)。
+    var onAddSession: ((String) -> Void)?
 
     private let outlineView = NSOutlineView()
     private let scrollView = NSScrollView()
@@ -24,6 +26,8 @@ final class SidebarViewController: NSViewController {
             case repository(RepositoryNode)
             case worktree(WorktreeNode)
             case session(SessionNode)
+            /// セッションが無い worktree に表示する「＋ セッションを追加」アクション行。
+            case addSession(worktreePath: String)
         }
         let kind: Kind
         var children: [Node]
@@ -113,9 +117,11 @@ final class SidebarViewController: NSViewController {
         emptyState.isHidden = !viewModel.repositories.isEmpty
         rootNodes = viewModel.repositories.map { repo in
             Node(kind: .repository(repo), children: repo.worktrees.map { wt in
-                Node(kind: .worktree(wt), children: wt.sessions.map { s in
-                    Node(kind: .session(s))
-                })
+                var children = wt.sessions.map { Node(kind: .session($0)) }
+                if children.isEmpty {
+                    children.append(Node(kind: .addSession(worktreePath: wt.id)))
+                }
+                return Node(kind: .worktree(wt), children: children)
             })
         }
         outlineView.reloadData()
@@ -156,6 +162,8 @@ final class SidebarViewController: NSViewController {
             onSelectSession?(s.id)
         case let .worktree(wt):
             onSelectWorktree?(wt.id)
+        case let .addSession(worktreePath):
+            onAddSession?(worktreePath)
         case .repository:
             break
         }
@@ -224,6 +232,10 @@ extension SidebarViewController: NSOutlineViewDelegate {
             if let n = s.shortcutNumber {
                 stack.addArrangedSubview(label("⌘\(n)", size: 10, color: .tertiaryLabelColor, mono: true))
             }
+
+        case .addSession:
+            stack.addArrangedSubview(label("＋ セッションを追加", size: 11, color: .secondaryLabelColor))
+            stack.addArrangedSubview(spacer())
         }
 
         let cell = NSTableCellView()
@@ -307,7 +319,9 @@ extension SidebarViewController: NSOutlineViewDelegate {
         guard let node = item as? Node else { return false }
         switch node.kind {
         case .session, .worktree: return true
-        case .repository: return false
+        // addSession は選択不可(クリックアクションのみ)。選択可能にすると
+        // selectionDidChange とクリックアクションの両方から発火して二重起動する。
+        case .repository, .addSession: return false
         }
     }
 

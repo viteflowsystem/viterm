@@ -43,6 +43,10 @@ final class MainWindowController: NSWindowController {
         }
         sidebar.onAddRepository = { [weak self] in self?.addRepository(nil) }
         sidebar.onNewWorktree = { [weak self] in self?.newWorktree(nil) }
+        sidebar.onAddSession = { [weak self] worktreePath in
+            self?.selectedWorktreePath = worktreePath
+            self?.startDefaultSession(in: worktreePath)
+        }
         stateMonitor.onStateChange = { [weak self] sessionID, newState in
             self?.handleStateChange(sessionID: sessionID, newState: newState)
         }
@@ -151,23 +155,26 @@ final class MainWindowController: NSWindowController {
         selectedWorktreePath = worktreePath
         if let session = appModel.sessions.first(where: { $0.worktreePath == worktreePath }) {
             appModel.selectSession(session.id)
-            render()
         } else {
-            // セッションが無い worktree は選択しただけで既定プリセット(通常シェル)を開く。
-            Task { @MainActor in
-                do {
-                    let session = try await appModel.startSession(
-                        worktreePath: worktreePath,
-                        presetName: appModel.config.defaultPreset ?? "shell"
-                    )
-                    watchSession(session)
-                    appModel.selectSession(session.id)
-                    render()
-                } catch {
-                    appModel.selectSession(nil)
-                    render()
-                    Self.presentError(error, in: window)
-                }
+            // 起動はしない。ツリー内の「＋ セッションを追加」行から明示的に開く。
+            appModel.selectSession(nil)
+        }
+        render()
+    }
+
+    /// ツリーの「＋ セッションを追加」行 / ⌘T から、指定 worktree に既定プリセットを起動する。
+    func startDefaultSession(in worktreePath: String) {
+        Task { @MainActor in
+            do {
+                let session = try await appModel.startSession(
+                    worktreePath: worktreePath,
+                    presetName: appModel.config.defaultPreset ?? "shell"
+                )
+                watchSession(session)
+                appModel.selectSession(session.id)
+                render()
+            } catch {
+                Self.presentError(error, in: window)
             }
         }
     }
@@ -183,19 +190,7 @@ final class MainWindowController: NSWindowController {
             NSSound.beep()
             return
         }
-        Task { @MainActor in
-            do {
-                let session = try await appModel.startSession(
-                    worktreePath: worktreePath,
-                    presetName: appModel.config.defaultPreset ?? "shell"
-                )
-                watchSession(session)
-                appModel.selectSession(session.id)
-                render()
-            } catch {
-                Self.presentError(error, in: window)
-            }
-        }
+        startDefaultSession(in: worktreePath)
     }
 
     /// ⌘1..9 セッション直接切替(sender.tag に番号)。

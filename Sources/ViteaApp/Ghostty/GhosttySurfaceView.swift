@@ -36,6 +36,18 @@ final class GhosttySurfaceView: NSView {
     /// OSC 7 によるカレントディレクトリ変更(`GHOSTTY_ACTION_PWD`)を受信した。
     var onPwdChange: ((_ pwd: String) -> Void)?
 
+    /// コマンド終了(`GHOSTTY_ACTION_COMMAND_FINISHED`)を受信した。OSC 133 のセマンティック
+    /// プロンプト(`end_input_start_output` → `end_command`)由来で、シェル統合が有効な場合のみ
+    /// 発火する(docs/ghostty-integration.md 参照。vitea は現状シェル統合リソースを配布して
+    /// いないため発火しない)。`exitCode` は終了コードが報告されていれば 0-255、未報告なら nil。
+    /// `duration` はコマンドの実行時間(秒)。
+    var onCommandFinished: ((_ exitCode: Int32?, _ duration: TimeInterval) -> Void)?
+
+    /// 進捗レポート(`GHOSTTY_ACTION_PROGRESS_REPORT`、OSC 9;4 由来)を受信した。シェル統合とは
+    /// 無関係に、実行中のプログラムが直接 OSC 9;4 を出力すれば発火しうる(docs/ghostty-integration.md
+    /// 参照)。`progress` は 0-100 の割合が報告されていればその値、未報告なら nil。
+    var onProgressReport: ((_ state: ghostty_action_progress_report_state_e, _ progress: Int?) -> Void)?
+
     /// - Parameters:
     ///   - command: 起動コマンド。nil ならユーザーのデフォルトシェル。
     ///   - workingDirectory: 作業ディレクトリ。nil ならホーム。

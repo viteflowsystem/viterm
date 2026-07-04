@@ -195,11 +195,10 @@ private static func surfaceView(from target: ghostty_target_s) -> GhosttySurface
 | `GHOSTTY_ACTION_SET_TITLE` | `set_title: { title: const char* }` | OSC 0/1/2 | ウィンドウ/タブタイトル変更。実行中コマンド名の推測等に使える |
 | `GHOSTTY_ACTION_PWD` | `pwd: { pwd: const char* }` | OSC 7 | カレントディレクトリ変更 |
 
-上記以外(`GHOSTTY_ACTION_COMMAND_FINISHED`(終了コード・実行時間つき)、`GHOSTTY_ACTION_PROGRESS_REPORT`
-(OSC 9;4 のプログレスバー)なども状態検出に使えそうだが今回はスコープ外。ウィンドウ/タブ/スプリット系
-(`GHOSTTY_ACTION_NEW_SPLIT` 等)は vitea が libghostty の apprt レベルのウィンドウ管理に乗っていない
-(自前の `SplitHostView` を使う)ため、`handleAction` は該当しないアクションをすべて `false`
-(未処理)で返す。
+`GHOSTTY_ACTION_COMMAND_FINISHED` / `GHOSTTY_ACTION_PROGRESS_REPORT` は P9 で対応した(下記節参照)。
+ウィンドウ/タブ/スプリット系(`GHOSTTY_ACTION_NEW_SPLIT` 等)は vitea が libghostty の apprt レベルの
+ウィンドウ管理に乗っていない(自前の `SplitHostView` を使う)ため、`handleAction` は該当しない
+アクションをすべて `false`(未処理)で返す。
 
 ### GhosttySurfaceView 側の公開 API
 
@@ -213,6 +212,8 @@ var onDesktopNotification: ((_ title: String, _ body: String) -> Void)?
 var onBell: (() -> Void)?
 var onTitleChange: ((_ title: String) -> Void)?
 var onPwdChange: ((_ pwd: String) -> Void)?
+var onCommandFinished: ((_ exitCode: Int32?, _ duration: TimeInterval) -> Void)?
+var onProgressReport: ((_ state: ghostty_action_progress_report_state_e, _ progress: Int?) -> Void)?
 ```
 
 ### Swift 6 の注意点
@@ -222,3 +223,85 @@ var onPwdChange: ((_ pwd: String) -> Void)?
 これらのコールバックを常に `ghostty_app_tick` 呼び出し元(= main queue に async 済みの `tick()`)と
 同じスレッド(メインスレッド)から呼ぶ設計になっているため成立している。既存の `read_clipboard_cb` 等
 と同じ流儀を踏襲した。
+
+## COMMAND_FINISHED / PROGRESS_REPORT の状態検出活用(P9 向け)
+
+P7 でスコープ外にした `GHOSTTY_ACTION_COMMAND_FINISHED` / `GHOSTTY_ACTION_PROGRESS_REPORT` を
+`GhosttyRuntime.handleAction` に追加した。`vendor/ghostty/include/ghostty.h` のペイロード構造体と、
+`vendor/ghostty/src/` 内の発火元(Zig 側実装)を調査した結果を記録する。
+
+### ペイロード構造体(`include/ghostty.h`)
+
+```c
+// apprt.action.CommandFinished.C
+typedef struct {
+  // -1 if no exit code was reported, otherwise 0-255
+  int16_t exit_code;
+  // number of nanoseconds that command was running for
+  uint64_t duration;
+} ghostty_action_command_finished_s;
+
+// terminal.osc.Command.ProgressReport.C
+typedef struct {
+  ghostty_action_progress_report_state_e state; // REMOVE / SET / ERROR / INDETERMINATE / PAUSE
+  // -1 if no progress was reported, otherwise 0-100 indicating percent completeness.
+  int8_t progress;
+} ghostty_action_progress_report_s;
+```
+
+### 発火条件
+
+両アクションは由来となる OSC シーケンスも、シェル統合(shell integration)への依存度も異なる。
+
+- **`GHOSTTY_ACTION_COMMAND_FINISHED`**: OSC 133 のセマンティックプロンプトシーケンスに由来する。
+  `src/termio/stream_handler.zig` の `semanticPrompt()` が OSC 133 の `end_input_start_output`
+  (`C` — コマンド出力開始)で `start_command` メッセージを、`end_command`(`D` — コマンド終了、
+  終了コードのオプション引数つき)で `stop_command` メッセージを発行する。`src/Surface.zig` の
+  `stop_command` ハンドラが実行時間(`start_command` からの経過時間)を計測し、
+  `command_finished` アクションとして apprt(vitea)側へ渡す。
+  **OSC 133 はシェル(zsh 等)が自発的に出すものではなく、通常はシェル統合スクリプト
+  (`vendor/ghostty/src/shell-integration/zsh/ghostty-integration` 等)が precmd/preexec フック
+  経由で自動注入する**。シェル統合が無効だと、この OSC シーケンス自体がシェルから送出されず、
+  `COMMAND_FINISHED` は発火しない。
+- **`GHOSTTY_ACTION_PROGRESS_REPORT`**: OSC 9;4(ConEmu 由来のプログレスレポート)に由来する。
+  `src/terminal/osc.zig` がこの OSC シーケンスをパースし、`src/termio/stream_handler.zig` の
+  `progressReport()` を経由してアクション化される。**OSC 133 のセマンティックプロンプト機構とは
+  独立した、任意のプログラムが直接出力できる標準的なエスケープシーケンス**であり、シェル統合の
+  有効・無効に関わらず、実行中のプログラム自身が OSC 9;4 を書き込めば発火しうる(ただし
+  Claude Code / Codex 等の AI コーディングエージェントが実際にこれを出力するかは未確認。
+  一般的なビルドツール・パッケージマネージャの一部が対応している程度)。
+
+### vitea で現状発火するか
+
+**`COMMAND_FINISHED` は現状発火しない。** `vendor/ghostty/src/global.zig` の初期化処理
+(`ghostty_init()` 経由)が `apprt.runtime.resourcesDir()`(= `src/os/resourcesdir.zig`)を呼んで
+`resources_dir` を決定するが、その解決順序は「(a) release ビルドでは `GHOSTTY_RESOURCES_DIR` 環境
+変数を最優先、(b) それが無ければ実行バイナリのパスを遡って `Contents/Resources/terminfo/78/xterm-ghostty`
+(macOS app bundle)や `share/terminfo/...` という sentinel ファイルを探す、(c) debug ビルドでは
+(b)を先に試してから `GHOSTTY_RESOURCES_DIR` にフォールバック」という順。vitea は
+`GhosttyRuntime.swift` の `init()` で `GHOSTTY_RESOURCES_DIR` を設定しておらず、`swift run` /
+`.build/vitea.app` のどちらの実行形態でも上記 sentinel ファイルを含むリソースを同梱していないため、
+`resources_dir` は解決されず nil になる。この場合 `src/termio/Exec.zig` の
+`log.warn("no resources dir set, shell integration disabled", ...)` が出て(T3 のログで確認済み)、
+シェル統合が注入されない → OSC 133 が送出されない → `COMMAND_FINISHED` は発火しない。
+
+**`PROGRESS_REPORT` はシェル統合と無関係なので、理論上は現状でも発火しうる**(ツール側が OSC 9;4 を
+直接出力すれば)。ただし vitea が起動する `claude` / `codex` / `shell` プリセットが実際にこれを出力
+するかどうかは別問題で、今回のコード調査だけでは確認できていない。
+
+### COMMAND_FINISHED を発火させるために必要な対応(調査のみ、未実装)
+
+現時点の変更範囲(`Sources/ViteaApp/Ghostty/` + 本ドキュメント)には含めていないが、必要になった際の
+見取り図として記録する。
+
+1. `vendor/ghostty` のビルド成果物(`zig build` 実行後の `zig-out/share/ghostty/` 相当。現状
+   `shell-integration/`(zsh/bash/fish/elvish/nushell 向けスクリプト)と `themes/` は生成されているが、
+   **`terminfo/` は含まれていない**(別途 `tic` 経由の生成ステップが必要な可能性がある。今回未調査)
+   を、vitea の配布物(`.build/vitea.app/Contents/Resources/ghostty/` 等)にコピーする仕組みを
+   `scripts/make-app.sh` 等に追加する
+2. `GhosttyRuntime.init()` で `ghostty_init()` を呼ぶ前に、Swift 側から
+   `setenv("GHOSTTY_RESOURCES_DIR", <上記コピー先パス>, 1)` を呼び、libghostty の
+   `resourcesDir()` 解決(`global.zig` の初期化時に1回だけ実行される)にそのパスを使わせる
+3. `swift run`(app bundle 化しない開発時実行)でも同様に機能させたい場合、コピー先パスを
+   `vendor/ghostty/zig-out/share/ghostty` に固定するなど、開発時とバンドル時それぞれの解決方法を
+   検討する必要がある

@@ -59,6 +59,22 @@ final class GhosttyRuntime {
             view.onPwdChange?(String(cString: pwdPtr))
             return true
 
+        case GHOSTTY_ACTION_COMMAND_FINISHED:
+            let payload = action.action.command_finished
+            // exit_code は「-1 なら未報告、それ以外は 0-255」(ghostty.h のコメント)。
+            let exitCode: Int32? = payload.exit_code >= 0 ? Int32(payload.exit_code) : nil
+            // duration はナノ秒単位。
+            let duration = TimeInterval(payload.duration) / 1_000_000_000
+            view.onCommandFinished?(exitCode, duration)
+            return true
+
+        case GHOSTTY_ACTION_PROGRESS_REPORT:
+            let payload = action.action.progress_report
+            // progress は「-1 なら未報告、それ以外は 0-100」(ghostty.h のコメント)。
+            let progress: Int? = payload.progress >= 0 ? Int(payload.progress) : nil
+            view.onProgressReport?(payload.state, progress)
+            return true
+
         default:
             return false
         }

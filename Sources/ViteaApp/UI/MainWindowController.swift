@@ -1,4 +1,5 @@
 import AppKit
+import GhosttyKit
 import GitKit
 import UserNotifications
 import ViteaCore
@@ -109,6 +110,18 @@ final class MainWindowController: NSWindowController {
             self.appModel.sessionStateChanged(sessionID: sessionID, newState: .waitingInput)
             self.render()
             NSApp.requestUserAttention(.informationalRequest)
+        }
+        // shell integration 有効時のみ発火(OSC 133)。コマンド終了=プロンプトに戻った=idle。
+        surfaceView.onCommandFinished = { [weak self] _, _ in
+            guard let self else { return }
+            self.appModel.sessionStateChanged(sessionID: sessionID, newState: .idle)
+            self.render()
+        }
+        // OSC 9;4 の進捗報告。進捗中は busy、REMOVE(完了)はテキスト検出に委ねる。
+        surfaceView.onProgressReport = { [weak self] state, _ in
+            guard let self, state != GHOSTTY_PROGRESS_STATE_REMOVE else { return }
+            self.appModel.sessionStateChanged(sessionID: sessionID, newState: .busy)
+            self.render()
         }
     }
 

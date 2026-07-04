@@ -70,15 +70,16 @@ final class SidebarViewController: NSViewController {
         emptyState.addArrangedSubview(emptyButton)
         emptyState.isHidden = true
 
-        // 下部アクションバー(UIモックの sb-actions 相当)。
+        // 下部アクションバー(UIモックの sb-actions 相当)。幅が狭くても切れないよう縦並び。
         let actionBar = NSStackView()
-        actionBar.orientation = .horizontal
-        actionBar.spacing = 6
+        actionBar.orientation = .vertical
+        actionBar.alignment = .leading
+        actionBar.spacing = 2
         actionBar.edgeInsets = NSEdgeInsets(top: 6, left: 8, bottom: 8, right: 8)
-        let addRepoButton = sidebarActionButton("＋ リポジトリ", action: #selector(didTapAddRepository))
         let addWorktreeButton = sidebarActionButton("＋ worktree  ⌘N", action: #selector(didTapNewWorktree))
-        actionBar.addArrangedSubview(addRepoButton)
+        let addRepoButton = sidebarActionButton("＋ リポジトリ", action: #selector(didTapAddRepository))
         actionBar.addArrangedSubview(addWorktreeButton)
+        actionBar.addArrangedSubview(addRepoButton)
 
         let separator = NSBox()
         separator.boxType = .separator

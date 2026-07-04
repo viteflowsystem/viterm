@@ -119,7 +119,7 @@ final class MainWindowController: NSWindowController {
 
     /// AppModel の現在状態を UI に反映する。状態変化のたびに呼ぶ。
     func render() {
-        sidebar.set(viewModel: appModel.sidebar)
+        sidebar.set(viewModel: appModel.sidebar, selectedWorktreePath: selectedWorktreePath)
         statusBar.update(sidebar: appModel.sidebar)
         let selectedID = appModel.sidebar.selectedSessionID
         terminalHost.show(selectedID.flatMap { sessionManager.surface(for: $0) })
@@ -151,10 +151,25 @@ final class MainWindowController: NSWindowController {
         selectedWorktreePath = worktreePath
         if let session = appModel.sessions.first(where: { $0.worktreePath == worktreePath }) {
             appModel.selectSession(session.id)
+            render()
         } else {
-            appModel.selectSession(nil)
+            // セッションが無い worktree は選択しただけで既定プリセット(通常シェル)を開く。
+            Task { @MainActor in
+                do {
+                    let session = try await appModel.startSession(
+                        worktreePath: worktreePath,
+                        presetName: appModel.config.defaultPreset ?? "shell"
+                    )
+                    watchSession(session)
+                    appModel.selectSession(session.id)
+                    render()
+                } catch {
+                    appModel.selectSession(nil)
+                    render()
+                    Self.presentError(error, in: window)
+                }
+            }
         }
-        render()
     }
 
     // MARK: - アクション(メニュー/ショートカットから)
@@ -172,7 +187,7 @@ final class MainWindowController: NSWindowController {
             do {
                 let session = try await appModel.startSession(
                     worktreePath: worktreePath,
-                    presetName: appModel.config.defaultPreset ?? "claude"
+                    presetName: appModel.config.defaultPreset ?? "shell"
                 )
                 watchSession(session)
                 appModel.selectSession(session.id)
@@ -317,7 +332,7 @@ final class MainWindowController: NSWindowController {
             )
             let sheet = NewWorktreeSheet(
                 form: form,
-                launchPresetName: appModel.config.defaultPreset ?? "claude"
+                launchPresetName: appModel.config.defaultPreset ?? "shell"
             ) { [weak self] request in
                 self?.createWorktree(request)
             }

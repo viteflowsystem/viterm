@@ -15,6 +15,8 @@ final class SidebarViewController: NSViewController {
     private let scrollView = NSScrollView()
     private let emptyState = NSStackView()
     private var viewModel = SidebarViewModel(repositories: [], worktrees: [], sessions: [])
+    /// セッション未起動の worktree を選択中の場合のハイライト対象。
+    private var selectedWorktreePath: String?
 
     // NSOutlineView の item は参照同一性で管理されるため、ツリーを class ノードに変換して保持する。
     private final class Node {
@@ -105,8 +107,9 @@ final class SidebarViewController: NSViewController {
     @objc private func didTapAddRepository() { onAddRepository?() }
     @objc private func didTapNewWorktree() { onNewWorktree?() }
 
-    func set(viewModel: SidebarViewModel) {
+    func set(viewModel: SidebarViewModel, selectedWorktreePath: String? = nil) {
         self.viewModel = viewModel
+        self.selectedWorktreePath = selectedWorktreePath
         emptyState.isHidden = !viewModel.repositories.isEmpty
         rootNodes = viewModel.repositories.map { repo in
             Node(kind: .repository(repo), children: repo.worktrees.map { wt in
@@ -127,18 +130,22 @@ final class SidebarViewController: NSViewController {
     private func syncSelection() {
         isSyncingSelection = true
         defer { isSyncingSelection = false }
-        guard let selected = viewModel.selectedSessionID else {
-            outlineView.deselectAll(nil)
-            return
-        }
         for row in 0..<outlineView.numberOfRows {
-            if let node = outlineView.item(atRow: row) as? Node,
-               case let .session(s) = node.kind, s.id == selected {
+            guard let node = outlineView.item(atRow: row) as? Node else { continue }
+            switch node.kind {
+            case let .session(s) where s.id == viewModel.selectedSessionID:
                 outlineView.selectRowIndexes([row], byExtendingSelection: false)
                 outlineView.scrollRowToVisible(row)
                 return
+            case let .worktree(wt) where viewModel.selectedSessionID == nil && wt.id == selectedWorktreePath:
+                outlineView.selectRowIndexes([row], byExtendingSelection: false)
+                outlineView.scrollRowToVisible(row)
+                return
+            default:
+                continue
             }
         }
+        outlineView.deselectAll(nil)
     }
 
     @objc private func didClickRow() {
@@ -307,5 +314,20 @@ extension SidebarViewController: NSOutlineViewDelegate {
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !isSyncingSelection else { return }
         didClickRow()
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
+        AccentBarRowView()
+    }
+}
+
+/// 選択行のハイライト(UIモックの .sess.active 相当: 背景 + 左端2pxのアクセントバー)。
+private final class AccentBarRowView: NSTableRowView {
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard selectionHighlightStyle != .none else { return }
+        NSColor.selectedContentBackgroundColor.withAlphaComponent(0.35).setFill()
+        bounds.fill()
+        NSColor.controlAccentColor.setFill()
+        NSRect(x: 0, y: 0, width: 2, height: bounds.height).fill()
     }
 }

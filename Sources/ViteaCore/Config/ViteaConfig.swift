@@ -98,7 +98,9 @@ public struct ViteaConfig: Sendable, Equatable {
     public static let `default` = ViteaConfig(
         worktreePathTemplate: "~/worktrees/{project}/{branch}",
         presets: defaultPresets,
-        defaultPreset: "claude",
+        // 既定はシェル。エージェント(claude 等)はシェル内でユーザーが起動する想定。
+        // 常に claude を開きたい場合は設定(⌘,)で defaultPreset を変更する。
+        defaultPreset: "shell",
         repositories: [],
         copySessionDataByDefault: false,
         postCreationHook: nil,

@@ -4,5 +4,5 @@ import Testing
 // スモークテスト。詳細なテストは WorktreePathTemplateTests / ViteaConfigTests /
 // ConfigLoaderTests / ModelsTests を参照。
 @Test func scaffoldBuilds() {
-    #expect(ViteaConfig.default.defaultPreset == "claude")
+    #expect(ViteaConfig.default.defaultPreset == "shell")
 }

@@ -46,10 +46,6 @@ public final class AppModel {
     /// 直近の `refresh()` で発生した(致命的でない)エラーメッセージ。UI のトースト表示等に使う。
     public private(set) var lastRefreshErrors: [String]
 
-    /// `RepositoryDiscovery` で自動検出するルートディレクトリ。`nil` なら自動検出を行わない。
-    /// (現行の `ViteaConfig` はこの値を保持しないため、設定化されるまでは呼び出し側が直接設定する)
-    public var discoveryRootDirectory: URL?
-
     // MARK: 注入された依存
 
     private let configProvider: any ConfigProviding
@@ -59,7 +55,7 @@ public final class AppModel {
     private let worktreeProvisioner: any WorktreeProvisioning
     private let worktreeRemover: any WorktreeRemoving
     private let mergeCleanupCoordinator: any MergeCleaningUp
-    private let statusChangeHookRunner: any StatusChangeNotifying
+    private var statusChangeHookRunner: any StatusChangeNotifying
     private let sessionLauncher: any SessionLaunching
 
     public init(
@@ -71,8 +67,7 @@ public final class AppModel {
         worktreeRemover: any WorktreeRemoving = GitService(),
         mergeCleanupCoordinator: any MergeCleaningUp = MergeCleanupCoordinator(),
         statusChangeHookRunner: any StatusChangeNotifying = StatusChangeHookRunner(config: StatusChangeHookConfig()),
-        sessionLauncher: any SessionLaunching,
-        discoveryRootDirectory: URL? = nil
+        sessionLauncher: any SessionLaunching
     ) {
         self.configProvider = configProvider
         self.repositoryConfigPersister = repositoryConfigPersister
@@ -83,7 +78,6 @@ public final class AppModel {
         self.mergeCleanupCoordinator = mergeCleanupCoordinator
         self.statusChangeHookRunner = statusChangeHookRunner
         self.sessionLauncher = sessionLauncher
-        self.discoveryRootDirectory = discoveryRootDirectory
 
         config = .default
         repositories = []
@@ -112,16 +106,29 @@ public final class AppModel {
         config = loadedConfig
 
         var mergedRepositories = loadedConfig.repositories
-        if let discoveryRootDirectory {
-            let discovered = repositoryDiscovery.discover(rootDirectory: discoveryRootDirectory)
+        if !loadedConfig.discoveryRoots.isEmpty {
+            let discovered = loadedConfig.discoveryRoots.flatMap { root in
+                repositoryDiscovery.discover(rootDirectory: Self.expandDiscoveryRoot(root))
+            }
             mergedRepositories = Self.merging(registered: mergedRepositories, discovered: discovered)
         }
         repositories = mergedRepositories
 
         worktrees = await worktreeStatusScanner.scan(repositories: repositories)
 
+        statusChangeHookRunner.updateConfig(StatusChangeHookConfig(
+            onBusy: loadedConfig.statusHooks.onBusy,
+            onWaitingInput: loadedConfig.statusHooks.onWaitingInput,
+            onIdle: loadedConfig.statusHooks.onIdle
+        ))
+
         rebuildSidebar()
         lastRefreshErrors = errors
+    }
+
+    /// `discoveryRoots` の1エントリ(`~` を含みうる文字列)を実際のディレクトリ URL に展開する。
+    static func expandDiscoveryRoot(_ path: String) -> URL {
+        URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
     }
 
     /// 登録済みリポジトリ(`path` で同定)を優先し、自動検出のみで見つかったものを末尾に追加する。
@@ -190,12 +197,19 @@ public final class AppModel {
             .remoteBranch(remote: remote, name: name, newLocalName: newLocalName)
         }
 
+        // フォームで hook が明示的に指定されていなければ、設定の既定 post-creation hook を使う。
+        let postCreationHookCommand: String? = if let formHook = formRequest.runHookCommand, !formHook.isEmpty {
+            formHook
+        } else {
+            config.postCreationHook
+        }
+
         let request = WorktreeCreationRequest(
             repository: formRequest.repository,
             source: source,
             pathTemplate: formRequest.pathTemplate,
             copySessionData: formRequest.copySessionData,
-            postCreationHookCommand: formRequest.runHookCommand
+            postCreationHookCommand: postCreationHookCommand
         )
 
         let result = try await worktreeProvisioner.createWorktree(request)

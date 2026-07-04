@@ -31,8 +31,15 @@ final class FakeConfigStore: ConfigProviding, RepositoryConfigPersisting, @unche
 }
 
 final class FakeRepositoryDiscovery: RepositoryDiscovering, @unchecked Sendable {
-    var repositoriesToReturn: [Repository] = []
-    func discover(rootDirectory: URL) -> [Repository] { repositoriesToReturn }
+    /// ルートディレクトリ(の `path`)ごとに返す結果。無ければ `defaultRepositoriesToReturn`。
+    var repositoriesByRoot: [String: [Repository]] = [:]
+    var defaultRepositoriesToReturn: [Repository] = []
+    private(set) var requestedRootDirectories: [URL] = []
+
+    func discover(rootDirectory: URL) -> [Repository] {
+        requestedRootDirectories.append(rootDirectory)
+        return repositoriesByRoot[rootDirectory.path] ?? defaultRepositoriesToReturn
+    }
 }
 
 final class FakeWorktreeStatusScanner: WorktreeStatusScanning, @unchecked Sendable {
@@ -86,6 +93,7 @@ final class FakeStatusChangeNotifier: StatusChangeNotifying, @unchecked Sendable
     }
 
     private(set) var calls: [Call] = []
+    private(set) var configUpdates: [StatusChangeHookConfig] = []
 
     @discardableResult
     func notify(
@@ -96,6 +104,10 @@ final class FakeStatusChangeNotifier: StatusChangeNotifying, @unchecked Sendable
     ) -> Task<Void, Never>? {
         calls.append(Call(sessionName: sessionName, worktreePath: worktreePath, oldState: oldState, newState: newState))
         return nil
+    }
+
+    func updateConfig(_ config: StatusChangeHookConfig) {
+        configUpdates.append(config)
     }
 }
 
@@ -130,8 +142,7 @@ struct AppModelTests {
         remover: FakeWorktreeRemover = FakeWorktreeRemover(),
         merger: FakeMergeCleanupCoordinator = FakeMergeCleanupCoordinator(),
         notifier: FakeStatusChangeNotifier = FakeStatusChangeNotifier(),
-        launcher: FakeSessionLauncher = FakeSessionLauncher(),
-        discoveryRootDirectory: URL? = nil
+        launcher: FakeSessionLauncher = FakeSessionLauncher()
     ) -> AppModel {
         AppModel(
             configProvider: configStore,
@@ -142,8 +153,7 @@ struct AppModelTests {
             worktreeRemover: remover,
             mergeCleanupCoordinator: merger,
             statusChangeHookRunner: notifier,
-            sessionLauncher: launcher,
-            discoveryRootDirectory: discoveryRootDirectory
+            sessionLauncher: launcher
         )
     }
 
@@ -169,22 +179,85 @@ struct AppModelTests {
         #expect(scanner.scannedRepositories.last == [repository])
     }
 
-    @Test("discoveryRootDirectoryがあれば自動検出の結果をマージし、登録済みが優先される")
+    @Test("設定のdiscoveryRootsがあれば自動検出の結果をマージし、登録済みが優先される")
     func refreshMergesDiscoveredRepositoriesWithRegisteredTakingPriority() async {
         let configStore = FakeConfigStore(config: ViteaConfig.merge(
-            global: ViteaConfigFile(repositories: [Repository(name: "registered-name", path: "/repo/shared")]),
+            global: ViteaConfigFile(
+                repositories: [Repository(name: "registered-name", path: "/repo/shared")],
+                discoveryRoots: ["/root"]
+            ),
             project: nil
         ))
         let discovery = FakeRepositoryDiscovery()
-        discovery.repositoriesToReturn = [
+        discovery.defaultRepositoriesToReturn = [
             Repository(name: "discovered-name", path: "/repo/shared"),
             Repository(name: "extra", path: "/repo/extra"),
         ]
 
-        let model = makeModel(configStore: configStore, discovery: discovery, discoveryRootDirectory: URL(fileURLWithPath: "/root"))
+        let model = makeModel(configStore: configStore, discovery: discovery)
         await model.refresh()
 
         #expect(model.repositories.map(\.name) == ["registered-name", "extra"])
+        #expect(discovery.requestedRootDirectories == [URL(fileURLWithPath: "/root")])
+    }
+
+    @Test("discoveryRootsが複数あればそれぞれについて自動検出し、結果を合算する")
+    func refreshDiscoversAcrossMultipleRoots() async {
+        let configStore = FakeConfigStore(config: ViteaConfig.merge(
+            global: ViteaConfigFile(discoveryRoots: ["/root-a", "/root-b"]),
+            project: nil
+        ))
+        let discovery = FakeRepositoryDiscovery()
+        discovery.repositoriesByRoot = [
+            "/root-a": [Repository(name: "repo-a", path: "/repo/a")],
+            "/root-b": [Repository(name: "repo-b", path: "/repo/b")],
+        ]
+
+        let model = makeModel(configStore: configStore, discovery: discovery)
+        await model.refresh()
+
+        #expect(model.repositories.map(\.name).sorted() == ["repo-a", "repo-b"])
+        #expect(discovery.requestedRootDirectories.map(\.path).sorted() == ["/root-a", "/root-b"])
+    }
+
+    @Test("discoveryRootsが空なら自動検出は呼ばれない")
+    func refreshSkipsDiscoveryWhenRootsAreEmpty() async {
+        let configStore = FakeConfigStore()
+        let discovery = FakeRepositoryDiscovery()
+
+        let model = makeModel(configStore: configStore, discovery: discovery)
+        await model.refresh()
+
+        #expect(discovery.requestedRootDirectories.isEmpty)
+    }
+
+    @Test("discoveryRootsの~はホームディレクトリに展開される")
+    func refreshExpandsTildeInDiscoveryRoots() async {
+        let configStore = FakeConfigStore(config: ViteaConfig.merge(
+            global: ViteaConfigFile(discoveryRoots: ["~/dev"]),
+            project: nil
+        ))
+        let discovery = FakeRepositoryDiscovery()
+
+        let model = makeModel(configStore: configStore, discovery: discovery)
+        await model.refresh()
+
+        #expect(discovery.requestedRootDirectories == [URL(fileURLWithPath: NSHomeDirectory() + "/dev")])
+    }
+
+    @Test("refreshはconfigのstatusHooksをStatusChangeHookConfigとして反映する")
+    func refreshAppliesStatusHooksToNotifier() async {
+        let configStore = FakeConfigStore(config: ViteaConfig.merge(
+            global: ViteaConfigFile(statusHooks: StatusHooksFile(onBusy: "notify-busy", onIdle: "notify-idle")),
+            project: nil
+        ))
+        let notifier = FakeStatusChangeNotifier()
+
+        let model = makeModel(configStore: configStore, notifier: notifier)
+        await model.refresh()
+
+        #expect(notifier.configUpdates.count == 1)
+        #expect(notifier.configUpdates.first == StatusChangeHookConfig(onBusy: "notify-busy", onWaitingInput: nil, onIdle: "notify-idle"))
     }
 
     @Test("設定の読み込みに失敗しても前回の設定を維持しエラーを記録する")
@@ -326,6 +399,45 @@ struct AppModelTests {
         #expect(launcher.startedRequests.first?.worktreePath == "/wt/feat")
         #expect(launcher.startedRequests.first?.presetName == "claude")
         #expect(model.sessions.count == 1)
+    }
+
+    @Test("createWorktreeはフォームにhook指定が無ければconfigのpostCreationHookをフォールバックとして使う")
+    func createWorktreeFallsBackToConfigPostCreationHook() async throws {
+        let configStore = FakeConfigStore(config: ViteaConfig.merge(
+            global: ViteaConfigFile(postCreationHook: "echo from-config"),
+            project: nil
+        ))
+        let provisioner = FakeWorktreeProvisioner()
+        let model = makeModel(configStore: configStore, provisioner: provisioner)
+        await model.refresh()
+
+        let request = NewWorktreeRequest(
+            repository: repository, source: .newBranch(name: "feat", startPoint: nil),
+            worktreePath: "/wt/feat", pathTemplate: WorktreePathTemplate("~/wt/{branch}")
+        )
+        _ = try await model.createWorktree(from: request)
+
+        #expect(provisioner.receivedRequests.first?.postCreationHookCommand == "echo from-config")
+    }
+
+    @Test("createWorktreeはフォームにhook指定があればconfigのpostCreationHookより優先する")
+    func createWorktreeFormHookTakesPriorityOverConfig() async throws {
+        let configStore = FakeConfigStore(config: ViteaConfig.merge(
+            global: ViteaConfigFile(postCreationHook: "echo from-config"),
+            project: nil
+        ))
+        let provisioner = FakeWorktreeProvisioner()
+        let model = makeModel(configStore: configStore, provisioner: provisioner)
+        await model.refresh()
+
+        let request = NewWorktreeRequest(
+            repository: repository, source: .newBranch(name: "feat", startPoint: nil),
+            worktreePath: "/wt/feat", pathTemplate: WorktreePathTemplate("~/wt/{branch}"),
+            runHookCommand: "echo from-form"
+        )
+        _ = try await model.createWorktree(from: request)
+
+        #expect(provisioner.receivedRequests.first?.postCreationHookCommand == "echo from-form")
     }
 
     // MARK: mergeAndCleanUp / removeWorktree

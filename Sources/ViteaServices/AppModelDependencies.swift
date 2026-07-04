@@ -52,6 +52,9 @@ public protocol StatusChangeNotifying: Sendable {
         oldState: AgentSession.State?,
         newState: AgentSession.State
     ) -> Task<Void, Never>?
+
+    /// 設定リロード(`AppModel.refresh()`)ごとに hook コマンド設定を最新化する。
+    mutating func updateConfig(_ config: StatusChangeHookConfig)
 }
 
 /// セッションの起動・切替の抽象。T6 で実装される `SessionManager` がこれに準拠する想定

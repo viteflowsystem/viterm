@@ -64,4 +64,9 @@ public struct StatusChangeHookRunner: Sendable {
             await runHook(command, environment)
         }
     }
+
+    /// 設定リロードごとに hook コマンド設定を最新化する(`StatusChangeNotifying.updateConfig`)。
+    public mutating func updateConfig(_ config: StatusChangeHookConfig) {
+        self.config = config
+    }
 }

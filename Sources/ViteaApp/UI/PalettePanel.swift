@@ -263,8 +263,12 @@ public final class PalettePanel: NSObject {
             x: window.frame.midX - PalettePanel.panelWidth / 2,
             y: window.frame.maxY - PalettePanel.topInset - height
         )
-        panelWindow.setFrame(NSRect(origin: origin, size: NSSize(width: PalettePanel.panelWidth, height: height)), display: true)
+        // `layoutContainer` を先に呼び、サブビューを新しい `height` に合わせておく。
+        // `setFrame(display: true)` は呼び出した瞬間に同期的に再描画するため、逆順だと
+        // 古い(絞り込み前の大きい)フレームのまま新しい(小さい)コンテナ境界で
+        // クリップされた状態が一瞬描画されてしまう(候補が1件のときの半端な切れ方の原因)。
         layoutContainer(height: height)
+        panelWindow.setFrame(NSRect(origin: origin, size: NSSize(width: PalettePanel.panelWidth, height: height)), display: true)
     }
 
     // MARK: - フィルタリング・選択

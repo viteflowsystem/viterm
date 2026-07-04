@@ -38,6 +38,11 @@ final class MainWindowController: NSWindowController {
         sidebar.onSelectSession = { [weak self] sessionID in
             self?.select(sessionID: sessionID)
         }
+        sidebar.onSelectWorktree = { [weak self] worktreePath in
+            self?.selectWorktree(worktreePath)
+        }
+        sidebar.onAddRepository = { [weak self] in self?.addRepository(nil) }
+        sidebar.onNewWorktree = { [weak self] in self?.newWorktree(nil) }
         stateMonitor.onStateChange = { [weak self] sessionID, newState in
             self?.handleStateChange(sessionID: sessionID, newState: newState)
         }
@@ -129,7 +134,21 @@ final class MainWindowController: NSWindowController {
     }
 
     private func select(sessionID: AgentSession.ID) {
+        selectedWorktreePath = nil
         appModel.selectSession(sessionID)
+        render()
+    }
+
+    /// worktree 行の選択。セッションがあれば先頭を表示し、無ければ ⌘T のターゲットとして記憶する。
+    private var selectedWorktreePath: String?
+
+    private func selectWorktree(_ worktreePath: String) {
+        selectedWorktreePath = worktreePath
+        if let session = appModel.sessions.first(where: { $0.worktreePath == worktreePath }) {
+            appModel.selectSession(session.id)
+        } else {
+            appModel.selectSession(nil)
+        }
         render()
     }
 
@@ -138,6 +157,7 @@ final class MainWindowController: NSWindowController {
     /// 現在選択中の worktree(なければ最初の worktree)にセッションを追加する。⌘T
     @objc func newSession(_ sender: Any?) {
         let worktreePath = appModel.sidebar.selectedSession?.session.worktreePath
+            ?? selectedWorktreePath
             ?? appModel.worktrees.first?.path
         guard let worktreePath else {
             NSSound.beep()
@@ -231,6 +251,16 @@ final class MainWindowController: NSWindowController {
         }
     }
 
+    /// ⌘, 設定シート。保存後は設定を読み直して反映する。
+    @objc func showSettings(_ sender: Any?) {
+        guard let window else { return }
+        let sheet = SettingsSheet(config: appModel.config) { [weak self] in
+            self?.refreshAndRender()
+        }
+        let panel = NSWindow(contentViewController: sheet)
+        window.beginSheet(panel, completionHandler: nil)
+    }
+
     /// リポジトリ追加(ディレクトリ選択、T15)。
     @objc func addRepository(_ sender: Any?) {
         guard let window else { return }
@@ -252,9 +282,10 @@ final class MainWindowController: NSWindowController {
         }
     }
 
-    /// 現在の文脈のリポジトリ(選択セッション → 先頭リポジトリの順で解決)。
+    /// 現在の文脈のリポジトリ(選択セッション → 選択worktree → 先頭リポジトリの順で解決)。
     private var currentRepository: Repository? {
-        if let worktreePath = appModel.sidebar.selectedSession?.session.worktreePath,
+        let worktreePath = appModel.sidebar.selectedSession?.session.worktreePath ?? selectedWorktreePath
+        if let worktreePath,
            let worktree = appModel.worktrees.first(where: { $0.path == worktreePath }) {
             return appModel.repositories.first { $0.path == worktree.repositoryPath }
         }

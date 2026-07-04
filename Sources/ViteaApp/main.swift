@@ -27,6 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
+        let settings = NSMenuItem(title: "設定…", action: #selector(MainWindowController.showSettings(_:)), keyEquivalent: ",")
+        settings.target = controller
+        appMenu.addItem(settings)
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit vitea", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
         main.addItem(appMenuItem)

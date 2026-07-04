@@ -211,16 +211,23 @@ extension SidebarViewController: NSOutlineViewDelegate {
         case let .worktree(wt):
             stack.addArrangedSubview(label(wt.worktree.branch, size: 11, weight: .semibold))
             stack.addArrangedSubview(spacer())
-            var git: [String] = []
-            if wt.worktree.ahead > 0 { git.append("↑\(wt.worktree.ahead)") }
-            if wt.worktree.behind > 0 { git.append("↓\(wt.worktree.behind)") }
+            // git 情報はモック準拠のセグメント別配色(↑↓=セカンダリ、+=緑、−=赤、dirty=オレンジ)。
+            var git: [(String, NSColor)] = []
+            if wt.worktree.ahead > 0 { git.append(("↑\(wt.worktree.ahead)", .secondaryLabelColor)) }
+            if wt.worktree.behind > 0 { git.append(("↓\(wt.worktree.behind)", .secondaryLabelColor)) }
             let added = wt.worktree.diffStat.added
             let removed = wt.worktree.diffStat.removed
-            if added > 0 { git.append("+\(added)") }
-            if removed > 0 { git.append("−\(removed)") }
-            if git.isEmpty && !wt.worktree.isDirty { git.append("clean") }
-            if wt.worktree.isDirty { git.append("●") }
-            stack.addArrangedSubview(label(git.joined(separator: " "), size: 10, color: .tertiaryLabelColor, mono: true))
+            if added > 0 { git.append(("+\(added)", .systemGreen)) }
+            if removed > 0 { git.append(("−\(removed)", .systemRed)) }
+            if git.isEmpty && !wt.worktree.isDirty { git.append(("clean", .tertiaryLabelColor)) }
+            if wt.worktree.isDirty { git.append(("●", .systemOrange)) }
+            let gitStack = NSStackView()
+            gitStack.orientation = .horizontal
+            gitStack.spacing = 4
+            for (text, color) in git {
+                gitStack.addArrangedSubview(label(text, size: 10, color: color, mono: true))
+            }
+            stack.addArrangedSubview(gitStack)
 
         case let .session(s):
             stack.addArrangedSubview(stateDot(for: s.session.state))

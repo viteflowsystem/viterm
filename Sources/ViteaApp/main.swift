@@ -22,6 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        windowController?.persistSessions()
+    }
+
     private static func buildMenu(for controller: MainWindowController) -> NSMenu {
         let main = NSMenu()
 

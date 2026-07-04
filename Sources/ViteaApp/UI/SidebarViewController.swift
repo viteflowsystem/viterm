@@ -221,6 +221,10 @@ extension SidebarViewController: NSOutlineViewDelegate {
             if git.isEmpty && !wt.worktree.isDirty { git.append("clean") }
             if wt.worktree.isDirty { git.append("●") }
             stack.addArrangedSubview(label(git.joined(separator: " "), size: 10, color: .tertiaryLabelColor, mono: true))
+            // セッションが既にある worktree にはセッション追加の「＋」ボタンを常設。
+            if !wt.sessions.isEmpty {
+                stack.addArrangedSubview(addButton(worktreePath: wt.id))
+            }
 
         case let .session(s):
             stack.addArrangedSubview(stateDot(for: s.session.state))
@@ -298,6 +302,22 @@ extension SidebarViewController: NSOutlineViewDelegate {
         return dot
     }
 
+    /// worktree 行の「＋」(セッション追加)ボタン。
+    private func addButton(worktreePath: String) -> NSButton {
+        let button = NSButton(title: "＋", target: self, action: #selector(didTapRowAddSession(_:)))
+        button.bezelStyle = .accessoryBarAction
+        button.font = .systemFont(ofSize: 10, weight: .semibold)
+        button.toolTip = "このworktreeにセッションを追加"
+        button.identifier = NSUserInterfaceItemIdentifier(worktreePath)
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        return button
+    }
+
+    @objc private func didTapRowAddSession(_ sender: NSButton) {
+        guard let path = sender.identifier?.rawValue else { return }
+        onAddSession?(path)
+    }
+
     /// waiting 数のバッジ(青いピル)。UIモックの .badge 相当。
     private func badge(_ text: String) -> NSView {
         let field = NSTextField(labelWithString: text)
@@ -331,17 +351,34 @@ extension SidebarViewController: NSOutlineViewDelegate {
     }
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
-        AccentBarRowView()
+        let rowView = AccentBarRowView()
+        // 2つ目以降のリポジトリ行の上にボーダーを引く(UIモックの .repo-sep 相当)。
+        if let node = item as? Node, case .repository = node.kind,
+           let first = rootNodes.first, first !== node {
+            rowView.drawsTopSeparator = true
+        }
+        return rowView
     }
 }
 
-/// 選択行のハイライト(UIモックの .sess.active 相当: 背景 + 左端2pxのアクセントバー)。
+/// 選択行のハイライト(UIモックの .sess.active 相当: 背景 + 左端2pxのアクセントバー)と
+/// リポジトリ区切りの上ボーダー(.repo-sep 相当)。
 private final class AccentBarRowView: NSTableRowView {
+    var drawsTopSeparator = false
+
     override func drawSelection(in dirtyRect: NSRect) {
         guard selectionHighlightStyle != .none else { return }
         NSColor.selectedContentBackgroundColor.withAlphaComponent(0.35).setFill()
         bounds.fill()
         NSColor.controlAccentColor.setFill()
         NSRect(x: 0, y: 0, width: 2, height: bounds.height).fill()
+    }
+
+    override func drawBackground(in dirtyRect: NSRect) {
+        super.drawBackground(in: dirtyRect)
+        if drawsTopSeparator {
+            NSColor.separatorColor.setFill()
+            NSRect(x: 8, y: 0, width: bounds.width - 16, height: 1).fill()
+        }
     }
 }

@@ -134,6 +134,7 @@ final class MainWindowController: NSWindowController {
             await appModel.refresh()
             sessionManager.presets = appModel.config.presets
             render()
+            await restoreSessionsIfNeeded()
             // デバッグ再現用: VITEA_AUTOSTART_SESSION=1 で起動直後にセッションを開く。
             if ProcessInfo.processInfo.environment["VITEA_AUTOSTART_SESSION"] != nil {
                 newSession(nil)
@@ -173,10 +174,47 @@ final class MainWindowController: NSWindowController {
                 watchSession(session)
                 appModel.selectSession(session.id)
                 render()
+                persistSessions()
             } catch {
                 Self.presentError(error, in: window)
             }
         }
+    }
+
+    // MARK: - セッション構成の永続化・復元
+
+    private let restoreStore = SessionRestoreStore()
+    private var didRestoreSessions = false
+
+    func persistSessions() {
+        restoreStore.save(
+            sessions: appModel.sessions,
+            selectedSessionID: appModel.sidebar.selectedSessionID
+        )
+    }
+
+    /// 起動後の初回 refresh 完了時に、前回のセッション構成を復元する。
+    private func restoreSessionsIfNeeded() async {
+        guard !didRestoreSessions else { return }
+        didRestoreSessions = true
+        guard let state = restoreStore.load(), !state.sessions.isEmpty else { return }
+
+        let knownWorktrees = Set(appModel.worktrees.map(\.path))
+        var restored: [AgentSession] = []
+        for persisted in state.sessions where knownWorktrees.contains(persisted.worktreePath) {
+            if let session = try? await appModel.startSession(
+                worktreePath: persisted.worktreePath,
+                presetName: persisted.presetName
+            ) {
+                watchSession(session)
+                restored.append(session)
+            }
+        }
+        if let index = state.selectedIndex, restored.indices.contains(index) {
+            appModel.selectSession(restored[index].id)
+            selectedWorktreePath = nil
+        }
+        render()
     }
 
     // MARK: - アクション(メニュー/ショートカットから)

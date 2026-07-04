@@ -127,6 +127,58 @@ final class FakeSessionLauncher: SessionLaunching, @unchecked Sendable {
     }
 }
 
+/// テスト用の即時発火クロック。実時間を待たずに `sleep(for:)` から即座に返る。
+/// `startAutoRefresh` のポーリング間隔待ちを飛ばして即座に tick を発生させたい場合に使う。
+struct ImmediateAutoRefreshClock: AutoRefreshClock {
+    func sleep(for duration: Duration) async {}
+}
+
+/// 1回目の `sleep(for:)` だけ即座に発火し、2回目以降は(テストの時間スケールでは)
+/// 実質無限に待つクロック。「最初の tick だけ検証したいが、その後ビジーループにしたくない」
+/// テスト(`stopAutoRefresh` の検証)向け。
+actor SingleShotThenForeverAutoRefreshClock: AutoRefreshClock {
+    private var hasFiredOnce = false
+
+    func sleep(for duration: Duration) async {
+        guard hasFiredOnce else {
+            hasFiredOnce = true
+            return
+        }
+        try? await Task.sleep(for: .seconds(3600))
+    }
+}
+
+/// `scan(repositories:)` の完了を外部から制御できるゲート。
+/// 「前回の refresh() がまだ走っている間は次の tick をスキップする」ことを検証するために、
+/// scan を意図的に一時停止させておき、テスト側の任意のタイミングで完了させる。
+actor AutoRefreshGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
+    }
+}
+
+/// `AutoRefreshGate` で `scan` の完了タイミングを制御できるスキャナー。
+actor GatedWorktreeStatusScanner: WorktreeStatusScanning {
+    let gate = AutoRefreshGate()
+    private(set) var scanCount = 0
+
+    func scan(repositories: [Repository]) async -> [ViteaCore.Worktree] {
+        scanCount += 1
+        await gate.wait()
+        return []
+    }
+}
+
 // MARK: - テスト
 
 @MainActor
@@ -137,7 +189,7 @@ struct AppModelTests {
     func makeModel(
         configStore: FakeConfigStore = FakeConfigStore(),
         discovery: FakeRepositoryDiscovery = FakeRepositoryDiscovery(),
-        scanner: FakeWorktreeStatusScanner = FakeWorktreeStatusScanner(),
+        scanner: any WorktreeStatusScanning = FakeWorktreeStatusScanner(),
         provisioner: FakeWorktreeProvisioner = FakeWorktreeProvisioner(),
         remover: FakeWorktreeRemover = FakeWorktreeRemover(),
         merger: FakeMergeCleanupCoordinator = FakeMergeCleanupCoordinator(),
@@ -275,6 +327,72 @@ struct AppModelTests {
 
         #expect(model.lastRefreshErrors.count == 1)
         #expect(model.repositories == [repository], "直前の設定(リポジトリ一覧)が維持される")
+    }
+
+    // MARK: startAutoRefresh / stopAutoRefresh
+
+    @Test("startAutoRefreshはクロックが即座に発火するとrefreshを実行し、onRefreshCompletedを呼ぶ")
+    func startAutoRefreshTriggersRefreshAndNotifiesCompletion() async {
+        let scanner = FakeWorktreeStatusScanner()
+        let model = makeModel(scanner: scanner)
+
+        // onRefreshCompleted は AppModel(@MainActor)から呼ばれ、このテスト自体も
+        // @MainActor 上で実行されるため、単純なローカル変数のキャプチャで安全に数えられる。
+        var completedCount = 0
+        model.onRefreshCompleted = { completedCount += 1 }
+
+        model.startAutoRefresh(interval: .seconds(30), clock: ImmediateAutoRefreshClock())
+        defer { model.stopAutoRefresh() }
+
+        while completedCount == 0 {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(scanner.scannedRepositories.count >= 1)
+        #expect(completedCount >= 1)
+    }
+
+    @Test("前回のrefreshが走っている間は次のtickをスキップする(重複実行防止)")
+    func startAutoRefreshSkipsOverlappingTicks() async {
+        let scanner = GatedWorktreeStatusScanner()
+        let model = makeModel(scanner: scanner)
+
+        model.startAutoRefresh(interval: .seconds(30), clock: ImmediateAutoRefreshClock())
+        defer { model.stopAutoRefresh() }
+
+        // 最初の refresh() が scan() の中で足止めされるまで待つ。
+        while await scanner.scanCount == 0 {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+
+        // クロックが即時発火するため、この間に複数 tick が到達しようとしているはずだが、
+        // 1回目の refresh() がまだ完了していないので scan() は増えない。
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(await scanner.scanCount == 1, "前回の refresh() が完了するまで次の tick はスキップされる")
+
+        await scanner.gate.open()
+
+        // 1回目が完了すれば、以降の tick で refresh() が再開し scan() が呼ばれる。
+        while await scanner.scanCount < 2 {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(await scanner.scanCount >= 2)
+    }
+
+    @Test("stopAutoRefreshを呼ぶと以降のtickは発生しない")
+    func stopAutoRefreshHaltsFurtherTicks() async {
+        let scanner = FakeWorktreeStatusScanner()
+        let model = makeModel(scanner: scanner)
+
+        model.startAutoRefresh(interval: .seconds(30), clock: SingleShotThenForeverAutoRefreshClock())
+        while scanner.scannedRepositories.isEmpty {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        model.stopAutoRefresh()
+
+        let countAfterStop = scanner.scannedRepositories.count
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(scanner.scannedRepositories.count == countAfterStop, "stopAutoRefresh後は新たなrefreshが走らない")
     }
 
     // MARK: dispatch(_:)

@@ -21,6 +21,20 @@ public enum PaletteDispatchOutcome: Sendable, Equatable {
     case failed(String)
 }
 
+/// `AppModel.startAutoRefresh` の1周期分の待機を抽象化する。既定は実時間で待つが、
+/// テストでは即座に返すフェイクを注入して間隔待ちなしで検証できるようにする。
+public protocol AutoRefreshClock: Sendable {
+    func sleep(for duration: Duration) async
+}
+
+/// 実時間で待機する既定実装(`Task.sleep` に委譲)。
+public struct SystemAutoRefreshClock: AutoRefreshClock {
+    public init() {}
+    public func sleep(for duration: Duration) async {
+        try? await Task.sleep(for: duration)
+    }
+}
+
 /// UI(ViteaApp)が直接バインドするアプリ状態のオーケストレーション層。
 ///
 /// 設定ロード → 登録リポジトリ + 自動検出の統合 → worktree 状態スキャン → セッション一覧、から
@@ -45,6 +59,10 @@ public final class AppModel {
     public private(set) var currentWorktreeID: String?
     /// 直近の `refresh()` で発生した(致命的でない)エラーメッセージ。UI のトースト表示等に使う。
     public private(set) var lastRefreshErrors: [String]
+    /// 自動リフレッシュ(`startAutoRefresh`)経由で `refresh()` が完了するたびに main actor で発火する。
+    /// `AppModel` は `@Observable` だが AppKit 側は明示呼び出し(`render()`)前提のため、
+    /// UI への再描画トリガーとしてこのコールバックを使う。
+    public var onRefreshCompleted: (() -> Void)?
 
     // MARK: 注入された依存
 
@@ -124,6 +142,43 @@ public final class AppModel {
 
         rebuildSidebar()
         lastRefreshErrors = errors
+    }
+
+    // MARK: - 自動リフレッシュ
+
+    private var autoRefreshTask: Task<Void, Never>?
+    /// 直前の自動リフレッシュ経由の `refresh()` がまだ走っているか(多重実行防止用)。
+    private var isAutoRefreshing = false
+
+    /// worktree の ahead/behind・diffstat・dirty 等を `interval` ごとに `refresh()` して最新化する。
+    /// 既に自動リフレッシュ中であれば一旦停止してから登録し直す(重複起動防止)。
+    /// 前回の `refresh()` がまだ走っている間は、次に来た tick をスキップする(重ねて実行しない)。
+    public func startAutoRefresh(
+        interval: Duration = .seconds(30),
+        clock: any AutoRefreshClock = SystemAutoRefreshClock()
+    ) {
+        stopAutoRefresh()
+        autoRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await clock.sleep(for: interval)
+                guard !Task.isCancelled else { return }
+                await self?.performAutoRefresh()
+            }
+        }
+    }
+
+    /// 自動リフレッシュを停止する。進行中の `refresh()` 自体は最後まで完了させる。
+    public func stopAutoRefresh() {
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
+    }
+
+    private func performAutoRefresh() async {
+        guard !isAutoRefreshing else { return }
+        isAutoRefreshing = true
+        defer { isAutoRefreshing = false }
+        await refresh()
+        onRefreshCompleted?()
     }
 
     /// `discoveryRoots` の1エントリ(`~` を含みうる文字列)を実際のディレクトリ URL に展開する。

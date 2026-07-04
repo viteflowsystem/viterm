@@ -60,6 +60,9 @@ final class MainWindowController: NSWindowController {
         stateMonitor.onStateChange = { [weak self] sessionID, newState in
             self?.handleStateChange(sessionID: sessionID, newState: newState)
         }
+        // サイドバーの git 情報(ahead/behind・diffstat・dirty)を30秒周期で自動更新。
+        appModel.onRefreshCompleted = { [weak self] in self?.render() }
+        appModel.startAutoRefresh()
         if notificationsAvailable {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }

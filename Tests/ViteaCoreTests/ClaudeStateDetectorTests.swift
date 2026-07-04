@@ -1,19 +1,18 @@
 import Testing
 @testable import ViteaCore
 
+/// フィクスチャは ccmanager(kbwo/ccmanager)の `src/services/stateDetector/claude.test.ts`
+/// (2026-07 時点の main ブランチ)の画面例を、vitea の `StateDetector`(ステートレス・直前状態なし)
+/// 向けに再構成したもの。
 @Suite("ClaudeStateDetector")
 struct ClaudeStateDetectorTests {
     let detector = ClaudeStateDetector()
 
-    @Test("スピナー+ing表現でbusy")
-    func spinnerWithIngIsBusy() {
-        let signal = detector.detect(screenLines: ["✻ Thinking… (offline)"])
-        #expect(signal == .busy)
-    }
+    // MARK: - busy: esc to interrupt / ctrl+c to interrupt
 
     @Test("esc to interrupt でbusy")
     func escToInterruptIsBusy() {
-        let signal = detector.detect(screenLines: ["some header", "esc to interrupt"])
+        let signal = detector.detect(screenLines: ["Processing...", "Press ESC to interrupt"])
         #expect(signal == .busy)
     }
 
@@ -23,31 +22,114 @@ struct ClaudeStateDetectorTests {
         #expect(signal == .busy)
     }
 
-    @Test("トークン統計行でbusy")
-    func tokenStatsLineIsBusy() {
+    @Test("閉じ括弧の無い ctrl+c to interrupt でもbusy")
+    func unclosedParenCtrlCToInterruptIsBusy() {
+        // ccmanager fixture: "Googling. (ctrl+c to interrupt"
+        let signal = detector.detect(screenLines: [
+            "Googling. (ctrl+c to interrupt",
+            "Searching for relevant information...",
+        ])
+        #expect(signal == .busy)
+    }
+
+    // MARK: - busy: スピナー活動ラベル(`…ing…`)
+
+    @Test("スピナー+ing+三点リーダーでbusy(✽ Tempering…)")
+    func spinnerActivityLabelIsBusy() {
+        let signal = detector.detect(screenLines: ["✽ Tempering…"])
+        #expect(signal == .busy)
+    }
+
+    @Test("スピナー活動ラベル+トークン統計が同じ行にあってもbusy")
+    func spinnerActivityLabelWithInlineTokenStatsIsBusy() {
+        let signal = detector.detect(screenLines: [
+            "✳ Simplifying recompute_tangents… (2m 18s · ↓ 4.8k tokens)",
+            "  ⎿  ◻ task list items...",
+        ])
+        #expect(signal == .busy)
+    }
+
+    @Test("中黒(·)スピナーでもbusy(· Misting…)")
+    func middleDotSpinnerIsBusy() {
+        let signal = detector.detect(screenLines: [
+            "· Misting…",
+            "   ⎿  Tip: Run /terminal-setup to enable convenient terminal integration",
+        ])
+        #expect(signal == .busy)
+    }
+
+    @Test(
+        "ccmanagerで実戦検証済みの各スピナー文字でbusy",
+        arguments: ["✱", "✲", "✳", "✴", "✵", "✶", "✷", "✸", "✹", "✺", "✻", "✼", "✽", "✾", "✿",
+                    "❀", "❁", "❂", "❃", "❇", "❈", "❉", "❊", "❋", "✢", "✣", "✤", "✥", "✦", "✧"]
+    )
+    func variousSpinnerCharactersAreBusy(char: String) {
+        let signal = detector.detect(screenLines: ["\(char) Kneading…"])
+        #expect(signal == .busy, "spinner char \(char) should be detected as busy")
+    }
+
+    @Test("スピナー文字で始まってもing+三点リーダーが無ければbusyにならない")
+    func spinnerWithoutIngSuffixIsNotBusy() {
+        let signal = detector.detect(screenLines: ["✽ Some random text"])
+        #expect(signal == .none)
+    }
+
+    // MARK: - busy: トークン統計行
+
+    @Test("トークン統計行(分+秒)でbusy")
+    func tokenStatsLineWithMinutesIsBusy() {
         let signal = detector.detect(screenLines: ["(2m 14s · ↓ 4.2k tokens)"])
         #expect(signal == .busy)
     }
 
-    @Test("Do you want の確認プロンプトでwaitingInput")
-    func doYouWantIsWaitingInput() {
+    @Test("トークン統計行(秒のみ)でもbusy")
+    func tokenStatsLineWithSecondsOnlyIsBusy() {
+        // ccmanager fixture: "(50s · ↓ 794 tokens)" — 時間表記の形式に依存しないことの検証。
+        let signal = detector.detect(screenLines: ["(50s · ↓ 794 tokens)"])
+        #expect(signal == .busy)
+    }
+
+    // MARK: - waitingInput: 確認プロンプト(選択肢を伴う)
+
+    @Test("Do you want + 番号付き選択肢でwaitingInput")
+    func doYouWantWithNumberedOptionsIsWaitingInput() {
         let signal = detector.detect(screenLines: [
-            "Do you want to make this edit?",
+            "Some previous output",
+            "Do you want to make this edit to test.txt?",
             "❯ 1. Yes",
-            "  2. No",
+            "2. Yes, allow all edits during this session (shift+tab)",
+            "3. No, and tell Claude what to do differently (esc)",
         ])
         #expect(signal == .waitingInput)
     }
 
-    @Test("Would you like でもwaitingInput")
-    func wouldYouLikeIsWaitingInput() {
-        let signal = detector.detect(screenLines: ["Would you like to continue?"])
+    @Test("大文字小文字が混在していてもwaitingInput")
+    func caseInsensitiveDoYouWantIsWaitingInput() {
+        let signal = detector.detect(screenLines: [
+            "Some output",
+            "DO YOU WANT to make this edit?",
+            "❯ 1. YES",
+            "2. NO",
+        ])
+        #expect(signal == .waitingInput)
+    }
+
+    @Test("Would you like + 空行を挟んだ選択肢でもwaitingInput")
+    func wouldYouLikeWithBlankLineBeforeOptionsIsWaitingInput() {
+        let signal = detector.detect(screenLines: [
+            "Some previous output",
+            "Would you like to proceed?",
+            "",
+            "❯ 1. Yes, and auto-accept edits",
+            "  2. Yes, and manually approve edits",
+            "  3. No, keep planning",
+        ])
         #expect(signal == .waitingInput)
     }
 
     @Test("esc to cancel でwaitingInput")
     func escToCancelIsWaitingInput() {
-        let signal = detector.detect(screenLines: ["esc to cancel"])
+        let signal = detector.detect(screenLines: ["Enter your message:", "Press esc to cancel"])
         #expect(signal == .waitingInput)
     }
 
@@ -56,9 +138,63 @@ struct ClaudeStateDetectorTests {
         let signal = detector.detect(screenLines: [
             "(2m 14s · ↓ 4.2k tokens)",
             "Do you want to proceed?",
+            "❯ 1. Yes",
         ])
         #expect(signal == .waitingInput)
     }
+
+    @Test("esc to cancel が esc to interrupt より優先される")
+    func escToCancelTakesPriorityOverEscToInterrupt() {
+        let signal = detector.detect(screenLines: [
+            "Press esc to interrupt",
+            "Some input prompt",
+            "Press esc to cancel",
+        ])
+        #expect(signal == .waitingInput)
+    }
+
+    // MARK: - waitingInput: 選択肢を伴わない確認"文言"だけでは誤検知しない
+
+    @Test("Do you want / Would you like だけで選択肢が無ければwaitingInputにならない")
+    func doYouWantWithoutOptionsIsNotWaitingInput() {
+        // ccmanager Issue #227 の教訓: 文言だけで即断すると通常の応答文中の言い回しを誤検知しうる。
+        let signal = detector.detect(screenLines: ["Would you like to continue?"])
+        #expect(signal == .none)
+    }
+
+    // MARK: - 検索プロンプト(⌕ Search…)は最優先で idle 側(none)
+
+    @Test("検索プロンプトはスピナー活動ラベルより優先してnone")
+    func searchPromptTakesPriorityOverSpinnerActivity() {
+        let signal = detector.detect(screenLines: ["⌕ Search…", "✽ Tempering…"])
+        #expect(signal == .none)
+    }
+
+    @Test("検索プロンプトはesc to cancelより優先してnone")
+    func searchPromptTakesPriorityOverEscToCancel() {
+        let signal = detector.detect(screenLines: ["⌕ Search…", "esc to cancel"])
+        #expect(signal == .none)
+    }
+
+    @Test("検索プロンプトはesc to interruptより優先してnone")
+    func searchPromptTakesPriorityOverEscToInterrupt() {
+        let signal = detector.detect(screenLines: ["⌕ Search…", "Press esc to interrupt"])
+        #expect(signal == .none)
+    }
+
+    // MARK: - ctrl+r to toggle(状態を変化させない → none で近似)
+
+    @Test("ctrl+r to toggle はnone(状態を変化させない近似)")
+    func ctrlRToToggleIsNone() {
+        let signal = detector.detect(screenLines: [
+            "Some output",
+            "Press Ctrl+R to toggle history search",
+            "More output",
+        ])
+        #expect(signal == .none)
+    }
+
+    // MARK: - none
 
     @Test("明確なシグナルが無ければnone")
     func plainPromptIsNone() {

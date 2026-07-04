@@ -3,7 +3,12 @@ import Foundation
 /// detector 実装間で共有する、テキストパターンマッチの小さなヘルパー集。
 enum TextSignals {
     /// Claude Code / Codex 等のCLIが「作業中」の表現に使うスピナー・装飾記号。
-    static let spinnerCharacters: Set<Character> = Set("⠋⠙⠸⠼⠴⠦⠧⠇⠏⠹✻✽✶✳✢")
+    /// 点字スピナー(⠋⠙…)は Codex 等向けの当初セット。花形・幾何学記号(✱✲…○●)は
+    /// ccmanager(kbwo/ccmanager)の claude.ts (2026-07 時点の main) で実戦検証済みのセットを移植したもの。
+    static let spinnerCharacters: Set<Character> = Set(
+        "⠋⠙⠸⠼⠴⠦⠧⠇⠏⠹"
+            + "✱✲✳✴✵✶✷✸✹✺✻✼✽✾✿❀❁❂❃❇❈❉❊❋✢✣✤✥✦✧✨⊛⊕⊙◉◎◍⁂⁕※⍟☼★☆·•⏺▸▹∙⋅○●"
+    )
 
     /// 大小文字を無視して、いずれかの部分文字列を含むか。
     static func containsAny(_ line: String, of needles: [String]) -> Bool {

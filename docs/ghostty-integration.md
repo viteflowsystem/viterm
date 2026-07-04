@@ -90,3 +90,62 @@ xcrun: error: unable to find utility "metallib", not a developer tool or in PATH
 **注意**: 公式デモ Ghostling (github.com/ghostty-org/ghostling) は `ghostty/vt.h` (libghostty-vt。VT パーサ + 端末状態管理のみ)しか使っておらず、レンダリングは raylib で完全に自前実装している。**フル Surface API(Metal 描画込み)の実装リファレンスにはならない** — Ghostty.app macOS 版の `SurfaceView_AppKit.swift` が唯一の実装リファレンス。
 
 T3(実際にウィンドウを出して zsh を動かす実装)は GhosttyKit.xcframework が生成できていないため未着手。上記の API 理解に基づき、GhosttyKit が用意でき次第 `Package.swift` に binaryTarget として組み込み、`Sources/ViteaApp` に最小の NSView + `ghostty_app_new`/`ghostty_surface_new` 呼び出しを実装する。
+
+## サーフェスの画面テキスト取得(T13b 向け)
+
+状態検出(T13b)のために「サーフェスの現在の画面テキストを取得する」手段を `include/ghostty.h` / `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` / `src/apprt/embedded.zig` / `src/terminal/Screen.zig` から調査した結果。
+
+### API シグネチャ
+
+```c
+// include/ghostty.h
+typedef struct {
+  ghostty_point_tag_e tag;   // GHOSTTY_POINT_ACTIVE / VIEWPORT / SCREEN / SURFACE
+  ghostty_point_coord_e coord; // EXACT / TOP_LEFT / BOTTOM_RIGHT
+  uint32_t x;
+  uint32_t y;
+} ghostty_point_s;
+
+typedef struct {
+  ghostty_point_s top_left;
+  ghostty_point_s bottom_right;
+  bool rectangle;
+} ghostty_selection_s;
+
+typedef struct {
+  double tl_px_x;
+  double tl_px_y;
+  uint32_t offset_start;
+  uint32_t offset_len;
+  const char* text;      // NUL 終端(かつ text_len も別途保持)
+  uintptr_t text_len;
+} ghostty_text_s;
+
+bool ghostty_surface_read_text(ghostty_surface_t, ghostty_selection_s, ghostty_text_s*);
+bool ghostty_surface_read_selection(ghostty_surface_t, ghostty_text_s*); // ユーザーの選択範囲版
+void ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*);     // 呼び出し必須(内部で alloc.free)
+```
+
+### セマンティクス
+
+- `ghostty_surface_read_text` は `sel`(`ghostty_selection_s`)で指定した範囲のテキストを返す。`sel` はユーザーの選択状態とは無関係に「読み取る範囲」を指定するためだけのパラメータ(コメント: "the selection structure is used as a way to determine the area of the screen to read from, it doesn't have to match the user's current selection state")
+- **ビューポート(現在画面に表示されている可視領域)全体を取得する**には、`top_left` / `bottom_right` の両方に `tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_TOP_LEFT` / `GHOSTTY_POINT_COORD_BOTTOM_RIGHT`(`x`/`y` は無視されるので `0,0` でよい)を指定し、`rectangle: false`。Ghostty.app macOS 版 `SurfaceView_AppKit.swift` の `cachedVisibleContents` がまさにこのパターン(500ms キャッシュして頻度を抑えている)。スクロールバック全体を含めたい場合は `tag: GHOSTTY_POINT_SCREEN` を使う(`cachedScreenContents` が対応)
+- 返る `ghostty_text_s.text` は Zig 側の `selectionString(.emit = .plain, .unwrap = true, .trim = false)` の出力で、**行はソフトラップを解除(unwrap)した上で `\n` 区切りの単一 C 文字列**になる。`String(cString: text.text)` → `.split(separator: "\n", omittingEmptySubsequences: false)` で `[String]`(可視行配列)に変換できる。`StateDetector.detect(screenLines:)` が期待する入力そのもの
+- **メモリ解放は必須**: `ghostty_surface_read_text` が `true` を返した場合、使用後に必ず `ghostty_surface_free_text(surface, &text)` を呼ぶこと(Zig 側で `alloc.free` される。呼ばないとリーク)。`false` が返った場合は `text` は書き込まれておらず解放不要
+- **スレッド/ロック**: `ghostty_surface_read_text` は内部で `core_surface.renderer_state.mutex` をロックする。libghostty の他の呼び出し(`ghostty_app_tick` 等)ともこのロックを介して整合するため、任意のタイミングで呼んでよいが、ロック待ちでブロックする可能性がある
+- **コスト注意(重要)**: Zig 側のドキュメントコメントに明記: 「This is an expensive operation so it shouldn't be called too often. We recommend that callers cache the result and throttle calls to this function.」Ghostty.app 自身も 500ms キャッシュで緩和している。T13b では 100ms 周期のポーリングを要件としているため、この点は認識しておくこと(セッション数が増えると相応のコストがかかる)
+
+### 使用例(Ghostty.app 本体の実装をほぼそのまま踏襲)
+
+```swift
+var text = ghostty_text_s()
+let sel = ghostty_selection_s(
+    top_left: ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
+    bottom_right: ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0),
+    rectangle: false)
+guard ghostty_surface_read_text(surface, sel, &text) else { return [] }
+defer { ghostty_surface_free_text(surface, &text) }
+return String(cString: text.text).split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+```
+
+実装: `Sources/ViteaApp/Sessions/SessionStateMonitor.swift`(T13b)。

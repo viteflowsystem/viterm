@@ -16,6 +16,8 @@ final class GhosttySurfaceView: NSView {
     init(command: String? = nil, workingDirectory: String? = nil) {
         super.init(frame: .zero)
         wantsLayer = true
+        // SessionStateMonitor 等がリサイズ通知(frameDidChangeNotification)に依存する。
+        postsFrameChangedNotifications = true
 
         guard let app = GhosttyRuntime.shared.app else { return }
 

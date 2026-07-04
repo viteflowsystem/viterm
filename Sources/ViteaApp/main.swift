@@ -31,6 +31,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenuItem.submenu = appMenu
         main.addItem(appMenuItem)
 
+        let worktreeMenuItem = NSMenuItem()
+        let worktreeMenu = NSMenu(title: "Worktree")
+        let newWorktree = NSMenuItem(title: "新規 worktree…", action: #selector(MainWindowController.newWorktree(_:)), keyEquivalent: "n")
+        newWorktree.target = controller
+        worktreeMenu.addItem(newWorktree)
+        let merge = NSMenuItem(title: "デフォルトブランチにマージ…", action: #selector(MainWindowController.mergeCurrentWorktree(_:)), keyEquivalent: "")
+        merge.target = controller
+        worktreeMenu.addItem(merge)
+        let remove = NSMenuItem(title: "worktree を削除…", action: #selector(MainWindowController.removeCurrentWorktree(_:)), keyEquivalent: "")
+        remove.target = controller
+        worktreeMenu.addItem(remove)
+        worktreeMenuItem.submenu = worktreeMenu
+        main.addItem(worktreeMenuItem)
+
         let sessionMenuItem = NSMenuItem()
         let sessionMenu = NSMenu(title: "Session")
         let newSession = NSMenuItem(title: "新規セッション", action: #selector(MainWindowController.newSession(_:)), keyEquivalent: "t")
@@ -58,6 +72,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let viewMenuItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
+        let palette = NSMenuItem(title: "コマンドパレット…", action: #selector(MainWindowController.showPalette(_:)), keyEquivalent: "k")
+        palette.target = controller
+        viewMenu.addItem(palette)
+        let addRepo = NSMenuItem(title: "リポジトリを追加…", action: #selector(MainWindowController.addRepository(_:)), keyEquivalent: "")
+        addRepo.target = controller
+        viewMenu.addItem(addRepo)
+        viewMenu.addItem(.separator())
         let toggle = NSMenuItem(title: "サイドバー表示切替", action: #selector(MainWindowController.toggleSidebar2(_:)), keyEquivalent: "b")
         toggle.target = controller
         viewMenu.addItem(toggle)

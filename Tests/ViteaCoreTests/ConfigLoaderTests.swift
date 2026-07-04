@@ -88,4 +88,42 @@ struct ConfigLoaderTests {
         let config = try ConfigLoader.load(globalURL: globalURL, repositoryRoot: nil)
         #expect(config.repositories == [Repository(name: "vitea", path: "/repo/vitea")])
     }
+
+    @Test("postCreationHook/statusHooks/discoveryRoots を含む設定ファイルを読み込める")
+    func loadsHookAndDiscoveryKeys() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let globalURL = dir.appendingPathComponent("config.json")
+        try """
+        {
+          "postCreationHook": "echo created",
+          "statusHooks": { "onBusy": "notify-busy", "onIdle": "notify-idle" },
+          "discoveryRoots": ["~/dev", "~/work"]
+        }
+        """.write(to: globalURL, atomically: true, encoding: .utf8)
+
+        let config = try ConfigLoader.load(globalURL: globalURL, repositoryRoot: nil)
+        #expect(config.postCreationHook == "echo created")
+        #expect(config.statusHooks.onBusy == "notify-busy")
+        #expect(config.statusHooks.onIdle == "notify-idle")
+        #expect(config.statusHooks.onWaitingInput == nil)
+        #expect(config.discoveryRoots == ["~/dev", "~/work"])
+    }
+
+    @Test("presets に arguments/environment を省略した config ファイルも読み込める")
+    func loadsPresetsWithMissingOptionalFields() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let globalURL = dir.appendingPathComponent("config.json")
+        try """
+        {"presets": [{"name": "gemini", "command": "gemini"}]}
+        """.write(to: globalURL, atomically: true, encoding: .utf8)
+
+        let config = try ConfigLoader.load(globalURL: globalURL, repositoryRoot: nil)
+        // 組み込み既定(claude/codex/shell)は残ったまま、gemini が末尾に追加される。
+        #expect(config.presets.map(\.name) == ["claude", "codex", "shell", "gemini"])
+        #expect(config.presets.first { $0.name == "gemini" } == SessionPreset(name: "gemini", command: "gemini"))
+    }
 }

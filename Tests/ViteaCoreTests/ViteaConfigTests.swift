@@ -39,14 +39,22 @@ struct ViteaConfigTests {
         #expect(config.presets == ViteaConfig.defaultPresets)
     }
 
-    @Test("グローバルが presets を指定すると既定プリセットは使われず置き換わる")
-    func globalPresetsReplaceDefaults() {
+    @Test("グローバルが presets を指定しても組み込み既定プリセットは残り、新規分が末尾に追加される")
+    func globalPresetsAddToDefaults() {
         let global = ViteaConfigFile(presets: [SessionPreset(name: "gemini", command: "gemini")])
         let config = ViteaConfig.merge(global: global, project: nil)
-        #expect(config.presets == [SessionPreset(name: "gemini", command: "gemini")])
+        #expect(config.presets.map(\.name) == ["claude", "codex", "shell", "gemini"])
     }
 
-    @Test("プロジェクトは同名プリセットをその場で上書きできる(位置は保持)")
+    @Test("グローバルが組み込みプリセットと同名のプリセットを指定するとその場で上書きされる(既定は消えない)")
+    func globalPresetOverridesBuiltinInPlace() {
+        let global = ViteaConfigFile(presets: [SessionPreset(name: "claude", command: "claude", arguments: ["--override"])])
+        let config = ViteaConfig.merge(global: global, project: nil)
+        #expect(config.presets.map(\.name) == ["claude", "codex", "shell"])
+        #expect(config.presets.first { $0.name == "claude" }?.arguments == ["--override"])
+    }
+
+    @Test("プロジェクトは同名プリセットをその場で上書きできる(位置は保持、組み込み既定は残る)")
     func projectOverridesPresetInPlace() {
         let global = ViteaConfigFile(presets: [
             SessionPreset(name: "claude", command: "claude", arguments: ["--old"]),
@@ -56,16 +64,16 @@ struct ViteaConfigTests {
             SessionPreset(name: "claude", command: "claude", arguments: ["--new"]),
         ])
         let config = ViteaConfig.merge(global: global, project: project)
-        #expect(config.presets.map(\.name) == ["claude", "codex"])
+        #expect(config.presets.map(\.name) == ["claude", "codex", "shell"])
         #expect(config.presets.first { $0.name == "claude" }?.arguments == ["--new"])
     }
 
-    @Test("プロジェクトが新規プリセットを追加すると末尾に追加される")
+    @Test("プロジェクトが新規プリセットを追加すると末尾に追加される(組み込み既定は残る)")
     func projectAddsNewPreset() {
         let global = ViteaConfigFile(presets: [SessionPreset(name: "claude", command: "claude")])
         let project = ViteaConfigFile(presets: [SessionPreset(name: "gemini", command: "gemini")])
         let config = ViteaConfig.merge(global: global, project: project)
-        #expect(config.presets.map(\.name) == ["claude", "gemini"])
+        #expect(config.presets.map(\.name) == ["claude", "codex", "shell", "gemini"])
     }
 
     @Test("repositories は path をキーにマージされる")
@@ -97,5 +105,43 @@ struct ViteaConfigTests {
             project: nil
         )
         #expect(config.pathTemplate == WorktreePathTemplate("~/x/{project}"))
+    }
+
+    @Test("postCreationHook は未指定なら nil、プロジェクトが優先される")
+    func postCreationHookMerge() {
+        #expect(ViteaConfig.merge(global: nil, project: nil).postCreationHook == nil)
+
+        let global = ViteaConfigFile(postCreationHook: "echo global")
+        #expect(ViteaConfig.merge(global: global, project: nil).postCreationHook == "echo global")
+
+        let project = ViteaConfigFile(postCreationHook: "echo project")
+        #expect(ViteaConfig.merge(global: global, project: project).postCreationHook == "echo project")
+    }
+
+    @Test("statusHooks はフィールド単位でプロジェクトがグローバルより優先される")
+    func statusHooksFieldLevelMerge() {
+        #expect(ViteaConfig.merge(global: nil, project: nil).statusHooks == StatusHooksFile())
+
+        let global = ViteaConfigFile(statusHooks: StatusHooksFile(onBusy: "g-busy", onIdle: "g-idle"))
+        let project = ViteaConfigFile(statusHooks: StatusHooksFile(onBusy: "p-busy"))
+        let config = ViteaConfig.merge(global: global, project: project)
+
+        // onBusy はプロジェクトが上書き、onIdle はプロジェクトが触れていないのでグローバルにフォールバック、
+        // onWaitingInput はどちらも未指定なので nil のまま。
+        #expect(config.statusHooks.onBusy == "p-busy")
+        #expect(config.statusHooks.onIdle == "g-idle")
+        #expect(config.statusHooks.onWaitingInput == nil)
+    }
+
+    @Test("discoveryRoots はグローバル設定のみが使われ、プロジェクト側は無視される")
+    func discoveryRootsUsesGlobalOnly() {
+        #expect(ViteaConfig.merge(global: nil, project: nil).discoveryRoots == [])
+
+        let global = ViteaConfigFile(discoveryRoots: ["~/dev", "~/work"])
+        #expect(ViteaConfig.merge(global: global, project: nil).discoveryRoots == ["~/dev", "~/work"])
+
+        // プロジェクト側に discoveryRoots があってもグローバルの値がそのまま使われる。
+        let project = ViteaConfigFile(discoveryRoots: ["~/project-only"])
+        #expect(ViteaConfig.merge(global: global, project: project).discoveryRoots == ["~/dev", "~/work"])
     }
 }

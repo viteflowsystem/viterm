@@ -19,4 +19,19 @@ public struct SessionPreset: Codable, Sendable, Hashable, Identifiable {
     }
 
     public var id: String { name }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, command, arguments, environment
+    }
+
+    /// `arguments` / `environment` を JSON 側で省略できるようにするためのカスタム実装。
+    /// 素の `Codable` 自動合成は非 Optional プロパティに `decodeIfPresent` を使わないため、
+    /// 初期化子の既定値([]/[:])はデコード時には効かない(キーが無いと `keyNotFound` になる)。
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        command = try container.decode(String.self, forKey: .command)
+        arguments = try container.decodeIfPresent([String].self, forKey: .arguments) ?? []
+        environment = try container.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
+    }
 }

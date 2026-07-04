@@ -48,6 +48,15 @@ struct ModelsTests {
         #expect(decoded == preset)
     }
 
+    @Test("SessionPreset は JSON 側で arguments/environment を省略してもデコードでき、既定値になる")
+    func sessionPresetDecodesWithMissingOptionalKeys() throws {
+        let json = Data(#"{"name": "claude", "command": "claude"}"#.utf8)
+        let decoded = try JSONDecoder().decode(SessionPreset.self, from: json)
+        #expect(decoded == SessionPreset(name: "claude", command: "claude"))
+        #expect(decoded.arguments.isEmpty)
+        #expect(decoded.environment.isEmpty)
+    }
+
     @Test("AgentSession は既定で idle 状態、Codable で往復できる")
     func agentSessionDefaultsAndRoundTrip() throws {
         let session = AgentSession(

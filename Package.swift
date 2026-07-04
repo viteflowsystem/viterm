@@ -14,7 +14,24 @@ let package = Package(
         // ドメイン+git を束ねるサービス層(UI非依存)
         .target(name: "ViteaServices", dependencies: ["ViteaCore", "GitKit"]),
         .testTarget(name: "ViteaServicesTests", dependencies: ["ViteaServices"]),
+        // libghostty (scripts/build-ghostty.sh で生成。vendor/ は git 管理外)
+        .binaryTarget(name: "GhosttyKit", path: "vendor/ghostty/macos/GhosttyKit.xcframework"),
         // AppKit アプリ本体
-        .executableTarget(name: "ViteaApp", dependencies: ["ViteaCore", "GitKit", "ViteaServices"]),
+        .executableTarget(
+            name: "ViteaApp",
+            dependencies: ["ViteaCore", "GitKit", "ViteaServices", "GhosttyKit"],
+            linkerSettings: [
+                .linkedLibrary("stdc++"),
+                .linkedFramework("AppKit"),
+                .linkedFramework("Metal"),
+                .linkedFramework("MetalKit"),
+                .linkedFramework("QuartzCore"),
+                .linkedFramework("CoreText"),
+                .linkedFramework("CoreVideo"),
+                .linkedFramework("IOSurface"),
+                .linkedFramework("Carbon"),
+                .linkedFramework("UniformTypeIdentifiers"),
+            ]
+        ),
     ]
 )

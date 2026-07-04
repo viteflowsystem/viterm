@@ -29,7 +29,11 @@
 
 この変更は **vendor/ghostty(pinned upstream コード)へのパッチ**であり、`scripts/fetch-ghostty.sh` で再取得すると失われる。再現性を保つため、今後 `scripts/fetch-ghostty.sh` にパッチ適用ステップを追加するか、この差分を明示的にドキュメント化しておく必要がある(TODO: 現状はこの md ファイルに差分の説明を残すのみで、自動適用にはなっていない)。
 
-## 既知の問題 3 (未解決・本機のブロッカー): Xcode の Metal Toolchain コンポーネントが欠落しており、この sandbox からは取得できない
+## 既知の問題 3 (解決済み): Xcode の Metal Toolchain コンポーネントが欠落していた
+
+**解決**: サンドボックス外(リード側)で `xcodebuild -downloadComponent MetalToolchain` を実行して導入済み(2026-07-04)。以降この問題は発生しない。当時の症状・調査記録は以下に残す。
+
+## (記録)既知の問題 3 の当時の症状
 
 **症状**: 上記 2 つの回避策を適用した状態で `zig build` を実行すると、153 ステップ中 147 ステップまで成功し(依存パッケージのフェッチ・freetype 等のビルド・libghostty 本体のコンパイルは完走)、最後の Metal シェーダコンパイルでのみ失敗する。
 
@@ -57,9 +61,19 @@ xcrun: error: unable to find utility "metallib", not a developer tool or in PATH
 ## scripts/ 各ファイルの役割
 
 - `scripts/ghostty-commit`: 固定コミットハッシュ(1行)
-- `scripts/fetch-ghostty.sh`: `vendor/ghostty` を上記コミットで取得・更新(冪等)。**現状、既知の問題 2 のパッチは自動適用されない**点に注意
+- `scripts/fetch-ghostty.sh`: `vendor/ghostty` を上記コミットで取得・更新(冪等)。`scripts/patches/*.patch` を自動適用する(適用済みならスキップ)
+- `scripts/patches/0001-xcframework-native-only.patch`: 既知の問題 2 の回避パッチ(native 指定時に iOS/universal バリアントをビルドしない)
 - `scripts/setup-zig.sh`: Zig 0.15.2 (aarch64-macos) を ziglang.org から取得し `vendor/zig/` に展開(sha256 検証あり)
-- `scripts/build-ghostty.sh`: `zig build` を実行して `vendor/ghostty/macos/GhosttyKit.xcframework` を生成。デフォルト実行で失敗した場合、`DEVELOPER_DIR=/Library/Developer/CommandLineTools` を使った自動リトライを行う(既知の問題 1 の回避策)
+- `scripts/build-ghostty.sh`: `zig build` を実行して `vendor/ghostty/macos/GhosttyKit.xcframework` を生成。デフォルト実行で失敗した場合、`DEVELOPER_DIR=/Library/Developer/CommandLineTools` に切り替えて自動リトライする(既知の問題 1 の回避策)。このとき最終ステップの `xcodebuild -create-xcframework` はフル Xcode を要求するため、`DEVELOPER_DIR` を剥がして本物の xcodebuild に委譲するシムを PATH 先頭に挿す(4つ目のハマりどころ。CLT の xcodebuild は `-create-xcframework` を実行できない)
+
+## T3 スパイク結果(2026-07-04)
+
+`swift build` に GhosttyKit.xcframework を binaryTarget として組み込み、サーフェス1枚 + デフォルトシェルの起動を確認済み。
+
+- **構成**: `Sources/ViteaApp/Ghostty/GhosttyRuntime.swift`(ghostty_app_t シングルトン、wakeup→main queue で tick、クリップボード callbacks)+ `GhosttySurfaceView.swift`(NSView。サイズ/フォーカス/キー/マウスをサーフェスへ中継)
+- **検証済み**: ビルド成功(リンク: stdc++ + AppKit/Metal/MetalKit/QuartzCore/CoreText/CoreVideo/IOSurface/Carbon/UniformTypeIdentifiers)、起動時に libghostty が PTY 経由で `/usr/bin/login -flp <user> ... exec -l /bin/zsh` を spawn することをプロセスツリーで確認、クラッシュ・エラーログなし
+- **Swift 6 の注意点**: `ghostty_surface_t`(UnsafeMutableRawPointer)を deinit で解放するには `nonisolated(unsafe)` が必要。surface config の `const char*` は ghostty_surface_new 呼び出しまで `withCString` スコープを維持する必要がある
+- **未検証(後続タスクで)**: 画面描画の目視確認(サンドボックスから screencapture 不可)、IME、修飾キー単体(flagsChanged)、⌘V 以外のキーバインド
 
 ## Surface API 調査メモ(T3 向け、実装未着手)
 

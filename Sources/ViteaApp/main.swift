@@ -1,5 +1,8 @@
 import AppKit
 
+// T3 スパイク: libghostty サーフェス1枚で zsh を動かす。
+// UI シェル(サイドバー等)は T7b 以降で組み込む。
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
@@ -17,7 +20,11 @@ let window = NSWindow(
 )
 window.title = "vitea"
 window.center()
+
+let surfaceView = GhosttySurfaceView(command: nil, workingDirectory: nil)
+window.contentView = surfaceView
 window.makeKeyAndOrderFront(nil)
+window.makeFirstResponder(surfaceView)
 
 app.activate(ignoringOtherApps: true)
 app.run()

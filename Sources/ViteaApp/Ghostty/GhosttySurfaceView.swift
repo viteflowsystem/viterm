@@ -373,101 +373,135 @@ final class GhosttySurfaceView: NSView {
 // keyDown 内の interpretKeyEvents([event]) がこのメソッド群を呼び出す。通常入力・IME 確定
 // テキストは insertText、変換中(preedit)は setMarkedText/unmarkText 経由で処理される。
 // 実装リファレンス: SurfaceView_AppKit.swift の同名メソッド群。
+// NSTextInputClient 準拠。
+//
+// 注意: `extension ...: @MainActor NSTextInputClient`(isolated conformance)にすると、
+// 別ウィンドウが key になる瞬間に AppKit が旧 first responder のこのビューへ
+// `NSTextInputContext initWithClient:` → `validAttributesForMarkedText` を呼ぶ経路で、
+// ランタイムの executor チェックが EXC_BAD_ACCESS でクラッシュする(実測)。
+// AppKit はこれらのメソッドを必ずメインスレッドで呼ぶ契約なので、各メソッドを
+// nonisolated + `MainActor.assumeIsolated` にして witness 呼び出し時の executor
+// チェック(クラッシュの発生箇所)自体を発生させない。conformance の isolation 宣言は
+// doCommand(by:)(NSResponder の @MainActor オーバーライド)が要件を満たす都合で残す。
 extension GhosttySurfaceView: @MainActor NSTextInputClient {
-    func hasMarkedText() -> Bool {
-        markedText.length > 0
+    nonisolated func hasMarkedText() -> Bool {
+        MainActor.assumeIsolated {
+            markedText.length > 0
+        }
     }
 
-    func markedRange() -> NSRange {
-        guard markedText.length > 0 else { return NSRange() }
-        return NSRange(location: 0, length: markedText.length)
+    nonisolated func markedRange() -> NSRange {
+        MainActor.assumeIsolated {
+            guard markedText.length > 0 else { return NSRange() }
+            return NSRange(location: 0, length: markedText.length)
+        }
     }
 
-    func selectedRange() -> NSRange {
-        guard let surface else { return NSRange() }
-        var text = ghostty_text_s()
-        guard ghostty_surface_read_selection(surface, &text) else { return NSRange() }
-        defer { ghostty_surface_free_text(surface, &text) }
-        return NSRange(location: Int(text.offset_start), length: Int(text.offset_len))
+    nonisolated func selectedRange() -> NSRange {
+        MainActor.assumeIsolated {
+            guard let surface else { return NSRange() }
+            var text = ghostty_text_s()
+            guard ghostty_surface_read_selection(surface, &text) else { return NSRange() }
+            defer { ghostty_surface_free_text(surface, &text) }
+            return NSRange(location: Int(text.offset_start), length: Int(text.offset_len))
+        }
     }
 
-    func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    nonisolated func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        // `Any`(非 Sendable)を MainActor クロージャに持ち込めないため、先に String へ落とす。
+        // preedit はプレーンテキストしか使わないので属性は捨てて問題ない。
+        let text: String
         switch string {
-        case let v as NSAttributedString:
-            markedText = NSMutableAttributedString(attributedString: v)
-        case let v as String:
-            markedText = NSMutableAttributedString(string: v)
-        default:
-            break
+        case let v as NSAttributedString: text = v.string
+        case let v as String: text = v
+        default: return
         }
+        MainActor.assumeIsolated {
+            markedText = NSMutableAttributedString(string: text)
 
-        // keyDown の外(キーボードレイアウト切り替え等)からの変更は即座に preedit へ反映する。
-        // keyDown 内であれば、keyDown 側が呼び出し後にまとめて syncPreedit する。
-        if keyTextAccumulator == nil {
-            syncPreedit(clearIfNeeded: true)
+            // keyDown の外(キーボードレイアウト切り替え等)からの変更は即座に preedit へ反映する。
+            // keyDown 内であれば、keyDown 側が呼び出し後にまとめて syncPreedit する。
+            if keyTextAccumulator == nil {
+                syncPreedit(clearIfNeeded: true)
+            }
         }
     }
 
-    func unmarkText() {
+    nonisolated func unmarkText() {
+        MainActor.assumeIsolated {
+            unmarkTextIsolated()
+        }
+    }
+
+    private func unmarkTextIsolated() {
         guard markedText.length > 0 else { return }
         markedText.mutableString.setString("")
         syncPreedit(clearIfNeeded: true)
     }
 
-    func validAttributesForMarkedText() -> [NSAttributedString.Key] { [] }
+    nonisolated func validAttributesForMarkedText() -> [NSAttributedString.Key] { [] }
 
-    func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
-        guard let surface, range.length > 0 else { return nil }
-        var text = ghostty_text_s()
-        guard ghostty_surface_read_selection(surface, &text) else { return nil }
-        defer { ghostty_surface_free_text(surface, &text) }
-        return NSAttributedString(string: String(cString: text.text))
-    }
-
-    func characterIndex(for point: NSPoint) -> Int { 0 }
-
-    func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
-        guard let surface else {
-            return NSRect(x: frame.origin.x, y: frame.origin.y, width: 0, height: 0)
+    nonisolated func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
+        // NSAttributedString は Sendable ではないため、クロージャからは String で受けて
+        // 外で NSAttributedString にする。
+        let string: String? = MainActor.assumeIsolated {
+            guard let surface, range.length > 0 else { return nil }
+            var text = ghostty_text_s()
+            guard ghostty_surface_read_selection(surface, &text) else { return nil }
+            defer { ghostty_surface_free_text(surface, &text) }
+            return String(cString: text.text)
         }
-
-        // ghostty がカーソル位置(IME 候補ウィンドウを出すべき場所)を教えてくれる。
-        var x: Double = 0
-        var y: Double = 0
-        var width: Double = 0
-        var height: Double = 0
-        ghostty_surface_ime_point(surface, &x, &y, &width, &height)
-
-        // ghostty の座標系は左上原点なので、AppKit の左下原点(ウィンドウ座標)に変換する。
-        let viewRect = NSRect(x: x, y: frame.size.height - y, width: width, height: height)
-        let winRect = convert(viewRect, to: nil)
-        guard let window else { return winRect }
-        return window.convertToScreen(winRect)
+        return string.map { NSAttributedString(string: $0) }
     }
 
-    func insertText(_ string: Any, replacementRange: NSRange) {
-        guard let surface, NSApp.currentEvent != nil else { return }
+    nonisolated func characterIndex(for point: NSPoint) -> Int { 0 }
 
+    nonisolated func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
+        MainActor.assumeIsolated {
+            guard let surface else {
+                return NSRect(x: frame.origin.x, y: frame.origin.y, width: 0, height: 0)
+            }
+
+            // ghostty がカーソル位置(IME 候補ウィンドウを出すべき場所)を教えてくれる。
+            var x: Double = 0
+            var y: Double = 0
+            var width: Double = 0
+            var height: Double = 0
+            ghostty_surface_ime_point(surface, &x, &y, &width, &height)
+
+            // ghostty の座標系は左上原点なので、AppKit の左下原点(ウィンドウ座標)に変換する。
+            let viewRect = NSRect(x: x, y: frame.size.height - y, width: width, height: height)
+            let winRect = convert(viewRect, to: nil)
+            guard let window else { return winRect }
+            return window.convertToScreen(winRect)
+        }
+    }
+
+    nonisolated func insertText(_ string: Any, replacementRange: NSRange) {
+        // `Any`(非 Sendable)を MainActor クロージャに持ち込めないため、先に String へ落とす。
         let chars: String
         switch string {
         case let v as NSAttributedString: chars = v.string
         case let v as String: chars = v
         default: return
         }
+        MainActor.assumeIsolated {
+            guard let surface, NSApp.currentEvent != nil else { return }
 
-        // insertText が呼ばれた時点で変換は確定しているので preedit を終了する。
-        unmarkText()
+            // insertText が呼ばれた時点で変換は確定しているので preedit を終了する。
+            unmarkTextIsolated()
 
-        if var accumulated = keyTextAccumulator {
-            // keyDown 処理中: 後段の sendKey にまとめて渡すため蓄積するだけ。
-            accumulated.append(chars)
-            keyTextAccumulator = accumulated
-            return
-        }
+            if var accumulated = keyTextAccumulator {
+                // keyDown 処理中: 後段の sendKey にまとめて渡すため蓄積するだけ。
+                accumulated.append(chars)
+                keyTextAccumulator = accumulated
+                return
+            }
 
-        // keyDown の外からの確定(絵文字ピッカー、音声入力等)は直接送る。
-        chars.withCString { cstr in
-            ghostty_surface_text(surface, cstr, UInt(chars.utf8.count))
+            // keyDown の外からの確定(絵文字ピッカー、音声入力等)は直接送る。
+            chars.withCString { cstr in
+                ghostty_surface_text(surface, cstr, UInt(chars.utf8.count))
+            }
         }
     }
 

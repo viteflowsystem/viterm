@@ -27,7 +27,6 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
     override func loadView() {
         grid.rowSpacing = 12
         grid.columnSpacing = 12
-        grid.column(at: 0).xPlacement = .trailing
 
         footnote.font = .systemFont(ofSize: 11)
         footnote.textColor = .tertiaryLabelColor
@@ -47,11 +46,17 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
             stack.topAnchor.constraint(equalTo: container.topAnchor),
             stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor),
+            // fittingSize でウィンドウ高さが決まるため、bottom は equal で固定する
+            // (lessThanOrEqual だと高さが 0 に潰れてウィンドウが見えなくなる)。
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             container.widthAnchor.constraint(equalToConstant: 560),
         ])
         view = container
         buildForm()
+        // 列は行追加時に生成されるため、placement 設定は buildForm 後でないと範囲外例外になる。
+        if grid.numberOfColumns > 0 {
+            grid.column(at: 0).xPlacement = .trailing
+        }
     }
 
     /// サブクラスがフォーム行を追加する。

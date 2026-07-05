@@ -268,6 +268,15 @@ final class MainWindowController: NSWindowController {
             if ProcessInfo.processInfo.environment["VITEA_AUTOSTART_SESSION"] != nil {
                 newSession(nil)
             }
+            // デバッグ再現用: VITEA_OPEN_SETTINGS=1 で起動直後に設定ウィンドウを開き、状態をログする。
+            if ProcessInfo.processInfo.environment["VITEA_OPEN_SETTINGS"] != nil {
+                showSettings(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    for window in NSApp.windows {
+                        NSLog("vitea-debug window: '\(window.title)' visible=\(window.isVisible) frame=\(window.frame)")
+                    }
+                }
+            }
         }
     }
 
@@ -486,15 +495,21 @@ final class MainWindowController: NSWindowController {
     private var settingsWindowController: SettingsWindowController?
 
     /// ⌘, 設定ウィンドウ(独立ウィンドウ、カテゴリはツールバーで切替)。変更は即時保存・即時反映。
+    ///
+    /// ウィンドウの生成・表示は必ず「素の」main runloop ターンで行う。Swift Task の中で
+    /// AppKit のウィンドウ/レイアウトを構築すると、@MainActor メソッドの executor チェックが
+    /// Task の executor 参照を読んで EXC_BAD_ACCESS するケースがあるため(実測)。
     @objc func showSettings(_ sender: Any?) {
-        if settingsWindowController == nil {
-            let store = SettingsStore { [weak self] in
-                self?.refreshAndRender()
+        DispatchQueue.main.async { [self] in
+            if settingsWindowController == nil {
+                let store = SettingsStore { [weak self] in
+                    self?.refreshAndRender()
+                }
+                settingsWindowController = SettingsWindowController(store: store)
             }
-            settingsWindowController = SettingsWindowController(store: store)
+            settingsWindowController?.showWindow(nil)
+            settingsWindowController?.window?.makeKeyAndOrderFront(nil)
         }
-        settingsWindowController?.showWindow(nil)
-        settingsWindowController?.window?.makeKeyAndOrderFront(nil)
     }
 
     /// リポジトリ追加(ディレクトリ選択、T15)。

@@ -46,6 +46,9 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             defer: false
         )
         window.title = "viterm"
+        // UIモック準拠: タイトルバーはコンテンツと一体の暗色(独立した明るい帯にしない)。
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = .textBackgroundColor
         window.center()
         window.setFrameAutosaveName("viterm.main")
         super.init(window: window)
@@ -262,6 +265,15 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
         // 表示中セッションは高頻度、非表示は間引きで状態監視(P1)。
         stateMonitor.setVisibleSession(selectedID)
+
+        // タイトルに現在のコンテキストを反映(モック: "vitea — feat/sidebar · claude #1")。
+        if let selected = appModel.sidebar.selectedSession {
+            let branch = appModel.worktrees.first { $0.path == selected.session.worktreePath }?.branch
+            let parts = [branch, selected.session.displayName].compactMap { $0 }
+            window?.title = "viterm — " + parts.joined(separator: " · ")
+        } else {
+            window?.title = "viterm"
+        }
     }
 
     func refreshAndRender() {

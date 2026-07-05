@@ -1,3 +1,5 @@
+<img src="docs/brand/icon.svg" width="96" alt="viterm">
+
 # viterm
 
 AI coding agent(Claude Code / Codex 等)を並列運用するためのネイティブ macOS ターミナルアプリケーション。

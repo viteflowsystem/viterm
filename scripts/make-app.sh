@@ -39,6 +39,8 @@ mkdir -p "$FRAMEWORKS_DIR"
 
 cp "$EXECUTABLE" "$MACOS_DIR/VitermApp"
 cp "$REPO_ROOT/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
+mkdir -p "$CONTENTS_DIR/Resources"
+cp "$REPO_ROOT/Resources/AppIcon.icns" "$CONTENTS_DIR/Resources/AppIcon.icns"
 
 echo "==> codesign --force --sign - $APP_BUNDLE"
 codesign --force --deep --sign - "$APP_BUNDLE"

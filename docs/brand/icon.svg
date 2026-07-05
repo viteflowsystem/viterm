@@ -1,0 +1,19 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="viterm">
+  <defs>
+    <linearGradient id="vf" x1="60" y1="68" x2="150" y2="188" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8A47"/>
+      <stop offset="0.33" stop-color="#FFBE3D"/>
+      <stop offset="0.6" stop-color="#FF7A4C"/>
+      <stop offset="1" stop-color="#FF3B8E"/>
+    </linearGradient>
+    <linearGradient id="vfh" x1="148" y1="162" x2="200" y2="162" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8A47"/>
+      <stop offset="0.33" stop-color="#FFBE3D"/>
+      <stop offset="0.6" stop-color="#FF7A4C"/>
+      <stop offset="1" stop-color="#FF3B8E"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="#1E2442"/>
+  <path d="M74 82 L136 128 L74 174" stroke="url(#vf)" stroke-width="27" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="148" y="152" width="52" height="21" rx="7" fill="url(#vfh)"/>
+</svg>

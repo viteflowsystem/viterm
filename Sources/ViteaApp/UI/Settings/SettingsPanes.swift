@@ -12,6 +12,13 @@ import ViteaCore
 class SettingsPane: NSViewController, NSTextFieldDelegate {
     let store: SettingsStore
 
+    /// フォームのレイアウト定数(全ペイン共通。ここだけで一貫性を担保する)。
+    private enum Layout {
+        static let labelColumnWidth: CGFloat = 168
+        static let fieldWidth: CGFloat = 380
+        static let contentWidth: CGFloat = 24 + labelColumnWidth + 12 + fieldWidth + 24
+    }
+
     private let grid = NSGridView()
     private let footnote = NSTextField(wrappingLabelWithString: "")
 
@@ -25,19 +32,25 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     override func loadView() {
-        grid.rowSpacing = 12
+        grid.rowSpacing = 14
         grid.columnSpacing = 12
+        grid.rowAlignment = .firstBaseline
 
         footnote.font = .systemFont(ofSize: 11)
         footnote.textColor = .tertiaryLabelColor
         footnote.isHidden = true
+        footnote.preferredMaxLayoutWidth = Layout.fieldWidth
 
         let stack = NSStackView(views: [grid, footnote])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 14
+        stack.spacing = 16
         stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
-        grid.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
+        // 注釈はフィールド列の開始位置に揃える。
+        footnote.leadingAnchor.constraint(
+            equalTo: stack.leadingAnchor,
+            constant: 24 + Layout.labelColumnWidth + 12
+        ).isActive = true
 
         let container = NSView()
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -49,13 +62,14 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
             // fittingSize でウィンドウ高さが決まるため、bottom は equal で固定する
             // (lessThanOrEqual だと高さが 0 に潰れてウィンドウが見えなくなる)。
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            container.widthAnchor.constraint(equalToConstant: 560),
+            container.widthAnchor.constraint(equalToConstant: Layout.contentWidth),
         ])
         view = container
         buildForm()
-        // 列は行追加時に生成されるため、placement 設定は buildForm 後でないと範囲外例外になる。
+        // 列は行追加時に生成されるため、設定は buildForm 後でないと範囲外例外になる。
         if grid.numberOfColumns > 0 {
             grid.column(at: 0).xPlacement = .trailing
+            grid.column(at: 0).width = Layout.labelColumnWidth
         }
     }
 
@@ -68,6 +82,8 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
         let labelField = NSTextField(labelWithString: label)
         labelField.font = .systemFont(ofSize: 13)
         labelField.textColor = .labelColor
+        labelField.lineBreakMode = .byClipping
+        labelField.setContentCompressionResistancePriority(.required, for: .horizontal)
         grid.addRow(with: [labelField, field])
     }
 
@@ -88,8 +104,27 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
         field.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         field.onCommit = onCommit
         field.delegate = field
-        field.widthAnchor.constraint(greaterThanOrEqualToConstant: 380).isActive = true
+        // 全ペインで同一のフィールド幅(伸縮させない。一貫性のため equal 固定)。
+        field.widthAnchor.constraint(equalToConstant: Layout.fieldWidth).isActive = true
         return field
+    }
+
+    /// フィールドの直下に補足(プレビュー等)を沿わせる縦スタック。行のフィールドとして使う。
+    func fieldWithCaption(_ field: NSView, caption: NSTextField) -> NSView {
+        caption.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        caption.textColor = .secondaryLabelColor
+        caption.lineBreakMode = .byTruncatingMiddle
+        caption.widthAnchor.constraint(lessThanOrEqualToConstant: Layout.fieldWidth).isActive = true
+        let stack = NSStackView(views: [field, caption])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        return stack
+    }
+
+    /// ポップアップ等の固定幅(テキストフィールドと開始位置・見た目を揃える)。
+    func fixWidth(_ view: NSView, _ width: CGFloat = 200) {
+        view.widthAnchor.constraint(equalToConstant: width).isActive = true
     }
 }
 
@@ -130,6 +165,7 @@ final class GeneralSettingsPane: SettingsPane {
         }
         presetPopup.target = self
         presetPopup.action = #selector(presetChanged(_:))
+        fixWidth(presetPopup)
         addRow(label: "既定プリセット:", field: presetPopup)
 
         let copyCheckbox = NSButton(
@@ -178,12 +214,7 @@ final class WorktreeSettingsPane: SettingsPane {
         (templateField as? CommitTextField)?.onLiveChange = { [weak self] value in
             self?.updatePreview(template: value)
         }
-        addRow(label: "作成先テンプレート:", field: templateField)
-
-        previewLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        previewLabel.textColor = .secondaryLabelColor
-        previewLabel.lineBreakMode = .byTruncatingMiddle
-        addTrailingRow(previewLabel)
+        addRow(label: "作成先テンプレート:", field: fieldWithCaption(templateField, caption: previewLabel))
         updatePreview(template: config.worktreePathTemplate)
 
         let hookField = makeTextField(
@@ -256,7 +287,7 @@ final class RepositoriesSettingsPane: SettingsPane, NSTableViewDataSource, NSTab
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
         scroll.heightAnchor.constraint(equalToConstant: 140).isActive = true
-        scroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 380).isActive = true
+        scroll.widthAnchor.constraint(equalToConstant: 380).isActive = true
         addRow(label: "登録リポジトリ:", field: scroll)
 
         let addButton = NSButton(title: "追加…", target: self, action: #selector(addRepository))

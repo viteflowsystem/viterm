@@ -28,6 +28,12 @@ final class SettingsWindowController: NSWindowController {
         window.title = "vitea 設定"
         window.isReleasedWhenClosed = false
         window.toolbarStyle = .preference
+        // 初期表示時から選択中ペインの内容サイズに合わせる
+        // (以降のタブ切替時のリサイズは NSTabViewController が preferredContentSize で行う)。
+        if let first = panes.first?.pane {
+            first.loadViewIfNeeded()
+            window.setContentSize(first.preferredContentSize)
+        }
         self.init(window: window)
         window.center()
     }

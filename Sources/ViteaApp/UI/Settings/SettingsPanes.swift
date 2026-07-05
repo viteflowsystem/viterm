@@ -71,6 +71,9 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
             grid.column(at: 0).xPlacement = .trailing
             grid.column(at: 0).width = Layout.labelColumnWidth
         }
+        // NSTabViewController(.toolbar)はこの値でウィンドウをペインごとにリサイズする。
+        // 未設定だと初期ウィンドウサイズのまま巨大な余白ができる。
+        preferredContentSize = container.fittingSize
     }
 
     /// サブクラスがフォーム行を追加する。

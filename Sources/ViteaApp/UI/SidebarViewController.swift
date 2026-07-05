@@ -246,7 +246,6 @@ extension SidebarViewController: NSOutlineViewDelegate {
             if waiting > 0 {
                 stack.addArrangedSubview(badge("\(waiting)"))
             }
-            stack.addArrangedSubview(label("\(repo.worktrees.count) wt", size: 10, color: .tertiaryLabelColor))
             // このリポジトリに worktree を追加する「＋」(常時表示。作成対象を明確にする)。
             stack.addArrangedSubview(addWorktreeButton(repositoryPath: repo.repository.path))
 

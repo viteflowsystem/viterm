@@ -21,6 +21,8 @@ public struct WorktreeNode: Sendable, Equatable, Identifiable {
 public struct RepositoryNode: Sendable, Equatable, Identifiable {
     public var repository: Repository
     public var worktrees: [WorktreeNode]
+    /// worktree が作られていないローカルブランチ名(サイドバーの「branches」グループ)。
+    public var availableBranches: [String] = []
 
     public var id: String { repository.id }
 

@@ -66,6 +66,11 @@ public protocol SessionLaunching: Sendable {
     func switchToWorktree(_ worktreePath: String) async
 }
 
+/// リポジトリのローカルブランチ名一覧の取得(サイドバーの「branches」グループ用)。
+public protocol BranchListing: Sendable {
+    func localBranchNames(in repository: URL) async throws -> [String]
+}
+
 // MARK: - 既存の具象型をそのままプロトコルに準拠させる(シグネチャは完全一致)。
 
 extension RepositoryDiscovery: RepositoryDiscovering {}
@@ -74,6 +79,12 @@ extension WorktreeProvisioner: WorktreeProvisioning {}
 extension MergeCleanupCoordinator: MergeCleaningUp {}
 extension StatusChangeHookRunner: StatusChangeNotifying {}
 extension GitService: WorktreeRemoving {}
+
+extension GitService: BranchListing {
+    public func localBranchNames(in repository: URL) async throws -> [String] {
+        try await branches(in: repository).filter { $0.kind == .local }.map(\.name)
+    }
+}
 
 // MARK: - Live 実装
 

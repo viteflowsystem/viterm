@@ -54,6 +54,8 @@ public final class AppModel {
     public private(set) var repositories: [Repository]
     public private(set) var worktrees: [VitermCore.Worktree]
     public private(set) var sessions: [AgentSession]
+    /// リポジトリパス → ローカルブランチ名一覧(refresh で更新。「branches」グループ用)。
+    public private(set) var branchesByRepository: [String: [String]] = [:]
     public private(set) var sidebar: SidebarViewModel
     /// 現在ターミナルペインに表示中の worktree(= `dispatch` の `startSession`/`switchToWorktree` の対象)。
     public private(set) var currentWorktreeID: String?
@@ -75,6 +77,7 @@ public final class AppModel {
     private let mergeCleanupCoordinator: any MergeCleaningUp
     private var statusChangeHookRunner: any StatusChangeNotifying
     private let sessionLauncher: any SessionLaunching
+    private let branchLister: any BranchListing
 
     public init(
         configProvider: any ConfigProviding = LiveConfigProvider(),
@@ -85,7 +88,8 @@ public final class AppModel {
         worktreeRemover: any WorktreeRemoving = GitService(),
         mergeCleanupCoordinator: any MergeCleaningUp = MergeCleanupCoordinator(),
         statusChangeHookRunner: any StatusChangeNotifying = StatusChangeHookRunner(config: StatusChangeHookConfig()),
-        sessionLauncher: any SessionLaunching
+        sessionLauncher: any SessionLaunching,
+        branchLister: any BranchListing = GitService()
     ) {
         self.configProvider = configProvider
         self.repositoryConfigPersister = repositoryConfigPersister
@@ -96,6 +100,7 @@ public final class AppModel {
         self.mergeCleanupCoordinator = mergeCleanupCoordinator
         self.statusChangeHookRunner = statusChangeHookRunner
         self.sessionLauncher = sessionLauncher
+        self.branchLister = branchLister
 
         config = .default
         repositories = []
@@ -133,6 +138,15 @@ public final class AppModel {
         repositories = mergedRepositories
 
         worktrees = await worktreeStatusScanner.scan(repositories: repositories)
+
+        // サイドバーの「branches」グループ用にローカルブランチ一覧を収集する
+        // (worktree 済みブランチの除外は SidebarViewModel 側で行う)。
+        var branches: [String: [String]] = [:]
+        for repository in repositories {
+            branches[repository.path] =
+                (try? await branchLister.localBranchNames(in: URL(fileURLWithPath: repository.path))) ?? []
+        }
+        branchesByRepository = branches
 
         statusChangeHookRunner.updateConfig(StatusChangeHookConfig(
             onBusy: loadedConfig.statusHooks.onBusy,
@@ -203,6 +217,7 @@ public final class AppModel {
             repositories: repositories,
             worktrees: worktrees,
             sessions: sessions,
+            branchesByRepository: branchesByRepository,
             selectedSessionID: previousSelection
         )
     }

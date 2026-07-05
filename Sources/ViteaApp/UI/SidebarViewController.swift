@@ -153,9 +153,18 @@ final class SidebarViewController: NSViewController {
     @objc private func didTapShowPalette() { onShowPalette?() }
 
     func set(viewModel: SidebarViewModel, selectedWorktreePath: String? = nil) {
+        // 選択変更だけの再描画ではツリーを作り直さない(reloadData は展開状態を破棄するうえ、
+        // 行クリックの delegate 通知中に同期 reload すると NSOutlineView の状態を壊しやすい)。
+        // ツリーの内容(リポジトリ/worktree/セッションの構成・状態)が前回と同一なら、
+        // 選択ハイライトの同期だけで返す。
+        let treeUnchanged = viewModel.repositories == self.viewModel.repositories
         self.viewModel = viewModel
         self.selectedWorktreePath = selectedWorktreePath
         emptyState.isHidden = !viewModel.repositories.isEmpty
+        if treeUnchanged {
+            syncSelection()
+            return
+        }
 
         // reloadData は展開状態を破棄するため、直前に「いま実際に畳まれている行」を
         // アウトラインから直接採取し、再構築後に畳まれていなかった行だけ展開し直す。

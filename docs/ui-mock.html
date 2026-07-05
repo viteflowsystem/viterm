@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
-<title>vitea — UIモック</title>
+<title>viterm — UIモック</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -255,7 +255,7 @@
 
 <div class="wrap">
   <header class="page">
-    <h1 class="brand">vitea<span class="cursor"></span></h1>
+    <h1 class="brand">viterm<span class="cursor"></span></h1>
     <p class="tagline">AI coding agent を並列運用するためのネイティブ macOS ターミナル。worktree とセッションを第一級オブジェクトとして扱う。</p>
     <div class="formula">cmux の UI 品質 <b>×</b> ccmanager の worktree 管理 <b>×</b> 1 worktree : <b>N</b> セッション</div>
   </header>
@@ -273,14 +273,14 @@
       <div class="marker" style="top: 150px; right: -10px;">4</div>
       <div class="marker" style="bottom: 30px; left: -10px;">5</div>
 
-      <div class="window" role="img" aria-label="viteaメイン画面のモック">
+      <div class="window" role="img" aria-label="vitermメイン画面のモック">
         <div class="titlebar">
           <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-          <span class="title">vitea — feat/sidebar · claude #1</span>
+          <span class="title">viterm — feat/sidebar · claude #1</span>
         </div>
         <div class="app">
           <div class="sidebar">
-            <div class="repo-head"><span class="tri">▾</span>vitea<span class="meta">2 wt</span></div>
+            <div class="repo-head"><span class="tri">▾</span>viterm<span class="meta">2 wt</span></div>
 
             <div class="wt">
               <div class="wt-head"><span class="tri">▾</span><span class="branch">main</span><span class="git">clean</span></div>
@@ -320,10 +320,10 @@
 
 <span class="t-dim">⏺</span> サイドバーの実装を始めます。まず既存の View 構成を確認します。
 
-<span class="t-tool">⏺ Read</span><span class="t-dim">(Sources/Vitea/Sidebar/SidebarView.swift)</span>
+<span class="t-tool">⏺ Read</span><span class="t-dim">(Sources/Viterm/Sidebar/SidebarView.swift)</span>
   <span class="t-dim">└ 82 lines</span>
 
-<span class="t-tool">⏺ Edit</span><span class="t-dim">(Sources/Vitea/Sidebar/SidebarView.swift)</span>
+<span class="t-tool">⏺ Edit</span><span class="t-dim">(Sources/Viterm/Sidebar/SidebarView.swift)</span>
   <span class="t-dim">└ Updated with 24 additions and 6 removals</span>
 
 <span class="t-ok">⏺</span> OutlineGroup ベースに置き換えました。ビルドして確認します。
@@ -334,7 +334,7 @@
               <pre><span class="t-warn"><span class="spin">✻</span> Forging…</span> <span class="t-dim">(2m 14s · ↓ 4.2k tokens · esc to interrupt)</span></pre>
             </div>
             <div class="statusbar">
-              <span class="cur">vitea · feat/sidebar · claude #1</span>
+              <span class="cur">viterm · feat/sidebar · claude #1</span>
               <span class="chip"><span class="st busy"></span>2 busy</span>
               <span class="chip"><span class="st wait"></span>1 waiting</span>
               <span class="chip"><span class="st idle"></span>2 idle</span>
@@ -363,11 +363,11 @@
     <div class="window" role="img" aria-label="コマンドパレットのモック">
       <div class="titlebar">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span class="title">vitea</span>
+        <span class="title">viterm</span>
       </div>
       <div class="app" style="min-height: 340px;">
         <div class="sidebar" style="opacity:.35">
-          <div class="repo-head"><span class="tri">▾</span>vitea<span class="meta">2 wt</span></div>
+          <div class="repo-head"><span class="tri">▾</span>viterm<span class="meta">2 wt</span></div>
           <div class="wt"><div class="wt-head"><span class="tri">▾</span><span class="branch">feat/sidebar</span></div>
             <div class="sess"><span class="st busy"></span>claude #1</div></div>
         </div>
@@ -397,11 +397,11 @@
     <div class="window" role="img" aria-label="worktree作成モーダルのモック">
       <div class="titlebar">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span class="title">vitea</span>
+        <span class="title">viterm</span>
       </div>
       <div class="app" style="min-height: 380px;">
         <div class="sidebar" style="opacity:.35">
-          <div class="repo-head"><span class="tri">▾</span>vitea<span class="meta">2 wt</span></div>
+          <div class="repo-head"><span class="tri">▾</span>viterm<span class="meta">2 wt</span></div>
         </div>
         <div class="term" style="opacity:.35"></div>
         <div class="overlay-dim"></div>
@@ -417,7 +417,7 @@
           </div>
           <div class="field">
             <label>作成先 — テンプレート: ~/worktrees/{project}/{branch}(設定で変更可)</label>
-            <div class="box"><span class="ph">~/worktrees/vitea/feat-palette</span></div>
+            <div class="box"><span class="ph">~/worktrees/viterm/feat-palette</span></div>
           </div>
           <div class="checkrow"><span class="cb">◉</span>Claude セッションデータをコピー(~/.claude/projects)</div>
           <div class="checkrow"><span class="cb">◉</span>作成後にセッションを起動: <b style="color: var(--text)">claude(既定プリセット)</b></div>
@@ -457,7 +457,7 @@
   </section>
 
   <footer>
-    vitea UI mock v1 — 2026-07-04 · 技術スタック: Swift + AppKit / libghostty (C API) / git CLI · 詳細は docs/requirements.md
+    viterm UI mock v1 — 2026-07-04 · 技術スタック: Swift + AppKit / libghostty (C API) / git CLI · 詳細は docs/requirements.md
   </footer>
 </div>
 

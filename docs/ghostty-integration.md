@@ -25,7 +25,7 @@
 
 **原因**: `vendor/ghostty/src/build/GhosttyXCFramework.zig` の `init()` は、`-Dxcframework-target=native` / `universal` の指定に関わらず、**macOS universal・native macOS・iOS・iOS Simulator の 4 バリアントを無条件に構築**し、最終的な xcframework に含めるかどうか(`switch (target) { .universal => ..., .native => ... }`)は成果物選択の段階でしか分岐しない。iOS / iOS Simulator 向けのビルドは `apple-sdk` パッケージ経由で `xcrun --sdk iphoneos --show-sdk-path` 等を呼ぶが、CommandLineTools には iOS プラットフォーム SDK が同梱されないため失敗する。
 
-**回避策(vendor へのパッチ)**: vitea は arm64 macOS 専用アプリで iOS ターゲットは不要なため、`src/build/GhosttyXCFramework.zig` を「`target` に応じて必要なバリアントだけを構築する」形に書き換えた(`native` の場合は `macos_native` のみを構築し、`ios` / `ios_sim` / `macos_universal` のビルドステップ自体を作らない)。
+**回避策(vendor へのパッチ)**: viterm は arm64 macOS 専用アプリで iOS ターゲットは不要なため、`src/build/GhosttyXCFramework.zig` を「`target` に応じて必要なバリアントだけを構築する」形に書き換えた(`native` の場合は `macos_native` のみを構築し、`ios` / `ios_sim` / `macos_universal` のビルドステップ自体を作らない)。
 
 この変更は **vendor/ghostty(pinned upstream コード)へのパッチ**であり、`scripts/fetch-ghostty.sh` で再取得すると失われる。再現性を保つため、今後 `scripts/fetch-ghostty.sh` にパッチ適用ステップを追加するか、この差分を明示的にドキュメント化しておく必要がある(TODO: 現状はこの md ファイルに差分の説明を残すのみで、自動適用にはなっていない)。
 
@@ -51,7 +51,7 @@ xcrun: error: unable to find utility "metallib", not a developer tool or in PATH
 
 **原因**: 最近の Xcode は Metal コンパイラツールチェーンの一部(`metallib` を含む)を「Metal Toolchain」という別ダウンロードコンポーネントとして分離しており、この sandbox の Xcode 26.6 インストールにはそれが含まれていない。`xcodebuild -downloadComponent MetalToolchain` で取得を試みたが、Apple のアセットカタログサーバーへの到達性がなく `Failed fetching catalog for assetType (com.apple.MobileAsset.MetalToolchain)` で失敗する。`xcodebuild -runFirstLaunch` でプラグイン読み込みエラー(`IDESimulatorFoundation` のシンボル不整合)は解消したが、Metal Toolchain 自体は取得できなかった。システム全体を検索しても `metallib` バイナリは存在しない。
 
-**結論**: これは vitea / Ghostty / Zig のコード上の問題ではなく、**この sandbox 環境の Xcode インストールに Metal Toolchain コンポーネントが欠けており、かつネットワーク的に取得できない**という環境側の制約。GPU レンダラを持つ Ghostty の macOS 版は Metal シェーダのコンパイルが必須であり、これを回避する手段はない(vt のみのビルドに倒す、等の代替は「サーフェスを表示する」という T3 の目的自体を達成できないため不採用)。
+**結論**: これは viterm / Ghostty / Zig のコード上の問題ではなく、**この sandbox 環境の Xcode インストールに Metal Toolchain コンポーネントが欠けており、かつネットワーク的に取得できない**という環境側の制約。GPU レンダラを持つ Ghostty の macOS 版は Metal シェーダのコンパイルが必須であり、これを回避する手段はない(vt のみのビルドに倒す、等の代替は「サーフェスを表示する」という T3 の目的自体を達成できないため不採用)。
 
 **対処方針(要判断)**:
 1. Metal Toolchain を含む完全な Xcode がインストール済みの macOS 実機 / 別環境で `scripts/fetch-ghostty.sh` → `scripts/setup-zig.sh` → `scripts/build-ghostty.sh` を実行する(既知の問題 1・2 の回避策は既にスクリプト/パッチに組み込み済みなので、Metal Toolchain さえ揃えばそのまま通る見込みが高い)。
@@ -70,7 +70,7 @@ xcrun: error: unable to find utility "metallib", not a developer tool or in PATH
 
 `swift build` に GhosttyKit.xcframework を binaryTarget として組み込み、サーフェス1枚 + デフォルトシェルの起動を確認済み。
 
-- **構成**: `Sources/ViteaApp/Ghostty/GhosttyRuntime.swift`(ghostty_app_t シングルトン、wakeup→main queue で tick、クリップボード callbacks)+ `GhosttySurfaceView.swift`(NSView。サイズ/フォーカス/キー/マウスをサーフェスへ中継)
+- **構成**: `Sources/VitermApp/Ghostty/GhosttyRuntime.swift`(ghostty_app_t シングルトン、wakeup→main queue で tick、クリップボード callbacks)+ `GhosttySurfaceView.swift`(NSView。サイズ/フォーカス/キー/マウスをサーフェスへ中継)
 - **検証済み**: ビルド成功(リンク: stdc++ + AppKit/Metal/MetalKit/QuartzCore/CoreText/CoreVideo/IOSurface/Carbon/UniformTypeIdentifiers)、起動時に libghostty が PTY 経由で `/usr/bin/login -flp <user> ... exec -l /bin/zsh` を spawn することをプロセスツリーで確認、クラッシュ・エラーログなし
 - **Swift 6 の注意点**: `ghostty_surface_t`(UnsafeMutableRawPointer)を deinit で解放するには `nonisolated(unsafe)` が必要。surface config の `const char*` は ghostty_surface_new 呼び出しまで `withCString` スコープを維持する必要がある
 - **未検証(後続タスクで)**: 画面描画の目視確認(サンドボックスから screencapture 不可)、IME、修飾キー単体(flagsChanged)、⌘V 以外のキーバインド
@@ -89,7 +89,7 @@ xcrun: error: unable to find utility "metallib", not a developer tool or in PATH
 
 **注意**: 公式デモ Ghostling (github.com/ghostty-org/ghostling) は `ghostty/vt.h` (libghostty-vt。VT パーサ + 端末状態管理のみ)しか使っておらず、レンダリングは raylib で完全に自前実装している。**フル Surface API(Metal 描画込み)の実装リファレンスにはならない** — Ghostty.app macOS 版の `SurfaceView_AppKit.swift` が唯一の実装リファレンス。
 
-T3(実際にウィンドウを出して zsh を動かす実装)は GhosttyKit.xcframework が生成できていないため未着手。上記の API 理解に基づき、GhosttyKit が用意でき次第 `Package.swift` に binaryTarget として組み込み、`Sources/ViteaApp` に最小の NSView + `ghostty_app_new`/`ghostty_surface_new` 呼び出しを実装する。
+T3(実際にウィンドウを出して zsh を動かす実装)は GhosttyKit.xcframework が生成できていないため未着手。上記の API 理解に基づき、GhosttyKit が用意でき次第 `Package.swift` に binaryTarget として組み込み、`Sources/VitermApp` に最小の NSView + `ghostty_app_new`/`ghostty_surface_new` 呼び出しを実装する。
 
 ## サーフェスの画面テキスト取得(T13b 向け)
 
@@ -148,7 +148,7 @@ defer { ghostty_surface_free_text(surface, &text) }
 return String(cString: text.text).split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
 ```
 
-実装: `Sources/ViteaApp/Sessions/SessionStateMonitor.swift`(T13b)。
+実装: `Sources/VitermApp/Sessions/SessionStateMonitor.swift`(T13b)。
 
 ## OSC 通知の一次シグナル化(P7 向け)
 
@@ -172,8 +172,8 @@ typedef bool (*ghostty_runtime_action_cb)(ghostty_app_t, ghostty_target_s, ghost
 「どのサーフェスか」を `GhosttySurfaceView` に逆引きするには、`ghostty_surface_t` から
 `void* ghostty_surface_userdata(ghostty_surface_t)` を呼ぶ(サーフェス生成時に設定した userdata が
 そのまま返る)。実装リファレンス: `macos/Sources/Ghostty/Ghostty.App.swift` の
-`surfaceView(from:)`/`action(_:target:action:)`。vitea 側の実装は
-`Sources/ViteaApp/Ghostty/GhosttyRuntime.swift` の `surfaceView(from target:)` / `handleAction(target:action:)`。
+`surfaceView(from:)`/`action(_:target:action:)`。viterm 側の実装は
+`Sources/VitermApp/Ghostty/GhosttyRuntime.swift` の `surfaceView(from target:)` / `handleAction(target:action:)`。
 
 ```swift
 private static func surfaceView(from target: ghostty_target_s) -> GhosttySurfaceView? {
@@ -184,7 +184,7 @@ private static func surfaceView(from target: ghostty_target_s) -> GhosttySurface
 
 ### 対応した ghostty_action_tag_e とペイロード
 
-`ghostty_action_tag_e` は67種類(ウィンドウ/タブ/スプリット操作、検索、レンダラ健全性等、vitea が
+`ghostty_action_tag_e` は67種類(ウィンドウ/タブ/スプリット操作、検索、レンダラ健全性等、viterm が
 独自のウィンドウ管理を持つため乗らないものが大半)。このうち「セッション状態把握に使える」もの・
 「デスクトップ通知(OSC 9/777)」を実装した。
 
@@ -196,13 +196,13 @@ private static func surfaceView(from target: ghostty_target_s) -> GhosttySurface
 | `GHOSTTY_ACTION_PWD` | `pwd: { pwd: const char* }` | OSC 7 | カレントディレクトリ変更 |
 
 `GHOSTTY_ACTION_COMMAND_FINISHED` / `GHOSTTY_ACTION_PROGRESS_REPORT` は P9 で対応した(下記節参照)。
-ウィンドウ/タブ/スプリット系(`GHOSTTY_ACTION_NEW_SPLIT` 等)は vitea が libghostty の apprt レベルの
+ウィンドウ/タブ/スプリット系(`GHOSTTY_ACTION_NEW_SPLIT` 等)は viterm が libghostty の apprt レベルの
 ウィンドウ管理に乗っていない(自前の `SplitHostView` を使う)ため、`handleAction` は該当しない
 アクションをすべて `false`(未処理)で返す。
 
 ### GhosttySurfaceView 側の公開 API
 
-`Sources/ViteaApp/Ghostty/GhosttySurfaceView.swift` に以下のコールバックプロパティを追加した。
+`Sources/VitermApp/Ghostty/GhosttySurfaceView.swift` に以下のコールバックプロパティを追加した。
 `GhosttyRuntime.handleAction` が対応するサーフェスの該当コールバックを呼ぶだけで、通知UIの表示や
 状態遷移の判断はコールバックの呼び出し側(`SessionStateMonitor` / `MainWindowController` 側の配線)
 の責務とする。
@@ -258,7 +258,7 @@ typedef struct {
   (`C` — コマンド出力開始)で `start_command` メッセージを、`end_command`(`D` — コマンド終了、
   終了コードのオプション引数つき)で `stop_command` メッセージを発行する。`src/Surface.zig` の
   `stop_command` ハンドラが実行時間(`start_command` からの経過時間)を計測し、
-  `command_finished` アクションとして apprt(vitea)側へ渡す。
+  `command_finished` アクションとして apprt(viterm)側へ渡す。
   **OSC 133 はシェル(zsh 等)が自発的に出すものではなく、通常はシェル統合スクリプト
   (`vendor/ghostty/src/shell-integration/zsh/ghostty-integration` 等)が precmd/preexec フック
   経由で自動注入する**。シェル統合が無効だと、この OSC シーケンス自体がシェルから送出されず、
@@ -271,33 +271,33 @@ typedef struct {
   Claude Code / Codex 等の AI コーディングエージェントが実際にこれを出力するかは未確認。
   一般的なビルドツール・パッケージマネージャの一部が対応している程度)。
 
-### vitea で現状発火するか
+### viterm で現状発火するか
 
 **`COMMAND_FINISHED` は現状発火しない。** `vendor/ghostty/src/global.zig` の初期化処理
 (`ghostty_init()` 経由)が `apprt.runtime.resourcesDir()`(= `src/os/resourcesdir.zig`)を呼んで
 `resources_dir` を決定するが、その解決順序は「(a) release ビルドでは `GHOSTTY_RESOURCES_DIR` 環境
 変数を最優先、(b) それが無ければ実行バイナリのパスを遡って `Contents/Resources/terminfo/78/xterm-ghostty`
 (macOS app bundle)や `share/terminfo/...` という sentinel ファイルを探す、(c) debug ビルドでは
-(b)を先に試してから `GHOSTTY_RESOURCES_DIR` にフォールバック」という順。vitea は
+(b)を先に試してから `GHOSTTY_RESOURCES_DIR` にフォールバック」という順。viterm は
 `GhosttyRuntime.swift` の `init()` で `GHOSTTY_RESOURCES_DIR` を設定しておらず、`swift run` /
-`.build/vitea.app` のどちらの実行形態でも上記 sentinel ファイルを含むリソースを同梱していないため、
+`.build/viterm.app` のどちらの実行形態でも上記 sentinel ファイルを含むリソースを同梱していないため、
 `resources_dir` は解決されず nil になる。この場合 `src/termio/Exec.zig` の
 `log.warn("no resources dir set, shell integration disabled", ...)` が出て(T3 のログで確認済み)、
 シェル統合が注入されない → OSC 133 が送出されない → `COMMAND_FINISHED` は発火しない。
 
 **`PROGRESS_REPORT` はシェル統合と無関係なので、理論上は現状でも発火しうる**(ツール側が OSC 9;4 を
-直接出力すれば)。ただし vitea が起動する `claude` / `codex` / `shell` プリセットが実際にこれを出力
+直接出力すれば)。ただし viterm が起動する `claude` / `codex` / `shell` プリセットが実際にこれを出力
 するかどうかは別問題で、今回のコード調査だけでは確認できていない。
 
 ### COMMAND_FINISHED を発火させるために必要な対応(調査のみ、未実装)
 
-現時点の変更範囲(`Sources/ViteaApp/Ghostty/` + 本ドキュメント)には含めていないが、必要になった際の
+現時点の変更範囲(`Sources/VitermApp/Ghostty/` + 本ドキュメント)には含めていないが、必要になった際の
 見取り図として記録する。
 
 1. `vendor/ghostty` のビルド成果物(`zig build` 実行後の `zig-out/share/ghostty/` 相当。現状
    `shell-integration/`(zsh/bash/fish/elvish/nushell 向けスクリプト)と `themes/` は生成されているが、
    **`terminfo/` は含まれていない**(別途 `tic` 経由の生成ステップが必要な可能性がある。今回未調査)
-   を、vitea の配布物(`.build/vitea.app/Contents/Resources/ghostty/` 等)にコピーする仕組みを
+   を、viterm の配布物(`.build/viterm.app/Contents/Resources/ghostty/` 等)にコピーする仕組みを
    `scripts/make-app.sh` 等に追加する
 2. `GhosttyRuntime.init()` で `ghostty_init()` を呼ぶ前に、Swift 側から
    `setenv("GHOSTTY_RESOURCES_DIR", <上記コピー先パス>, 1)` を呼び、libghostty の

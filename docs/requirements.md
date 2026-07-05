@@ -1,4 +1,4 @@
-# vitea — 要件定義
+# viterm — 要件定義
 
 > AI coding agent(Claude Code / Codex など)を並列運用するための、ネイティブmacOSターミナルアプリケーション。
 > 一言でいうと「cmux の UI 品質 × ccmanager の worktree 管理 × 1 worktree に複数セッション」。
@@ -26,7 +26,7 @@
 - [ ] 作成先パスはテンプレートで設定可能。例: `~/worktrees/{project}/{branch}_hogehoge` のように、プレースホルダと任意のリテラルを混在できる
   - プレースホルダ: `{project}`(リポジトリ名)、`{branch}`(ブランチ名。`/` は `-` に正規化)、`{branch_raw}`(ブランチ名そのまま。`feat/x` はサブディレクトリになる)
   - `~` と相対パス(リポジトリルート基準)の両方をサポート
-  - グローバル設定で既定を持ち、プロジェクト別 `.vitea.json` でオーバーライド可能。作成ダイアログ上でその場編集も可能(テンプレートは展開済みプレビューを表示)
+  - グローバル設定で既定を持ち、プロジェクト別 `.viterm.json` でオーバーライド可能。作成ダイアログ上でその場編集も可能(テンプレートは展開済みプレビューを表示)
 - [ ] worktree 作成時に Claude Code セッションデータ(`~/.claude/projects/…`)をコピーするオプション(失敗しても作成自体は成功する非致命的設計)
 - [ ] post-creation hook(worktree パス・ブランチ名・git root を環境変数で渡す、非同期実行)
 - [ ] worktree 削除(dirty チェック付き確認、`git worktree remove`)
@@ -62,7 +62,7 @@
 ## 4. 非機能要件
 
 - ネイティブ macOS アプリ(Swift + AppKit)。Electron 不使用。起動 1 秒以内、セッション切替は体感遅延なし
-- 設定はファイルベース(グローバル: `~/.config/vitea/config.json`、プロジェクト別: `.vitea.json` でオーバーライド)。dotfiles 管理可能。登録リポジトリ一覧はグローバル設定に保存
+- 設定はファイルベース(グローバル: `~/.config/viterm/config.json`、プロジェクト別: `.viterm.json` でオーバーライド)。dotfiles 管理可能。登録リポジトリ一覧はグローバル設定に保存
 - libghostty はアルファ品質のため、特定コミット/タグに固定して追随する(cmux も同様の運用)
 
 ## 5. スコープ外(当面)

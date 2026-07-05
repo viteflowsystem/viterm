@@ -1,4 +1,4 @@
-# vitea — タスクブレイクダウン
+# viterm — タスクブレイクダウン
 
 依存関係と並列レーンを明示したマイルストーン構成。M0 がクリティカルパス(libghostty統合リスクの検証)。
 M1 の T4/T5 は M0 と並列で着手できる。
@@ -37,7 +37,7 @@ T1 scaffold ─→ T2 libghostty build ─→ T3 spike    T4 domain/config   T5 
 
 ### T4. ドメインモデル + 設定(T1 のみ依存)
 - `Repo` / `Worktree` / `Session` モデル、`AppState`(observable)
-- 設定ロード: `~/.config/vitea/config.json` + プロジェクト別 `.vitea.json` マージ
+- 設定ロード: `~/.config/viterm/config.json` + プロジェクト別 `.viterm.json` マージ
 - worktree パステンプレート展開: `{project}` / `{branch}`(`/`→`-`) / `{branch_raw}`、`~`・相対パス対応。ユニットテスト必須
 - 登録リポジトリ一覧の永続化
 

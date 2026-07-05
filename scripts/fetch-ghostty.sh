@@ -32,7 +32,7 @@ if [ "$resolved" != "$COMMIT" ]; then
   exit 1
 fi
 
-# vitea 用のローカルパッチを適用する(冪等: 適用済みならスキップ)。
+# viterm 用のローカルパッチを適用する(冪等: 適用済みならスキップ)。
 # 例: 0001-xcframework-native-only.patch — native 指定時に iOS/universal
 #     バリアントのビルドをスキップする(CommandLineTools には iOS SDK が無いため)。
 for patch in "$ROOT_DIR"/scripts/patches/*.patch; do

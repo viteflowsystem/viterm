@@ -4,7 +4,7 @@
 # 使い方: scripts/make-app.sh [release|debug]  (既定: release)
 #
 # 生成物: .build/viterm.app (git 管理外、.build/ は .gitignore 対象)
-#   Contents/MacOS/ViteaApp   … `swift build` の実行バイナリ
+#   Contents/MacOS/VitermApp   … `swift build` の実行バイナリ
 #   Contents/Info.plist       … Resources/Info.plist のコピー
 #   Contents/Frameworks/      … TODO(T3待ち): GhosttyKit が xcframework/dylib を含む場合、
 #                                 ここに `vendor/ghostty` のビルド成果物をコピーする
@@ -20,10 +20,10 @@ echo "==> swift build -c $CONFIGURATION"
 swift build --package-path "$REPO_ROOT" -c "$CONFIGURATION"
 
 BIN_PATH="$(swift build --package-path "$REPO_ROOT" -c "$CONFIGURATION" --show-bin-path)"
-EXECUTABLE="$BIN_PATH/ViteaApp"
+EXECUTABLE="$BIN_PATH/VitermApp"
 
 if [ ! -x "$EXECUTABLE" ]; then
-    echo "error: ViteaApp executable not found at $EXECUTABLE" >&2
+    echo "error: VitermApp executable not found at $EXECUTABLE" >&2
     exit 1
 fi
 
@@ -37,7 +37,7 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$MACOS_DIR"
 mkdir -p "$FRAMEWORKS_DIR"
 
-cp "$EXECUTABLE" "$MACOS_DIR/ViteaApp"
+cp "$EXECUTABLE" "$MACOS_DIR/VitermApp"
 cp "$REPO_ROOT/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
 
 echo "==> codesign --force --sign - $APP_BUNDLE"

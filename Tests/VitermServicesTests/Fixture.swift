@@ -1,11 +1,12 @@
 import Foundation
-@testable import GitKit
+import GitKit
+@testable import VitermServices
 
 /// テスト用の一時ディレクトリを作り、`body` 実行後に必ず削除する。
 /// 実 git を使う fixture リポジトリはすべてこの配下に作る。カレントの viterm リポジトリには一切触れない。
 func withTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
     let directory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("viterm-GitKitTests-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("viterm-VitermServicesTests-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
     return try await body(directory)
@@ -41,34 +42,5 @@ enum Fixture {
         try await runner.run(["commit", "-m", message], in: directory)
         let sha = try await runner.run(["rev-parse", "HEAD"], in: directory)
         return sha.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// bare リモート("origin")を持つリポジトリ一式を作る。`repo` が origin/HEAD = main を持つ
-    /// clone になっており、`feature` ブランチも origin に push 済みで `repo` から fetch 済み。
-    /// - Returns: (repo: 作業用 clone, bare: bare リモートのパス)
-    static func makeRepositoryWithRemote(in directory: URL) async throws -> (repo: URL, bare: URL) {
-        let bare = directory.appendingPathComponent("origin.git", isDirectory: true)
-        let seed = directory.appendingPathComponent("seed", isDirectory: true)
-        let repo = directory.appendingPathComponent("repo", isDirectory: true)
-
-        try FileManager.default.createDirectory(at: bare, withIntermediateDirectories: true)
-        try await runner.run(["init", "--bare", "-b", "main"], in: bare)
-
-        try await runner.run(["clone", bare.path, seed.path], in: directory)
-        try await runner.run(["config", "user.email", "viterm-test@example.com"], in: seed)
-        try await runner.run(["config", "user.name", "Viterm Test"], in: seed)
-        try await commitFile(named: "README.md", content: "hello\n", message: "initial commit", in: seed)
-        try await runner.run(["push", "origin", "main"], in: seed)
-
-        try await runner.run(["checkout", "-b", "feature"], in: seed)
-        try await commitFile(named: "feature.txt", content: "feature\n", message: "add feature", in: seed)
-        try await runner.run(["push", "origin", "feature"], in: seed)
-
-        try await runner.run(["clone", bare.path, repo.path], in: directory)
-        try await runner.run(["config", "user.email", "viterm-test@example.com"], in: repo)
-        try await runner.run(["config", "user.name", "Viterm Test"], in: repo)
-        try await runner.run(["fetch", "origin"], in: repo)
-
-        return (repo, bare)
     }
 }

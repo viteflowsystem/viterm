@@ -9,7 +9,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>viterm</string>
 	<key>CFBundleExecutable</key>
-	<string>ViteaApp</string>
+	<string>VitermApp</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

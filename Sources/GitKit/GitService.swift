@@ -3,7 +3,7 @@ import Foundation
 /// git worktree / branch 操作をまとめた高レベル API。
 ///
 /// すべてのメソッドは `GitRunner` 経由で実 `git` プロセスを起動する(libgit2 は使わない)。
-/// UI 非依存。呼び出し側(ViteaApp)がスレッド/エラーハンドリングを扱う。
+/// UI 非依存。呼び出し側(VitermApp)がスレッド/エラーハンドリングを扱う。
 public struct GitService: Sendable {
     public let runner: GitRunner
 

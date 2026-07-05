@@ -60,7 +60,7 @@ Socket API は Unix ドメインソケット上の JSON-RPC(既定 `/tmp/cmux.so
    - 通知の粒度設定(`agentTurnComplete` 相当: whenIdle/always/never、サウンド選択)
    - ショートカットのカスタマイズ(`shortcuts.bindings`)
    - ホットリロード(config.json の変更監視 or ⌘⇧, )
-   - プロジェクトローカル設定の actions 拡張(viterm は `.vitea.json` が既にあるので同路線)
+   - プロジェクトローカル設定の actions 拡張(viterm は `.viterm.json` が既にあるので同路線)
    - `agentHibernation` / `rendererRealization` 相当のリソース節約(セッション多数時)
    - `windowTitleTemplate`、`confirmQuit`
 

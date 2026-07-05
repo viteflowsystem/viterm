@@ -8,7 +8,7 @@ index 3afeb90..bd9da64 100644
  ) !GhosttyXCFramework {
 -    // Universal macOS build
 -    const macos_universal = try GhosttyLib.initMacOSUniversal(b, deps);
-+    // vitea patch (see docs/ghostty-integration.md): only construct the
++    // viterm patch (see docs/ghostty-integration.md): only construct the
 +    // library variants actually needed for the requested xcframework
 +    // target. Upstream unconditionally builds all four variants (macOS
 +    // universal, native macOS, iOS, iOS Simulator) regardless of `target`
@@ -17,7 +17,7 @@ index 3afeb90..bd9da64 100644
 +    // working iOS/iOS Simulator SDK (via the apple-sdk package's
 +    // `LibCInstallation.findNative`), which isn't available when using a
 +    // Command Line Tools-only developer directory as a workaround for a
-+    // Zig 0.15.2 linker/SDK incompatibility. vitea only ever needs the
++    // Zig 0.15.2 linker/SDK incompatibility. viterm only ever needs the
 +    // native macOS slice, so we skip building the others entirely.
 +    const xcframework = switch (target) {
 +        .universal => xc: {

@@ -23,7 +23,7 @@ cd "$GHOSTTY_DIR"
 
 # -Demit-macos-app=false: Xcode 側で Ghostty.app 本体をビルドするので、
 #   zig 側で重複するアプリバンドル生成はスキップする(CI と同じ構成)。
-# -Dxcframework-target=native: vitea は arm64 macOS 専用アプリなので、
+# -Dxcframework-target=native: viterm は arm64 macOS 専用アプリなので、
 #   universal(x86_64含む)/iOS/iOS Simulator スライスは作らない。
 run_zig_build() {
   "$ZIG_BIN" build \

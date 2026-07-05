@@ -47,10 +47,6 @@ final class SidebarViewController: NSViewController {
     }
 
     private var rootNodes: [Node] = []
-    /// ユーザーが畳んだ行(repo パス / worktree パス)。再描画(reloadData)後の展開復元に使う。
-    private var collapsedIDs: Set<String> = []
-    /// プログラムからの展開/折りたたみ中は collapse 追跡を更新しない。
-    private var isRestoringExpansion = false
 
     override func loadView() {
         outlineView.headerView = nil
@@ -160,6 +156,13 @@ final class SidebarViewController: NSViewController {
         self.viewModel = viewModel
         self.selectedWorktreePath = selectedWorktreePath
         emptyState.isHidden = !viewModel.repositories.isEmpty
+
+        // reloadData は展開状態を破棄するため、直前に「いま実際に畳まれている行」を
+        // アウトラインから直接採取し、再構築後に畳まれていなかった行だけ展開し直す。
+        // (イベント通知の蓄積で追跡すると reloadData 前後の通知の拾い方次第で実態と
+        // ズレていくため、毎回スナップショットを取る。新規に現れた行は既定で展開。)
+        let collapsedIDs = snapshotCollapsedIDs()
+
         rootNodes = viewModel.repositories.map { repo in
             Node(kind: .repository(repo), children: repo.worktrees.map { wt in
                 // セッション数に関係なく、末尾に「＋ セッションを追加」行を常設する。
@@ -169,14 +172,29 @@ final class SidebarViewController: NSViewController {
             })
         }
         outlineView.reloadData()
-        restoreExpansion()
+        restoreExpansion(collapsedIDs: collapsedIDs)
         syncSelection()
     }
 
-    /// reloadData 後、ユーザーが畳んだ行以外を展開状態に戻す(既定は全展開)。
-    private func restoreExpansion() {
-        isRestoringExpansion = true
-        defer { isRestoringExpansion = false }
+    /// 現在のツリー(再構築前の rootNodes)から、畳まれている repo/worktree の ID を集める。
+    /// 初回(rootNodes が空)は空集合 = 全展開が既定。
+    private func snapshotCollapsedIDs() -> Set<String> {
+        var collapsed: Set<String> = []
+        for repoNode in rootNodes {
+            if let id = nodeID(repoNode), !outlineView.isItemExpanded(repoNode) {
+                collapsed.insert(id)
+            }
+            for wtNode in repoNode.children {
+                if let id = nodeID(wtNode), !outlineView.isItemExpanded(wtNode) {
+                    collapsed.insert(id)
+                }
+            }
+        }
+        return collapsed
+    }
+
+    /// reloadData 後、スナップショットで畳まれていなかった行を展開状態に戻す。
+    private func restoreExpansion(collapsedIDs: Set<String>) {
         for repoNode in rootNodes {
             guard let repoID = nodeID(repoNode), !collapsedIDs.contains(repoID) else { continue }
             outlineView.expandItem(repoNode)
@@ -442,19 +460,6 @@ extension SidebarViewController: NSOutlineViewDelegate {
         didClickRow()
     }
 
-    func outlineViewItemDidCollapse(_ notification: Notification) {
-        guard !isRestoringExpansion,
-              let node = notification.userInfo?["NSObject"] as? Node,
-              let id = nodeID(node) else { return }
-        collapsedIDs.insert(id)
-    }
-
-    func outlineViewItemDidExpand(_ notification: Notification) {
-        guard !isRestoringExpansion,
-              let node = notification.userInfo?["NSObject"] as? Node,
-              let id = nodeID(node) else { return }
-        collapsedIDs.remove(id)
-    }
 
     // MARK: - コンテキストメニュー
 

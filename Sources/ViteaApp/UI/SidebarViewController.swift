@@ -252,13 +252,13 @@ extension SidebarViewController: NSOutlineViewDelegate {
         case let .worktree(wt):
             stack.addArrangedSubview(label(wt.worktree.branch, size: 11, weight: .semibold))
             stack.addArrangedSubview(spacer())
-            // git 情報: ↑↓(main との commit 差)+ staged「+」/ unstaged「!」の有無。
+            // git 情報: ↑↓(main との commit 差)+ staged(オレンジ●)/ unstaged(赤●)の有無。
             // 差分行数は「base との差か未コミット差か」が紛らわしいため表示しない。
             var git: [(String, NSColor, String?)] = []
             if wt.worktree.ahead > 0 { git.append(("↑\(wt.worktree.ahead)", .secondaryLabelColor, nil)) }
             if wt.worktree.behind > 0 { git.append(("↓\(wt.worktree.behind)", .secondaryLabelColor, nil)) }
-            if wt.worktree.hasStagedChanges { git.append(("+", .systemGreen, "ステージ済みの変更あり")) }
-            if wt.worktree.hasUnstagedChanges { git.append(("!", .systemOrange, "未ステージの変更あり")) }
+            if wt.worktree.hasStagedChanges { git.append(("●", .systemOrange, "ステージ済みの変更あり")) }
+            if wt.worktree.hasUnstagedChanges { git.append(("●", .systemRed, "未ステージの変更あり")) }
             if git.isEmpty { git.append(("clean", .tertiaryLabelColor, nil)) }
             let gitStack = NSStackView()
             gitStack.orientation = .horizontal

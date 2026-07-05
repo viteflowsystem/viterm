@@ -21,7 +21,7 @@
 ## 3. 機能要件
 
 ### 3.1 git worktree 管理(ccmanager 相当)
-- [x] worktree 一覧表示: ブランチ名、親ブランチとの ahead/behind(↑3 ↓1)、staged/unstaged の有無(差分行数は base 差分か未コミット差分か紛らわしいため不採用)
+- [x] worktree 一覧表示: ブランチ名、親ブランチとの ahead/behind(↑3 ↓1)、staged(オレンジ●)/unstaged(赤●)の有無(差分行数は base 差分か未コミット差分か紛らわしいため不採用)
 - [ ] worktree 新規作成: 新規ブランチ / 既存ローカルブランチ / リモートブランチから
 - [ ] 作成先パスはテンプレートで設定可能。例: `~/worktrees/{project}/{branch}_hogehoge` のように、プレースホルダと任意のリテラルを混在できる
   - プレースホルダ: `{project}`(リポジトリ名)、`{branch}`(ブランチ名。`/` は `-` に正規化)、`{branch_raw}`(ブランチ名そのまま。`feat/x` はサブディレクトリになる)

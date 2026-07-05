@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>viterm ロゴ候補</title>
+<style>
+  :root {
+    --navy: #1E2442;
+    --navy2: #2B3052;
+    --paper: #FAF8F6;
+    --ink: #1E2442;
+    --muted: #6B7280;
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    padding: 56px 32px 96px;
+    line-height: 1.7;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  h1 { font-size: 28px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin: 6px 0 12px; }
+  .swatches { display: flex; gap: 8px; margin-bottom: 48px; align-items: center; }
+  .sw { width: 28px; height: 28px; border-radius: 8px; }
+  .sw.grad { background: linear-gradient(135deg, #FF8A47, #FFBE3D 33%, #FF7A4C 60%, #FF3B8E); }
+  .swlabel { font-size: 12px; color: var(--muted); margin-left: 6px; }
+
+  section { margin-bottom: 72px; }
+  .head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .num {
+    font-size: 13px; font-weight: 700; color: #FF7A4C;
+    font-variant-numeric: tabular-nums;
+  }
+  h2 { font-size: 20px; letter-spacing: -0.01em; }
+  .desc { color: var(--muted); font-size: 14px; max-width: 62ch; margin-bottom: 20px; }
+
+  .row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; }
+  .tile {
+    border-radius: 16px; padding: 28px;
+    display: flex; align-items: center; justify-content: center; gap: 28px;
+    border: 1px solid #E8D9CC;
+  }
+  .tile.dark { background: #14172B; }
+  .tile.light { background: #FFFFFF; }
+  .cap { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
+  .stack { display: flex; flex-direction: column; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>viterm ロゴ候補</h1>
+  <p class="sub">viteflow system のブランドグラデーションとネイビーを継承した5案。各案はアプリアイコン(大/小)とワードマークのロックアップ。</p>
+  <div class="swatches">
+    <div class="sw grad"></div>
+    <div class="sw" style="background:#1E2442"></div>
+    <div class="sw" style="background:#2B3052"></div>
+    <div class="sw" style="background:#FAF8F6; border:1px solid #E8D9CC"></div>
+    <span class="swlabel">#FF8A47→#FFBE3D→#FF7A4C→#FF3B8E / #1E2442 / #2B3052 / #FAF8F6</span>
+  </div>
+
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <linearGradient id="vf" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#FF8A47"/>
+        <stop offset="0.33" stop-color="#FFBE3D"/>
+        <stop offset="0.6" stop-color="#FF7A4C"/>
+        <stop offset="1" stop-color="#FF3B8E"/>
+      </linearGradient>
+      <linearGradient id="vfh" x1="0" y1="0" x2="1" y2="0">
+        <stop stop-color="#FF8A47"/>
+        <stop offset="0.33" stop-color="#FFBE3D"/>
+        <stop offset="0.6" stop-color="#FF7A4C"/>
+        <stop offset="1" stop-color="#FF3B8E"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <!-- ======================= 1. Prompt ======================= -->
+  <section>
+    <div class="head"><span class="num">01</span><h2>Prompt — ❯ とカーソル</h2></div>
+    <p class="desc">ターミナルの原型「❯_」をそのままマークに。グラデーションのプロンプトが viteflow の血筋を示す。最も説明不要で、メニューバーやDockでも一目でターミナルとわかる。</p>
+    <div class="row">
+      <div class="stack">
+        <div class="tile dark">
+          <svg width="128" height="128" viewBox="0 0 256 256">
+            <rect width="256" height="256" rx="58" fill="#1E2442"/>
+            <path d="M76 84 L136 128 L76 172" stroke="url(#vf)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <rect x="148" y="152" width="50" height="20" rx="6" fill="url(#vfh)"/>
+          </svg>
+          <svg width="32" height="32" viewBox="0 0 256 256">
+            <rect width="256" height="256" rx="58" fill="#1E2442"/>
+            <path d="M76 84 L136 128 L76 172" stroke="url(#vf)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <rect x="148" y="152" width="50" height="20" rx="6" fill="url(#vfh)"/>
+          </svg>
+        </div>
+        <div class="cap">アプリアイコン 128px / 32px</div>
+      </div>
+      <div class="stack">
+        <div class="tile light">
+          <svg width="300" height="72" viewBox="0 0 300 72">
+            <path d="M18 18 L44 36 L18 54" stroke="url(#vf)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <text x="62" y="50" font-family="-apple-system, BlinkMacSystemFont" font-size="40" font-weight="800" letter-spacing="-1.5" fill="#1E2442">viterm</text>
+          </svg>
+        </div>
+        <div class="cap">ワードマーク(ライト)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= 2. Merge-V ======================= -->
+  <section>
+    <div class="head"><span class="num">02</span><h2>Merge-V — ブランチが合流する「v」</h2></div>
+    <p class="desc">gitグラフの「2本のブランチがマージされる」形がそのまま「v」になる。viterm の核心機能(worktree並列作業→マージ)を1つの字形で語る案。コミットドットがアクセント。</p>
+    <div class="row">
+      <div class="stack">
+        <div class="tile dark">
+          <svg width="128" height="128" viewBox="0 0 256 256">
+            <rect width="256" height="256" rx="58" fill="#1E2442"/>
+            <path d="M78 78 L128 172 L178 78" stroke="url(#vf)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <circle cx="78" cy="78" r="17" fill="#FFBE3D"/>
+            <circle cx="178" cy="78" r="17" fill="#FF3B8E"/>
+            <circle cx="128" cy="172" r="17" fill="#FF7A4C"/>
+          </svg>
+          <svg width="32" height="32" viewBox="0 0 256 256">
+            <rect width="256" height="256" rx="58" fill="#1E2442"/>
+            <path d="M78 78 L128 172 L178 78" stroke="url(#vf)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <circle cx="78" cy="78" r="17" fill="#FFBE3D"/>
+            <circle cx="178" cy="78" r="17" fill="#FF3B8E"/>
+            <circle cx="128" cy="172" r="17" fill="#FF7A4C"/>
+          </svg>
+        </div>
+        <div class="cap">アプリアイコン 128px / 32px</div>
+      </div>
+      <div class="stack">
+        <div class="tile light">
+          <svg width="300" height="72" viewBox="0 0 300 72">
+            <path d="M16 16 L34 50 L52 16" stroke="url(#vf)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <circle cx="16" cy="16" r="6" fill="#FFBE3D"/>
+            <circle cx="52" cy="16" r="6" fill="#FF3B8E"/>
+            <circle cx="34" cy="50" r="6" fill="#FF7A4C"/>
+            <text x="70" y="50" font-family="-apple-system, BlinkMacSystemFont" font-size="40" font-weight="800" letter-spacing="-1.5" fill="#1E2442">viterm</text>
+          </svg>
+        </div>
+        <div class="cap">ワードマーク(ライト)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= 3. Split Panes ======================= -->
+  <section>
+    <div class="head"><span class="num">03</span><h2>Split — 分割ペインとフロー</h2></div>
+    <p class="desc">ウィンドウの分割ペインをアイコン化。左ペインはプロンプト(あなた)、右ペインは流れるライン(働くエージェント)。「並列運用」というプロダクトの主張が最も直接的。</p>
+    <div class="row">
+      <div class="stack">
+        <div class="tile dark">
+          <svg width="128" height="128" viewBox="0 0 256 256">
+            <rect width="256" height="256" rx="58" fill="#1E2442"/>
+            <rect x="42" y="52" width="172" height="152" rx="18" fill="#2B3052"/>
+            <line x1="128" y1="52" x2="128" y2="204" stroke="#1E2442" stroke-width="8"/>
+            <path d="M64 96 L92 122 L64 148" stroke="url(#vf)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <rect x="146" y="92" width="52" height="12" rx="6" fill="#FF8A47"/>
+            <rect x="146" y="122" width="38" height="12" rx="6" fill="#FFBE3D"/>
+            <rect x="146" y="152" width="46" height="12" rx="6" fill="#FF3B8E"/>
+          </svg>
+          <svg width="32" height="32" viewBox="0 0 256 256">
+            <rect width="256" height="256" rx="58" fill="#1E2442"/>
+            <rect x="42" y="52" width="172" height="152" rx="18" fill="#2B3052"/>
+            <line x1="128" y1="52" x2="128" y2="204" stroke="#1E2442" stroke-width="8"/>
+            <path d="M64 96 L92 122 L64 148" stroke="url(#vf)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <rect x="146" y="92" width="52" height="12" rx="6" fill="#FF8A47"/>
+            <rect x="146" y="122" width="38" height="12" rx="6" fill="#FFBE3D"/>
+            <rect x="146" y="152" width="46" height="12" rx="6" fill="#FF3B8E"/>
+          </svg>
+        </div>
+        <div class="cap">アプリアイコン 128px / 32px</div>
+      </div>
+      <div class="stack">
+        <div class="tile light">
+          <svg width="320" height="72" viewBox="0 0 320 72">
+            <rect x="10" y="14" width="48" height="44" rx="8" fill="#1E2442"/>
+            <line x1="34" y1="14" x2="34" y2="58" stroke="#FAF8F6" stroke-width="3"/>
+            <path d="M17 27 L26 36 L17 45" stroke="url(#vf)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <rect x="40" y="28" width="12" height="4" rx="2" fill="#FFBE3D"/>
+            <rect x="40" y="38" width="9" height="4" rx="2" fill="#FF7A4C"/>
+            <text x="74" y="50" font-family="-apple-system, BlinkMacSystemFont" font-size="40" font-weight="800" letter-spacing="-1.5" fill="#1E2442">viterm</text>
+          </svg>
+        </div>
+        <div class="cap">ワードマーク(ライト)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= 4. Worktree Fork ======================= -->
+  <section>
+    <div class="head"><span class="num">04</span><h2>Fork — プロンプトから枝分かれ</h2></div>
+    <p class="desc">プロンプト「❯」の先端がworktreeのように枝分かれする。ターミナル(❯)と並列ブランチ(fork)の合成で、01と02の中間。動きのあるストロークが viteflow のマークと響き合う。</p>
+    <div class="row">
+      <div class="stack">
+        <div class="tile dark">
+          <svg width="128" height="128" viewBox="0 0 256 256">
+            <rect width="256" height="256" rx="58" fill="#1E2442"/>
+            <path d="M66 70 L128 128 L66 186" stroke="url(#vf)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <path d="M128 128 L196 92" stroke="#FFBE3D" stroke-width="18" stroke-linecap="round" fill="none"/>
+            <path d="M128 128 L196 164" stroke="#FF3B8E" stroke-width="18" stroke-linecap="round" fill="none"/>
+            <circle cx="196" cy="92" r="14" fill="#FFBE3D"/>
+            <circle cx="196" cy="164" r="14" fill="#FF3B8E"/>
+          </svg>
+          <svg width="32" height="32" viewBox="0 0 256 256">
+            <rect width="256" height="256" rx="58" fill="#1E2442"/>
+            <path d="M66 70 L128 128 L66 186" stroke="url(#vf)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <path d="M128 128 L196 92" stroke="#FFBE3D" stroke-width="18" stroke-linecap="round" fill="none"/>
+            <path d="M128 128 L196 164" stroke="#FF3B8E" stroke-width="18" stroke-linecap="round" fill="none"/>
+            <circle cx="196" cy="92" r="14" fill="#FFBE3D"/>
+            <circle cx="196" cy="164" r="14" fill="#FF3B8E"/>
+          </svg>
+        </div>
+        <div class="cap">アプリアイコン 128px / 32px</div>
+      </div>
+      <div class="stack">
+        <div class="tile light">
+          <svg width="310" height="72" viewBox="0 0 310 72">
+            <path d="M14 18 L40 36 L14 54" stroke="url(#vf)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <path d="M40 36 L62 24" stroke="#FFBE3D" stroke-width="7" stroke-linecap="round"/>
+            <path d="M40 36 L62 48" stroke="#FF3B8E" stroke-width="7" stroke-linecap="round"/>
+            <circle cx="62" cy="24" r="5" fill="#FFBE3D"/>
+            <circle cx="62" cy="48" r="5" fill="#FF3B8E"/>
+            <text x="80" y="50" font-family="-apple-system, BlinkMacSystemFont" font-size="40" font-weight="800" letter-spacing="-1.5" fill="#1E2442">viterm</text>
+          </svg>
+        </div>
+        <div class="cap">ワードマーク(ライト)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= 5. Flow-V ======================= -->
+  <section>
+    <div class="head"><span class="num">05</span><h2>Flow-V — viteflowマークの直系</h2></div>
+    <p class="desc">viteflow system のロゴマーク(流れる連続ストローク)の「v」部分だけを切り出した直系デザイン。会社ブランドとの親子関係が最も強く、プロダクトファミリーとして展開しやすい。</p>
+    <div class="row">
+      <div class="stack">
+        <div class="tile dark">
+          <svg width="128" height="128" viewBox="0 0 256 256">
+            <rect width="256" height="256" rx="58" fill="#1E2442"/>
+            <path d="M52 78 C60 78 66 82 70 92 L114 182 C118 190 124 194 130 194 C136 194 142 190 146 182 L192 88 C196 80 202 76 210 76"
+              stroke="url(#vf)" stroke-width="22" stroke-linecap="round" fill="none"/>
+            <rect x="176" y="170" width="44" height="18" rx="6" fill="url(#vfh)"/>
+          </svg>
+          <svg width="32" height="32" viewBox="0 0 256 256">
+            <rect width="256" height="256" rx="58" fill="#1E2442"/>
+            <path d="M52 78 C60 78 66 82 70 92 L114 182 C118 190 124 194 130 194 C136 194 142 190 146 182 L192 88 C196 80 202 76 210 76"
+              stroke="url(#vf)" stroke-width="22" stroke-linecap="round" fill="none"/>
+            <rect x="176" y="170" width="44" height="18" rx="6" fill="url(#vfh)"/>
+          </svg>
+        </div>
+        <div class="cap">アプリアイコン 128px / 32px</div>
+      </div>
+      <div class="stack">
+        <div class="tile light">
+          <svg width="300" height="72" viewBox="0 0 300 72">
+            <path d="M12 22 C15 22 17 24 19 28 L33 58 C35 61 37 63 39 63 C41 63 43 61 45 58 L60 26 C62 23 64 21 67 21"
+              stroke="url(#vf)" stroke-width="8" stroke-linecap="round" fill="none"/>
+            <text x="80" y="50" font-family="-apple-system, BlinkMacSystemFont" font-size="40" font-weight="800" letter-spacing="-1.5" fill="#1E2442">viterm</text>
+          </svg>
+        </div>
+        <div class="cap">ワードマーク(ライト)</div>
+      </div>
+    </div>
+  </section>
+
+  <p class="sub">方向が決まったら、選んだ案を磨き込んで AppIcon(.icns 全サイズ)/ SVG 原稿 / README ヘッダー用に書き出します。組み合わせ(例: アイコンは02、ワードマークは01)も可。</p>
+</div>
+</body>
+</html>

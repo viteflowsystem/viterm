@@ -12,10 +12,10 @@ public struct Worktree: Codable, Sendable, Hashable, Identifiable {
     public var ahead: Int
     /// 親ブランチに対する behind コミット数。
     public var behind: Int
-    /// 差分行数の要約。
-    public var diffStat: DiffStat
-    /// 未コミットの変更があるかどうか。
-    public var isDirty: Bool
+    /// ステージ済みの変更があるか(`git status --porcelain` の X カラム)。
+    public var hasStagedChanges: Bool
+    /// 未ステージの変更(untracked 含む)があるか(同 Y カラム / `??`)。
+    public var hasUnstagedChanges: Bool
 
     public init(
         path: String,
@@ -23,28 +23,20 @@ public struct Worktree: Codable, Sendable, Hashable, Identifiable {
         branch: String,
         ahead: Int = 0,
         behind: Int = 0,
-        diffStat: DiffStat = DiffStat(),
-        isDirty: Bool = false
+        hasStagedChanges: Bool = false,
+        hasUnstagedChanges: Bool = false
     ) {
         self.path = path
         self.repositoryPath = repositoryPath
         self.branch = branch
         self.ahead = ahead
         self.behind = behind
-        self.diffStat = diffStat
-        self.isDirty = isDirty
+        self.hasStagedChanges = hasStagedChanges
+        self.hasUnstagedChanges = hasUnstagedChanges
     }
 
     public var id: String { path }
 
-    /// `git diff --shortstat` 相当の追加/削除行数。
-    public struct DiffStat: Codable, Sendable, Hashable {
-        public var added: Int
-        public var removed: Int
-
-        public init(added: Int = 0, removed: Int = 0) {
-            self.added = added
-            self.removed = removed
-        }
-    }
+    /// 未コミットの変更(staged / unstaged いずれか)があるかどうか。
+    public var isDirty: Bool { hasStagedChanges || hasUnstagedChanges }
 }

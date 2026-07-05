@@ -18,7 +18,8 @@ struct ModelsTests {
         let worktree = Worktree(path: "/repo/vitea/wt/feat-foo", repositoryPath: "/repo/vitea", branch: "feat/foo")
         #expect(worktree.ahead == 0)
         #expect(worktree.behind == 0)
-        #expect(worktree.diffStat == Worktree.DiffStat(added: 0, removed: 0))
+        #expect(worktree.hasStagedChanges == false)
+        #expect(worktree.hasUnstagedChanges == false)
         #expect(worktree.isDirty == false)
         #expect(worktree.id == worktree.path)
 
@@ -28,8 +29,8 @@ struct ModelsTests {
             branch: "feat/foo",
             ahead: 3,
             behind: 1,
-            diffStat: Worktree.DiffStat(added: 10, removed: 5),
-            isDirty: true
+            hasStagedChanges: true,
+            hasUnstagedChanges: true
         )
         let data = try JSONEncoder().encode(full)
         let decoded = try JSONDecoder().decode(Worktree.self, from: data)

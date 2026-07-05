@@ -376,3 +376,15 @@ import Testing
         #expect(branch == "trunk")
     }
 }
+
+// MARK: - parseWorkingState (pure logic, git 不要)
+
+@Test func parseWorkingState_stagedAndUnstagedColumns() {
+    // X=staged, Y=unstaged, ??=untracked(unstaged 扱い)
+    #expect(GitService.parseWorkingState("") == WorkingState(hasStagedChanges: false, hasUnstagedChanges: false))
+    #expect(GitService.parseWorkingState("M  a.txt\n") == WorkingState(hasStagedChanges: true, hasUnstagedChanges: false))
+    #expect(GitService.parseWorkingState(" M a.txt\n") == WorkingState(hasStagedChanges: false, hasUnstagedChanges: true))
+    #expect(GitService.parseWorkingState("MM a.txt\n") == WorkingState(hasStagedChanges: true, hasUnstagedChanges: true))
+    #expect(GitService.parseWorkingState("?? new.txt\n") == WorkingState(hasStagedChanges: false, hasUnstagedChanges: true))
+    #expect(GitService.parseWorkingState("A  new.txt\n?? junk\n") == WorkingState(hasStagedChanges: true, hasUnstagedChanges: true))
+}

@@ -252,21 +252,21 @@ extension SidebarViewController: NSOutlineViewDelegate {
         case let .worktree(wt):
             stack.addArrangedSubview(label(wt.worktree.branch, size: 11, weight: .semibold))
             stack.addArrangedSubview(spacer())
-            // git 情報はモック準拠のセグメント別配色(↑↓=セカンダリ、+=緑、−=赤、dirty=オレンジ)。
-            var git: [(String, NSColor)] = []
-            if wt.worktree.ahead > 0 { git.append(("↑\(wt.worktree.ahead)", .secondaryLabelColor)) }
-            if wt.worktree.behind > 0 { git.append(("↓\(wt.worktree.behind)", .secondaryLabelColor)) }
-            let added = wt.worktree.diffStat.added
-            let removed = wt.worktree.diffStat.removed
-            if added > 0 { git.append(("+\(added)", .systemGreen)) }
-            if removed > 0 { git.append(("−\(removed)", .systemRed)) }
-            if git.isEmpty && !wt.worktree.isDirty { git.append(("clean", .tertiaryLabelColor)) }
-            if wt.worktree.isDirty { git.append(("●", .systemOrange)) }
+            // git 情報: ↑↓(main との commit 差)+ staged「+」/ unstaged「!」の有無。
+            // 差分行数は「base との差か未コミット差か」が紛らわしいため表示しない。
+            var git: [(String, NSColor, String?)] = []
+            if wt.worktree.ahead > 0 { git.append(("↑\(wt.worktree.ahead)", .secondaryLabelColor, nil)) }
+            if wt.worktree.behind > 0 { git.append(("↓\(wt.worktree.behind)", .secondaryLabelColor, nil)) }
+            if wt.worktree.hasStagedChanges { git.append(("+", .systemGreen, "ステージ済みの変更あり")) }
+            if wt.worktree.hasUnstagedChanges { git.append(("!", .systemOrange, "未ステージの変更あり")) }
+            if git.isEmpty { git.append(("clean", .tertiaryLabelColor, nil)) }
             let gitStack = NSStackView()
             gitStack.orientation = .horizontal
             gitStack.spacing = 4
-            for (text, color) in git {
-                gitStack.addArrangedSubview(label(text, size: 10, color: color, mono: true))
+            for (text, color, tooltip) in git {
+                let item = label(text, size: 10, color: color, mono: true)
+                item.toolTip = tooltip
+                gitStack.addArrangedSubview(item)
             }
             stack.addArrangedSubview(gitStack)
 

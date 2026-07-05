@@ -58,7 +58,7 @@ public struct WorktreeStatusScanner: Sendable {
             behind = counts.behind
         }
 
-        let diff = try? await gitService.diffStat(at: gitWorktree.path, comparedTo: comparisonBranch)
+        let workingState = try? await gitService.workingState(at: gitWorktree.path)
 
         return ViteaCore.Worktree(
             path: gitWorktree.path.path,
@@ -66,8 +66,8 @@ public struct WorktreeStatusScanner: Sendable {
             branch: branch,
             ahead: ahead,
             behind: behind,
-            diffStat: ViteaCore.Worktree.DiffStat(added: diff?.insertions ?? 0, removed: diff?.deletions ?? 0),
-            isDirty: diff?.isDirty ?? false
+            hasStagedChanges: workingState?.hasStagedChanges ?? false,
+            hasUnstagedChanges: workingState?.hasUnstagedChanges ?? false
         )
     }
 }

@@ -133,6 +133,29 @@ public struct GitService: Sendable {
         return !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// staged / unstaged の変更が存在するかを `git status --porcelain` の XY カラムから判定する。
+    /// untracked(`??`)は unstaged 扱い。
+    public func workingState(at worktreePath: URL) async throws -> WorkingState {
+        let output = try await runner.run(["status", "--porcelain"], in: worktreePath)
+        return Self.parseWorkingState(output)
+    }
+
+    static func parseWorkingState(_ porcelainOutput: String) -> WorkingState {
+        var staged = false
+        var unstaged = false
+        for line in porcelainOutput.split(separator: "\n") where line.count >= 2 {
+            let x = line[line.startIndex]
+            let y = line[line.index(after: line.startIndex)]
+            if x == "?" {
+                unstaged = true
+                continue
+            }
+            if x != " " { staged = true }
+            if y != " " { unstaged = true }
+        }
+        return WorkingState(hasStagedChanges: staged, hasUnstagedChanges: unstaged)
+    }
+
     // MARK: - Merge
 
     /// worktree 間のマージ/リベースを行う。

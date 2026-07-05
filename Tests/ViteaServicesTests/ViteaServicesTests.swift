@@ -219,8 +219,8 @@ struct StubError: Error, CustomStringConvertible {
         #expect(worktrees[0].ahead == 0)
         #expect(worktrees[0].behind == 0)
         #expect(worktrees[0].isDirty == false)
-        #expect(worktrees[0].diffStat.added == 0)
-        #expect(worktrees[0].diffStat.removed == 0)
+        #expect(worktrees[0].hasStagedChanges == false)
+        #expect(worktrees[0].hasUnstagedChanges == false)
         #expect(worktrees[0].repositoryPath == repo.path)
     }
 }
@@ -248,9 +248,9 @@ struct StubError: Error, CustomStringConvertible {
         }
         #expect(feature.ahead == 2)
         #expect(feature.behind == 1)
-        #expect(feature.diffStat.added == 2)
-        #expect(feature.diffStat.removed == 1)
         #expect(feature.isDirty == false)
+        #expect(feature.hasStagedChanges == false)
+        #expect(feature.hasUnstagedChanges == false)
 
         guard let main = worktrees.first(where: { $0.branch == "main" }) else {
             Issue.record("main worktree not found")

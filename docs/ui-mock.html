@@ -289,7 +289,7 @@
 
             <div class="wt">
               <div class="wt-head"><span class="tri">▾</span><span class="branch">feat/sidebar</span>
-                <span class="git">↑3 ↓1 <span class="plus">+142</span> <span class="minus">−38</span></span></div>
+                <span class="git">↑3 ↓1 <span class="plus">+</span> <span style="color: var(--busy)">!</span></span></div>
               <div class="sess active"><span class="st busy"></span>claude #1<span class="key">⌘2</span></div>
               <div class="sess"><span class="st wait"></span>claude #2<span class="badge">1</span><span class="key">⌘3</span></div>
               <div class="sess"><span class="st idle"></span>codex #1<span class="key">⌘4</span></div>
@@ -300,7 +300,7 @@
 
             <div class="wt">
               <div class="wt-head"><span class="tri">▾</span><span class="branch">fix/login</span>
-                <span class="git">↑1 <span class="plus">+12</span> <span class="minus">−4</span></span></div>
+                <span class="git">↑1 <span style="color: var(--busy)">!</span></span></div>
               <div class="sess"><span class="st busy"></span>claude #1<span class="key">⌘5</span></div>
             </div>
 
@@ -347,7 +347,7 @@
 
     <div class="notes">
       <div class="note"><span class="n">1</span><div><b>リポジトリ行。</b>複数リポジトリ(複数ディレクトリ)を登録して1つのサイドバーで管理。折りたたんでも waiting 数のバッジは集約表示される(最下段の infra 参照)。</div></div>
-      <div class="note"><span class="n">2</span><div><b>worktree 行。</b>ブランチ名、親ブランチとの ahead/behind(↑3 ↓1)、差分行数(+142 −38)を常時表示。dirty なら clean の代わりに ● を出す。</div></div>
+      <div class="note"><span class="n">2</span><div><b>worktree 行。</b>ブランチ名、親ブランチとの ahead/behind(↑3 ↓1)、staged(+ 緑)/unstaged(! オレンジ)の有無を常時表示。変更が無ければ clean。</div></div>
       <div class="note"><span class="n">3</span><div><b>セッション行。</b>同一 worktree 配下に claude #1 / claude #2 / codex #1 と複数セッションをぶら下げられる(核心要件)。⌘1〜9 で直接ジャンプ。</div></div>
       <div class="note"><span class="n">4</span><div><b>libghostty サーフェス。</b>フル機能のターミナル。~/.config/ghostty/config のテーマ・フォントを継承。非表示のセッションもバックグラウンドで生存。</div></div>
       <div class="note"><span class="n">5</span><div><b>ステータスバー。</b>リポジトリ横断で全セッションの状態を集計。⌘⇧U で最新の入力待ちへジャンプ(別リポジトリでも飛べる)。</div></div>

@@ -76,6 +76,17 @@ public struct DiffStat: Sendable, Equatable {
     }
 }
 
+/// 作業ツリーの staged / unstaged 変更の有無(`git status --porcelain` の XY カラム要約)。
+public struct WorkingState: Sendable, Equatable {
+    public let hasStagedChanges: Bool
+    public let hasUnstagedChanges: Bool
+
+    public init(hasStagedChanges: Bool, hasUnstagedChanges: Bool) {
+        self.hasStagedChanges = hasStagedChanges
+        self.hasUnstagedChanges = hasUnstagedChanges
+    }
+}
+
 /// `addWorktree` の作成元パターン。
 public enum WorktreeSource: Sendable, Equatable {
     /// 新規ブランチを作成して worktree を追加する(`git worktree add -b <name> <path> [<startPoint>]`)。

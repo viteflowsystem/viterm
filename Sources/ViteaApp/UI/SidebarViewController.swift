@@ -47,6 +47,10 @@ final class SidebarViewController: NSViewController {
     }
 
     private var rootNodes: [Node] = []
+    /// ユーザーが畳んだ行(repo パス / worktree パス)。再描画(reloadData)後の展開復元に使う。
+    private var collapsedIDs: Set<String> = []
+    /// プログラムからの展開/折りたたみ中は collapse 追跡を更新しない。
+    private var isRestoringExpansion = false
 
     override func loadView() {
         outlineView.headerView = nil
@@ -165,8 +169,30 @@ final class SidebarViewController: NSViewController {
             })
         }
         outlineView.reloadData()
-        outlineView.expandItem(nil, expandChildren: true)
+        restoreExpansion()
         syncSelection()
+    }
+
+    /// reloadData 後、ユーザーが畳んだ行以外を展開状態に戻す(既定は全展開)。
+    private func restoreExpansion() {
+        isRestoringExpansion = true
+        defer { isRestoringExpansion = false }
+        for repoNode in rootNodes {
+            guard let repoID = nodeID(repoNode), !collapsedIDs.contains(repoID) else { continue }
+            outlineView.expandItem(repoNode)
+            for wtNode in repoNode.children {
+                guard let wtID = nodeID(wtNode), !collapsedIDs.contains(wtID) else { continue }
+                outlineView.expandItem(wtNode)
+            }
+        }
+    }
+
+    private func nodeID(_ node: Node) -> String? {
+        switch node.kind {
+        case let .repository(repo): return repo.repository.path
+        case let .worktree(wt): return wt.id
+        case .session, .addSession: return nil
+        }
     }
 
     /// プログラムからの選択反映中は selectionDidChange をコールバックに再入させない
@@ -414,6 +440,20 @@ extension SidebarViewController: NSOutlineViewDelegate {
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !isSyncingSelection else { return }
         didClickRow()
+    }
+
+    func outlineViewItemDidCollapse(_ notification: Notification) {
+        guard !isRestoringExpansion,
+              let node = notification.userInfo?["NSObject"] as? Node,
+              let id = nodeID(node) else { return }
+        collapsedIDs.insert(id)
+    }
+
+    func outlineViewItemDidExpand(_ notification: Notification) {
+        guard !isRestoringExpansion,
+              let node = notification.userInfo?["NSObject"] as? Node,
+              let id = nodeID(node) else { return }
+        collapsedIDs.remove(id)
     }
 
     // MARK: - コンテキストメニュー

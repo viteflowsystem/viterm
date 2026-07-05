@@ -21,8 +21,6 @@ final class SidebarViewController: NSViewController {
     var onRemoveWorktree: ((String) -> Void)?
     /// リポジトリ行の「＋」/右クリック→新規 worktree(引数はリポジトリパス)。
     var onNewWorktreeInRepository: ((String) -> Void)?
-    /// branches グループのブランチ行クリック→そのブランチで worktree 作成(リポジトリパス, ブランチ名)。
-    var onCreateWorktreeFromBranch: ((String, String) -> Void)?
 
     private let outlineView = NSOutlineView()
     private let scrollView = NSScrollView()
@@ -35,10 +33,6 @@ final class SidebarViewController: NSViewController {
     private final class Node {
         enum Kind {
             case repository(RepositoryNode)
-            /// 「branches」「worktrees」のグループ見出し行。id は "repoPath#タイトル"。
-            case group(title: String, id: String)
-            /// worktree 未作成のローカルブランチ行。クリックで worktree 作成シートを開く。
-            case branch(name: String, repositoryPath: String)
             case worktree(WorktreeNode)
             case session(SessionNode)
             /// セッションが無い worktree に表示する「＋ セッションを追加」アクション行。
@@ -53,8 +47,6 @@ final class SidebarViewController: NSViewController {
     }
 
     private var rootNodes: [Node] = []
-    /// 一度でも表示した「branches」グループの id。初出時は既定で畳んでおくための追跡。
-    private var seenBranchGroupIDs: Set<String> = []
 
     override func loadView() {
         outlineView.headerView = nil
@@ -180,56 +172,31 @@ final class SidebarViewController: NSViewController {
         // ズレていくため、毎回スナップショットを取る。新規に現れた行は既定で展開。)
         let collapsedIDs = snapshotCollapsedIDs()
 
-        // repo → [branches グループ, worktrees グループ] → 各行、の4階層で構築する。
-        var collapsedWithDefaults = collapsedIDs
         rootNodes = viewModel.repositories.map { repo in
-            var groups: [Node] = []
-            if !repo.availableBranches.isEmpty {
-                let groupID = "\(repo.repository.path)#branches"
-                let branchNodes = repo.availableBranches.map {
-                    Node(kind: .branch(name: $0, repositoryPath: repo.repository.path))
-                }
-                groups.append(Node(kind: .group(title: "branches", id: groupID), children: branchNodes))
-                // branches グループは初出時のみ既定で畳む(一覧が長くなりがちなため)。
-                if !seenBranchGroupIDs.contains(groupID) {
-                    seenBranchGroupIDs.insert(groupID)
-                    collapsedWithDefaults.insert(groupID)
-                }
-            }
-            let worktreeNodes = repo.worktrees.map { wt -> Node in
+            Node(kind: .repository(repo), children: repo.worktrees.map { wt in
                 // セッション数に関係なく、末尾に「＋ セッションを追加」行を常設する。
                 let children = wt.sessions.map { Node(kind: .session($0)) }
                     + [Node(kind: .addSession(worktreePath: wt.id))]
                 return Node(kind: .worktree(wt), children: children)
-            }
-            groups.append(Node(
-                kind: .group(title: "worktrees", id: "\(repo.repository.path)#worktrees"),
-                children: worktreeNodes
-            ))
-            return Node(kind: .repository(repo), children: groups)
+            })
         }
         outlineView.reloadData()
-        restoreExpansion(collapsedIDs: collapsedWithDefaults)
+        restoreExpansion(collapsedIDs: collapsedIDs)
         syncSelection()
     }
 
-    /// 展開可能(ID持ち・子あり)なノードを深さ優先で列挙する。
-    private func walkExpandables(_ nodes: [Node], _ body: (Node, String) -> Void) {
-        for node in nodes {
-            if !node.children.isEmpty, let id = nodeID(node) {
-                body(node, id)
-            }
-            walkExpandables(node.children, body)
-        }
-    }
-
-    /// 現在のツリー(再構築前の rootNodes)から、畳まれている行の ID を集める。
+    /// 現在のツリー(再構築前の rootNodes)から、畳まれている repo/worktree の ID を集める。
     /// 初回(rootNodes が空)は空集合 = 全展開が既定。
     private func snapshotCollapsedIDs() -> Set<String> {
         var collapsed: Set<String> = []
-        walkExpandables(rootNodes) { node, id in
-            if !outlineView.isItemExpanded(node) {
+        for repoNode in rootNodes {
+            if let id = nodeID(repoNode), !outlineView.isItemExpanded(repoNode) {
                 collapsed.insert(id)
+            }
+            for wtNode in repoNode.children {
+                if let id = nodeID(wtNode), !outlineView.isItemExpanded(wtNode) {
+                    collapsed.insert(id)
+                }
             }
         }
         return collapsed
@@ -237,9 +204,12 @@ final class SidebarViewController: NSViewController {
 
     /// reloadData 後、スナップショットで畳まれていなかった行を展開状態に戻す。
     private func restoreExpansion(collapsedIDs: Set<String>) {
-        walkExpandables(rootNodes) { node, id in
-            if !collapsedIDs.contains(id) {
-                outlineView.expandItem(node)
+        for repoNode in rootNodes {
+            guard let repoID = nodeID(repoNode), !collapsedIDs.contains(repoID) else { continue }
+            outlineView.expandItem(repoNode)
+            for wtNode in repoNode.children {
+                guard let wtID = nodeID(wtNode), !collapsedIDs.contains(wtID) else { continue }
+                outlineView.expandItem(wtNode)
             }
         }
     }
@@ -247,9 +217,8 @@ final class SidebarViewController: NSViewController {
     private func nodeID(_ node: Node) -> String? {
         switch node.kind {
         case let .repository(repo): return repo.repository.path
-        case let .group(_, id): return id
         case let .worktree(wt): return wt.id
-        case .branch, .session, .addSession: return nil
+        case .session, .addSession: return nil
         }
     }
 
@@ -288,9 +257,7 @@ final class SidebarViewController: NSViewController {
             onSelectWorktree?(wt.id)
         case let .addSession(worktreePath):
             onAddSession?(worktreePath)
-        case let .branch(name, repositoryPath):
-            onCreateWorktreeFromBranch?(repositoryPath, name)
-        case .repository, .group:
+        case .repository:
             break
         }
     }
@@ -334,18 +301,6 @@ extension SidebarViewController: NSOutlineViewDelegate {
             }
             // このリポジトリに worktree を追加する「＋」(常時表示。作成対象を明確にする)。
             stack.addArrangedSubview(addWorktreeButton(repositoryPath: repo.repository.path))
-
-        case let .group(title, _):
-            let heading = label(title, size: 10, weight: .semibold, color: .tertiaryLabelColor)
-            stack.addArrangedSubview(heading)
-            stack.addArrangedSubview(spacer())
-
-        case let .branch(name, _):
-            stack.addArrangedSubview(label(name, size: 11, color: .secondaryLabelColor))
-            stack.addArrangedSubview(spacer())
-            let hint = label("＋ worktree", size: 9, color: .tertiaryLabelColor)
-            hint.toolTip = "クリックでこのブランチの worktree を作成"
-            stack.addArrangedSubview(hint)
 
         case let .worktree(wt):
             stack.addArrangedSubview(label(wt.worktree.branch, size: 11, weight: .semibold))
@@ -515,9 +470,9 @@ extension SidebarViewController: NSOutlineViewDelegate {
         guard let node = item as? Node else { return false }
         switch node.kind {
         case .session, .worktree: return true
-        // addSession / branch は選択不可(クリックアクションのみ)。選択可能にすると
+        // addSession は選択不可(クリックアクションのみ)。選択可能にすると
         // selectionDidChange とクリックアクションの両方から発火して二重起動する。
-        case .repository, .group, .addSession, .branch: return false
+        case .repository, .addSession: return false
         }
     }
 
@@ -648,9 +603,7 @@ extension SidebarViewController: NSMenuDelegate {
             menu.addItem(makeItem("worktree を削除…", #selector(menuRemoveWorktree(_:))))
         case .repository:
             menu.addItem(makeItem("新規 worktree…", #selector(menuNewWorktree(_:))))
-        case .branch:
-            menu.addItem(makeItem("このブランチで worktree を作成…", #selector(menuCreateWorktreeFromBranch(_:))))
-        case .group, .addSession:
+        case .addSession:
             break
         }
     }
@@ -658,11 +611,6 @@ extension SidebarViewController: NSMenuDelegate {
     @objc private func menuNewWorktree(_ sender: NSMenuItem) {
         guard let node = clickedNode(), case let .repository(repo) = node.kind else { return }
         onNewWorktreeInRepository?(repo.repository.path)
-    }
-
-    @objc private func menuCreateWorktreeFromBranch(_ sender: NSMenuItem) {
-        guard let node = clickedNode(), case let .branch(name, repositoryPath) = node.kind else { return }
-        onCreateWorktreeFromBranch?(repositoryPath, name)
     }
 
     private func makeItem(_ title: String, _ action: Selector) -> NSMenuItem {

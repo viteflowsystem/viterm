@@ -24,23 +24,16 @@ public struct SidebarViewModel: Sendable, Equatable {
         repositories: [Repository],
         worktrees: [Worktree],
         sessions: [AgentSession],
-        branchesByRepository: [String: [String]] = [:],
         selectedSessionID: AgentSession.ID? = nil
     ) {
-        self.repositories = Self.buildTree(
-            repositories: repositories,
-            worktrees: worktrees,
-            sessions: sessions,
-            branchesByRepository: branchesByRepository
-        )
+        self.repositories = Self.buildTree(repositories: repositories, worktrees: worktrees, sessions: sessions)
         self.selectedSessionID = selectedSessionID
     }
 
     private static func buildTree(
         repositories: [Repository],
         worktrees: [Worktree],
-        sessions: [AgentSession],
-        branchesByRepository: [String: [String]]
+        sessions: [AgentSession]
     ) -> [RepositoryNode] {
         // `Dictionary(grouping:by:)` は元の配列の相対順序を保ったままグルーピングするため、
         // 呼び出し側が渡した並び順(= サイドバー表示順)がそのままツリーに反映される。
@@ -58,14 +51,7 @@ public struct SidebarViewModel: Sendable, Equatable {
                 }
                 return WorktreeNode(worktree: worktree, sessions: childSessions)
             }
-            // worktree に既にチェックアウトされているブランチは「branches」グループから除く。
-            let checkedOut = Set(childWorktrees.map(\.worktree.branch))
-            let available = (branchesByRepository[repository.path] ?? []).filter { !checkedOut.contains($0) }
-            return RepositoryNode(
-                repository: repository,
-                worktrees: childWorktrees,
-                availableBranches: available
-            )
+            return RepositoryNode(repository: repository, worktrees: childWorktrees)
         }
     }
 

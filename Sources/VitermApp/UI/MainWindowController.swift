@@ -81,11 +81,6 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
                   let repository = self.appModel.repositories.first(where: { $0.path == repositoryPath }) else { return }
             self.newWorktree(in: repository)
         }
-        sidebar.onCreateWorktreeFromBranch = { [weak self] repositoryPath, branch in
-            guard let self,
-                  let repository = self.appModel.repositories.first(where: { $0.path == repositoryPath }) else { return }
-            self.newWorktree(in: repository, existingBranch: branch)
-        }
         stateMonitor.onStateChange = { [weak self] sessionID, newState in
             self?.handleStateChange(sessionID: sessionID, newState: newState)
         }
@@ -579,9 +574,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     }
 
     /// 指定リポジトリを対象に worktree 作成シートを開く(サイドバーの「＋」/右クリック用)。
-    /// worktree 作成シートを開く。`existingBranch` を渡すと、そのローカルブランチから
-    /// 作成するモード(サイドバーの「branches」グループから)でプリフィルする。
-    func newWorktree(in repository: Repository, existingBranch: String? = nil) {
+    func newWorktree(in repository: Repository) {
         guard let window else {
             NSSound.beep()
             return
@@ -596,8 +589,6 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
                     AvailableBranch(name: $0.name, kind: $0.kind == .local ? .local : .remote)
                 },
                 existingWorktreePaths: appModel.worktrees.map(\.path),
-                branchName: existingBranch ?? "",
-                sourceMode: existingBranch != nil ? .existingLocalBranch : .newBranch,
                 copySessionData: appModel.config.copySessionDataByDefault ?? false
             )
             let sheet = NewWorktreeSheet(

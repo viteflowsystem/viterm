@@ -322,6 +322,13 @@ extension SidebarViewController: NSOutlineViewDelegate {
                 gitStack.addArrangedSubview(item)
             }
             stack.addArrangedSubview(gitStack)
+            // ホバーで worktree 削除のゴミ箱を出す(メイン worktree = リポジトリ本体は削除不可のため除外)。
+            if wt.worktree.path != wt.worktree.repositoryPath {
+                let path = wt.id
+                return makeCell(stack: stack, hoverTrash: { [weak self] in
+                    self?.onRemoveWorktree?(path)
+                }, trashTooltip: "worktree を削除")
+            }
 
         case let .session(s):
             stack.addArrangedSubview(stateDot(for: s.session.state))
@@ -348,11 +355,16 @@ extension SidebarViewController: NSOutlineViewDelegate {
     }
 
     /// 行のスタックをセルに包む。`hoverTrash` を渡すとホバー時にゴミ箱ボタンを表示する。
-    private func makeCell(stack: NSStackView, hoverTrash: (() -> Void)?) -> NSTableCellView {
+    private func makeCell(
+        stack: NSStackView,
+        hoverTrash: (() -> Void)?,
+        trashTooltip: String = "セッションを終了"
+    ) -> NSTableCellView {
         let cell: NSTableCellView
         if let hoverTrash {
             let hoverCell = HoverTrashCellView()
             hoverCell.onTrash = hoverTrash
+            hoverCell.trashButton.toolTip = trashTooltip
             stack.addArrangedSubview(hoverCell.trashButton)
             cell = hoverCell
         } else {

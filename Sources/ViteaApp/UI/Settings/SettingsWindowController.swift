@@ -25,7 +25,7 @@ final class SettingsWindowController: NSWindowController {
 
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable]
-        window.title = "vitea 設定"
+        window.title = "viterm 設定"
         window.isReleasedWhenClosed = false
         window.toolbarStyle = .preference
         // 初期表示時から選択中ペインの内容サイズに合わせる

@@ -90,7 +90,7 @@ public struct LiveConfigProvider: ConfigProviding {
     }
 }
 
-/// グローバル設定ファイル(`~/.config/vitea/config.json`)の `repositories` フィールドだけを
+/// グローバル設定ファイル(`~/.config/viterm/config.json`)の `repositories` フィールドだけを
 /// 読み込み直して上書きする既定実装。他のフィールド(テンプレート・プリセット等)は保持する。
 public struct LiveRepositoryConfigPersister: RepositoryConfigPersisting {
     public var globalConfigURL: URL

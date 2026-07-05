@@ -1,7 +1,7 @@
 import Foundation
 import ViteaCore
 
-/// 設定ウィンドウの書き込み窓口。グローバル設定 `~/.config/vitea/config.json` を
+/// 設定ウィンドウの書き込み窓口。グローバル設定 `~/.config/viterm/config.json` を
 /// 「既存 JSON を読み、対象キーだけ差し替えて書き戻す」方式で更新する
 /// (この画面で扱わないキーは保全される)。変更は即時保存(macOS 設定の流儀)。
 @MainActor
@@ -11,7 +11,7 @@ final class SettingsStore {
 
     static var globalConfigURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/vitea/config.json")
+            .appendingPathComponent(".config/viterm/config.json")
     }
 
     init(onChanged: @escaping () -> Void) {

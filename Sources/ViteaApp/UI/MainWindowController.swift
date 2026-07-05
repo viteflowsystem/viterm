@@ -45,9 +45,9 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "vitea"
+        window.title = "viterm"
         window.center()
-        window.setFrameAutosaveName("vitea.main")
+        window.setFrameAutosaveName("viterm.main")
         super.init(window: window)
 
         setUpContent()
@@ -208,7 +208,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         // (arranged subview への外部幅制約は required 扱いになりドラッグを固めてしまう)。
         splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
         splitView.delegate = self
-        splitView.autosaveName = "vitea.sidebar"
+        splitView.autosaveName = "viterm.sidebar"
 
         // ペインのフォーカス移動をサイドバー選択に同期する。
         splitHost.onActivePaneChanged = { [weak self] contentView in

@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.vitea.app</string>
+	<string>com.viteflowsystem.viterm</string>
 	<key>CFBundleName</key>
-	<string>vitea</string>
+	<string>viterm</string>
 	<key>CFBundleDisplayName</key>
-	<string>vitea</string>
+	<string>viterm</string>
 	<key>CFBundleExecutable</key>
 	<string>ViteaApp</string>
 	<key>CFBundlePackageType</key>

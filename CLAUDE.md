@@ -1,4 +1,4 @@
-# vitea
+# viterm
 
 AI coding agent(Claude Code / Codex 等)を並列運用するためのネイティブ macOS ターミナル。
 Swift + AppKit + libghostty。コンセプトは docs/requirements.md、タスクは docs/tasks.md 参照。

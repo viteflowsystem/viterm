@@ -1,9 +1,9 @@
 #!/bin/sh
-# vitea.app バンドルを組み立てて、そのまま `open` で起動できる状態にする。
+# viterm.app バンドルを組み立てて、そのまま `open` で起動できる状態にする。
 #
 # 使い方: scripts/make-app.sh [release|debug]  (既定: release)
 #
-# 生成物: .build/vitea.app (git 管理外、.build/ は .gitignore 対象)
+# 生成物: .build/viterm.app (git 管理外、.build/ は .gitignore 対象)
 #   Contents/MacOS/ViteaApp   … `swift build` の実行バイナリ
 #   Contents/Info.plist       … Resources/Info.plist のコピー
 #   Contents/Frameworks/      … TODO(T3待ち): GhosttyKit が xcframework/dylib を含む場合、
@@ -27,7 +27,7 @@ if [ ! -x "$EXECUTABLE" ]; then
     exit 1
 fi
 
-APP_BUNDLE="$REPO_ROOT/.build/vitea.app"
+APP_BUNDLE="$REPO_ROOT/.build/viterm.app"
 CONTENTS_DIR="$APP_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"

@@ -22,13 +22,13 @@ public enum ConfigLoaderError: Error, Equatable, CustomStringConvertible {
 
 /// グローバル設定・プロジェクト設定を読み込み、マージ済みの `ViteaConfig` を生成する。
 public enum ConfigLoader {
-    /// グローバル設定ファイルの既定パス: `~/.config/vitea/config.json`
+    /// グローバル設定ファイルの既定パス: `~/.config/viterm/config.json`
     public static func defaultGlobalConfigURL(
         fileManager: FileManager = .default
     ) -> URL {
         fileManager.homeDirectoryForCurrentUser
             .appendingPathComponent(".config", isDirectory: true)
-            .appendingPathComponent("vitea", isDirectory: true)
+            .appendingPathComponent("viterm", isDirectory: true)
             .appendingPathComponent("config.json", isDirectory: false)
     }
 

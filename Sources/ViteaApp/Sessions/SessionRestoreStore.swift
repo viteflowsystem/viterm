@@ -20,7 +20,7 @@ struct SessionRestoreStore {
 
     var fileURL: URL = FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("vitea/sessions.json")
+        .appendingPathComponent("viterm/sessions.json")
 
     func save(sessions: [AgentSession], selectedSessionID: AgentSession.ID?) {
         let state = State(

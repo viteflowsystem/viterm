@@ -19,6 +19,8 @@ final class SidebarViewController: NSViewController {
     var onTerminateSession: ((AgentSession.ID) -> Void)?
     var onMergeWorktree: ((String) -> Void)?
     var onRemoveWorktree: ((String) -> Void)?
+    /// リポジトリ行の「＋」/右クリック→新規 worktree(引数はリポジトリパス)。
+    var onNewWorktreeInRepository: ((String) -> Void)?
 
     private let outlineView = NSOutlineView()
     private let scrollView = NSScrollView()
@@ -245,6 +247,8 @@ extension SidebarViewController: NSOutlineViewDelegate {
                 stack.addArrangedSubview(badge("\(waiting)"))
             }
             stack.addArrangedSubview(label("\(repo.worktrees.count) wt", size: 10, color: .tertiaryLabelColor))
+            // このリポジトリに worktree を追加する「＋」(常時表示。作成対象を明確にする)。
+            stack.addArrangedSubview(addWorktreeButton(repositoryPath: repo.repository.path))
 
         case let .worktree(wt):
             stack.addArrangedSubview(label(wt.worktree.branch, size: 11, weight: .semibold))
@@ -359,6 +363,26 @@ extension SidebarViewController: NSOutlineViewDelegate {
             dot.layer?.borderWidth = 1.5
         }
         return dot
+    }
+
+    /// リポジトリ行の「＋」(新規 worktree)ボタン。
+    private func addWorktreeButton(repositoryPath: String) -> NSButton {
+        let button = NSButton()
+        button.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "新規 worktree")
+        button.isBordered = false
+        button.imageScaling = .scaleProportionallyDown
+        button.contentTintColor = .secondaryLabelColor
+        button.toolTip = "このリポジトリに worktree を追加"
+        button.identifier = NSUserInterfaceItemIdentifier(repositoryPath)
+        button.target = self
+        button.action = #selector(didTapAddWorktree(_:))
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        return button
+    }
+
+    @objc private func didTapAddWorktree(_ sender: NSButton) {
+        guard let path = sender.identifier?.rawValue else { return }
+        onNewWorktreeInRepository?(path)
     }
 
     /// waiting 数のバッジ(青いピル)。UIモックの .badge 相当。
@@ -512,9 +536,16 @@ extension SidebarViewController: NSMenuDelegate {
             menu.addItem(.separator())
             menu.addItem(makeItem("デフォルトブランチにマージ…", #selector(menuMergeWorktree(_:))))
             menu.addItem(makeItem("worktree を削除…", #selector(menuRemoveWorktree(_:))))
-        case .repository, .addSession:
+        case .repository:
+            menu.addItem(makeItem("新規 worktree…", #selector(menuNewWorktree(_:))))
+        case .addSession:
             break
         }
+    }
+
+    @objc private func menuNewWorktree(_ sender: NSMenuItem) {
+        guard let node = clickedNode(), case let .repository(repo) = node.kind else { return }
+        onNewWorktreeInRepository?(repo.repository.path)
     }
 
     private func makeItem(_ title: String, _ action: Selector) -> NSMenuItem {

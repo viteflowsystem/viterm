@@ -73,6 +73,11 @@ final class MainWindowController: NSWindowController {
         }
         sidebar.onMergeWorktree = { [weak self] path in self?.mergeWorktree(at: path) }
         sidebar.onRemoveWorktree = { [weak self] path in self?.removeWorktreeFlow(at: path) }
+        sidebar.onNewWorktreeInRepository = { [weak self] repositoryPath in
+            guard let self,
+                  let repository = self.appModel.repositories.first(where: { $0.path == repositoryPath }) else { return }
+            self.newWorktree(in: repository)
+        }
         stateMonitor.onStateChange = { [weak self] sessionID, newState in
             self?.handleStateChange(sessionID: sessionID, newState: newState)
         }
@@ -543,9 +548,18 @@ final class MainWindowController: NSWindowController {
         return appModel.repositories.first
     }
 
-    /// ⌘N worktree 新規作成シート(T10)。
+    /// ⌘N worktree 新規作成シート(T10)。現在の文脈のリポジトリが対象。
     @objc func newWorktree(_ sender: Any?) {
-        guard let repository = currentRepository, let window else {
+        guard let repository = currentRepository else {
+            NSSound.beep()
+            return
+        }
+        newWorktree(in: repository)
+    }
+
+    /// 指定リポジトリを対象に worktree 作成シートを開く(サイドバーの「＋」/右クリック用)。
+    func newWorktree(in repository: Repository) {
+        guard let window else {
             NSSound.beep()
             return
         }

@@ -8,7 +8,7 @@ import ViteaServices
 /// メインウィンドウ: サイドバー + ターミナルホスト + ステータスバーの統合(T7b/T8/T9)。
 /// AppModel(状態)と SessionManager(サーフェス実体)を束ね、キーボードショートカットを配線する。
 @MainActor
-final class MainWindowController: NSWindowController {
+final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     let appModel: AppModel
     let sessionManager: SessionManager
 
@@ -201,10 +201,14 @@ final class MainWindowController: NSWindowController {
         splitView.dividerStyle = .thin
 
         let sidebarView = sidebar.view
-        sidebarView.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
         splitView.addArrangedSubview(sidebarView)
         splitView.addArrangedSubview(splitHost)
+        // サイドバー側の幅を優先的に保持しつつ、ディバイダのドラッグで調整可能にする。
+        // 最小/最大幅は delegate(constrainMin/MaxCoordinate)で管理する
+        // (arranged subview への外部幅制約は required 扱いになりドラッグを固めてしまう)。
         splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+        splitView.delegate = self
+        splitView.autosaveName = "vitea.sidebar"
 
         // ペインのフォーカス移動をサイドバー選択に同期する。
         splitHost.onActivePaneChanged = { [weak self] contentView in
@@ -731,6 +735,16 @@ final class MainWindowController: NSWindowController {
             guard response == .alertFirstButtonReturn else { return }
             self?.cleanUpSession(sessionID)
         }
+    }
+
+    // MARK: - NSSplitViewDelegate(サイドバー幅の制約)
+
+    func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+        max(proposedMinimumPosition, 180)
+    }
+
+    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+        min(proposedMaximumPosition, 480)
     }
 
     static func presentError(_ error: any Error, in window: NSWindow?) {

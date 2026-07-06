@@ -53,6 +53,20 @@ cp "$EXECUTABLE" "$MACOS_DIR/VitermApp"
 cp "$REPO_ROOT/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
 mkdir -p "$CONTENTS_DIR/Resources"
 
+# Copy the SPM resource bundles (Bundle.module lookups fail without them) and
+# compile the string catalogs: Foundation does not parse raw .xcstrings at
+# runtime, so turn them into {en,ja}.lproj/Localizable.strings.
+for BUNDLE in "$BIN_PATH"/viterm_*.bundle; do
+    [ -d "$BUNDLE" ] || continue
+    DEST="$CONTENTS_DIR/Resources/$(basename "$BUNDLE")"
+    cp -R "$BUNDLE" "$DEST"
+    for CATALOG in "$DEST"/*.xcstrings; do
+        [ -f "$CATALOG" ] || continue
+        xcrun xcstringstool compile "$CATALOG" --output-directory "$DEST"
+        rm "$CATALOG"
+    done
+done
+
 if [ "$VARIANT" = "dist" ]; then
     cp "$REPO_ROOT/Resources/AppIcon.icns" "$CONTENTS_DIR/Resources/AppIcon.icns"
 else

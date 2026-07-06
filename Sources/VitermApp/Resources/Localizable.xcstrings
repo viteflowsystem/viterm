@@ -1,6 +1,836 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
+  "sourceLanguage": "en",
+  "strings": {
+    "%@ has uncommitted changes. Force delete?": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ には未コミットの変更があります。強制削除しますか?"
+          }
+        }
+      }
+    },
+    "(current HEAD)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(現在の HEAD)"
+          }
+        }
+      }
+    },
+    "Add Repository": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リポジトリを追加"
+          }
+        }
+      }
+    },
+    "Add Repository…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リポジトリを追加…"
+          }
+        }
+      }
+    },
+    "Add Session": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セッションを追加"
+          }
+        }
+      }
+    },
+    "Add a worktree to this repository": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このリポジトリに worktree を追加"
+          }
+        }
+      }
+    },
+    "Add…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "追加…"
+          }
+        }
+      }
+    },
+    "After a successful merge, the worktree and local branch will be deleted.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "マージ成功後、worktree とローカルブランチを削除します。"
+          }
+        }
+      }
+    },
+    "Base Branch": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ベースブランチ"
+          }
+        }
+      }
+    },
+    "Branch Name": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ブランチ名"
+          }
+        }
+      }
+    },
+    "Branch name: %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ブランチ名: %@"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャンセル"
+          }
+        }
+      }
+    },
+    "Close Pane": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ペインを閉じる"
+          }
+        }
+      }
+    },
+    "Command (leave empty to disable)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コマンド(空で無効)"
+          }
+        }
+      }
+    },
+    "Command Palette": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コマンドパレット"
+          }
+        }
+      }
+    },
+    "Command Palette…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コマンドパレット…"
+          }
+        }
+      }
+    },
+    "Copy Claude session data (~/.claude/projects)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude セッションデータをコピー(~/.claude/projects)"
+          }
+        }
+      }
+    },
+    "Copy Claude session data when creating a worktree": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "worktree 作成時に Claude セッションデータをコピー"
+          }
+        }
+      }
+    },
+    "Create and Launch": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作成して起動"
+          }
+        }
+      }
+    },
+    "Default Preset:": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "既定プリセット:"
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        }
+      }
+    },
+    "Delete Worktree": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "worktree を削除"
+          }
+        }
+      }
+    },
+    "Delete Worktree…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "worktree を削除…"
+          }
+        }
+      }
+    },
+    "Destination Template (can be overridden here)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作成先テンプレート(その場上書き可)"
+          }
+        }
+      }
+    },
+    "Destination Template:": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作成先テンプレート:"
+          }
+        }
+      }
+    },
+    "Discovery Roots:": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動検出ルート:"
+          }
+        }
+      }
+    },
+    "Example: feat/x in myapp → %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例: myapp の feat/x → %@"
+          }
+        }
+      }
+    },
+    "Force Delete": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "強制削除"
+          }
+        }
+      }
+    },
+    "General": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一般"
+          }
+        }
+      }
+    },
+    "Git repositories under the discovery roots (up to depth 4, excluding node_modules and the like) are added to the sidebar automatically at launch and on refresh. Registered repositories are always shown in addition to those.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動検出ルート配下の git リポジトリ(深さ4まで、node_modules 等は除外)は起動時・更新時に自動でサイドバーに追加されます。登録リポジトリはそれとは別に常に表示されます。"
+          }
+        }
+      }
+    },
+    "Has staged changes": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ステージ済みの変更あり"
+          }
+        }
+      }
+    },
+    "Has unstaged changes": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未ステージの変更あり"
+          }
+        }
+      }
+    },
+    "Jump to Latest Waiting Session": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最新の入力待ちへ"
+          }
+        }
+      }
+    },
+    "Launch a session after creation": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作成後にセッションを起動"
+          }
+        }
+      }
+    },
+    "Launch a session after creation: %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作成後にセッションを起動: %@"
+          }
+        }
+      }
+    },
+    "Merge %@ into %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ を %2$@ にマージ"
+          }
+        }
+      }
+    },
+    "Merge into Default Branch…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デフォルトブランチにマージ…"
+          }
+        }
+      }
+    },
+    "New Session": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新規セッション"
+          }
+        }
+      }
+    },
+    "New Worktree": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新規 worktree"
+          }
+        }
+      }
+    },
+    "New Worktree — %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新規 worktree — %@"
+          }
+        }
+      }
+    },
+    "New Worktree…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新規 worktree…"
+          }
+        }
+      }
+    },
+    "Next Pane": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次のペイン"
+          }
+        }
+      }
+    },
+    "No Results": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "見つかりません"
+          }
+        }
+      }
+    },
+    "No repositories registered": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リポジトリが未登録です"
+          }
+        }
+      }
+    },
+    "No session selected": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セッション未選択"
+          }
+        }
+      }
+    },
+    "Notification Hooks": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通知フック"
+          }
+        }
+      }
+    },
+    "Notification: %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通知: %@"
+          }
+        }
+      }
+    },
+    "Open config.json…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "config.json を開く…"
+          }
+        }
+      }
+    },
+    "Operation Failed": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作に失敗しました"
+          }
+        }
+      }
+    },
+    "Placeholders: {project} (repository name), {branch} (/ normalized to -), {branch_raw} (as is). The hook receives VITERM_WORKTREE_PATH / VITERM_BRANCH / VITERM_GIT_ROOT.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレースホルダ: {project}(リポジトリ名)、{branch}(/ は - に正規化)、{branch_raw}(そのまま)。フックには VITERM_WORKTREE_PATH / VITERM_BRANCH / VITERM_GIT_ROOT が渡されます。"
+          }
+        }
+      }
+    },
+    "Post-Creation Hook:": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作成後フック:"
+          }
+        }
+      }
+    },
+    "Press ⌘T to start a session or ⌘N to create a worktree": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌘T でセッションを起動 / ⌘N で worktree を作成"
+          }
+        }
+      }
+    },
+    "Registered Repositories:": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登録リポジトリ:"
+          }
+        }
+      }
+    },
+    "Remove": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        }
+      }
+    },
+    "Rename": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リネーム"
+          }
+        }
+      }
+    },
+    "Rename Session": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セッションをリネーム"
+          }
+        }
+      }
+    },
+    "Rename…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リネーム…"
+          }
+        }
+      }
+    },
+    "Repositories": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リポジトリ"
+          }
+        }
+      }
+    },
+    "Runs via /bin/sh -c when a session state changes (leave empty to disable). Environment variables: VITERM_SESSION_NAME / VITERM_WORKTREE_PATH / VITERM_OLD_STATE / VITERM_NEW_STATE. Example: play a sound on waiting for input → afplay /System/Library/Sounds/Glass.aiff": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セッション状態の変化時に /bin/sh -c で実行されます(空で無効)。環境変数: VITERM_SESSION_NAME / VITERM_WORKTREE_PATH / VITERM_OLD_STATE / VITERM_NEW_STATE。例: 入力待ちで音を鳴らす → afplay /System/Library/Sounds/Glass.aiff"
+          }
+        }
+      }
+    },
+    "Search commands…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コマンドを検索…"
+          }
+        }
+      }
+    },
+    "Select the root directory of a git repository": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "git リポジトリのルートディレクトリを選択"
+          }
+        }
+      }
+    },
+    "Session": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セッション"
+          }
+        }
+      }
+    },
+    "Session %lld": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セッション %lld"
+          }
+        }
+      }
+    },
+    "Settings…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定…"
+          }
+        }
+      }
+    },
+    "Show in Finder": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder で表示"
+          }
+        }
+      }
+    },
+    "Some steps failed: %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一部のステップが失敗: %@"
+          }
+        }
+      }
+    },
+    "Split Down": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下に分割"
+          }
+        }
+      }
+    },
+    "Split Right": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "右に分割"
+          }
+        }
+      }
+    },
+    "Terminate": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "終了"
+          }
+        }
+      }
+    },
+    "Terminate Session": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セッションを終了"
+          }
+        }
+      }
+    },
+    "The default preset is used for ⌘T, “＋ Add Session”, and the session launched when creating a worktree. Presets themselves are edited in the presets section of config.json.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "既定プリセットは ⌘T・「＋ セッションを追加」・worktree 作成時のセッション起動に使われます。プリセットの定義自体は config.json の presets で編集します。"
+          }
+        }
+      }
+    },
+    "The destination path collides with an existing worktree": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作成先パスが既存の worktree と衝突しています"
+          }
+        }
+      }
+    },
+    "The running process will be terminated and the scrollback will be discarded.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "実行中のプロセスは終了され、スクロールバックも破棄されます。"
+          }
+        }
+      }
+    },
+    "This will delete %@ (%@).": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@(%2$@)を削除します。"
+          }
+        }
+      }
+    },
+    "Toggle Sidebar": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サイドバー表示切替"
+          }
+        }
+      }
+    },
+    "Waiting for input: %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "入力待ち: %@"
+          }
+        }
+      }
+    },
+    "When busy:": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "busy になったとき:"
+          }
+        }
+      }
+    },
+    "When idle:": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "idle になったとき:"
+          }
+        }
+      }
+    },
+    "When waiting for input:": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "入力待ちになったとき:"
+          }
+        }
+      }
+    },
+    "e.g. npm install (leave empty to disable)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "npm install など(空で無効)"
+          }
+        }
+      }
+    },
+    "viterm Settings": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "viterm 設定"
+          }
+        }
+      }
+    },
+    "~/repo, ~/work (comma-separated, leave empty to disable)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/repo, ~/work(カンマ区切り、空で無効)"
+          }
+        }
+      }
+    },
+    "⌘⇧U jump to waiting": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌘⇧U 未読へ"
+          }
+        }
+      }
+    }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

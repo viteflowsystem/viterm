@@ -22,31 +22,31 @@ public enum BranchNameValidationError: Sendable, Equatable, CustomStringConverti
     public var description: String {
         switch self {
         case .empty:
-            return "ブランチ名を入力してください"
+            return L("Branch name is required")
         case .containsWhitespace:
-            return "ブランチ名に空白は使えません"
+            return L("Branch names can't contain whitespace")
         case .startsWithHyphen:
-            return "ブランチ名を \"-\" で始めることはできません"
+            return L("Branch names can't start with \"-\"")
         case .endsWithSlash:
-            return "ブランチ名を \"/\" で終えることはできません"
+            return L("Branch names can't end with \"/\"")
         case .endsWithDot:
-            return "ブランチ名を \".\" で終えることはできません"
+            return L("Branch names can't end with \".\"")
         case .endsWithDotLock:
-            return "ブランチ名を \".lock\" で終えることはできません"
+            return L("Branch names can't end with \".lock\"")
         case .containsDoubleDot:
-            return "ブランチ名に \"..\" は使えません"
+            return L("Branch names can't contain \"..\"")
         case .containsConsecutiveSlashes:
-            return "ブランチ名に連続した \"/\" は使えません"
+            return L("Branch names can't contain consecutive slashes")
         case .containsEmptyOrDotPathComponent:
-            return "\"/\" 区切りの各階層を空や \".\" 始まりにすることはできません"
+            return L("Path components separated by \"/\" can't be empty or start with \".\"")
         case let .containsInvalidCharacter(character):
-            return "ブランチ名に使えない文字が含まれています: \(character)"
+            return L("Branch name contains an invalid character: \(String(character))")
         case .containsAtBrace:
-            return "ブランチ名に \"@{\" は使えません"
+            return L("Branch names can't contain \"@{\"")
         case .isSingleAt:
-            return "ブランチ名を \"@\" だけにすることはできません"
+            return L("Branch name can't be just \"@\"")
         case .duplicatesExistingBranch:
-            return "同名のローカルブランチが既に存在します"
+            return L("A local branch with this name already exists")
         }
     }
 }

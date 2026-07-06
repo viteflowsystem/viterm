@@ -114,7 +114,8 @@ public struct WorktreeProvisioner: Sendable {
             do {
                 try copyClaudeSessionData(from: sourcePath, to: expandedPath)
             } catch {
-                warnings.append("Claude セッションデータのコピーに失敗しました: \(error)")
+                let detail = "\(error)"
+                warnings.append(L("Failed to copy Claude session data: \(detail)"))
             }
         }
 

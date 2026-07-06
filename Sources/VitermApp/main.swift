@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
-        let settings = NSMenuItem(title: "設定…", action: #selector(MainWindowController.showSettings(_:)), keyEquivalent: ",")
+        let settings = NSMenuItem(title: L("Settings…"), action: #selector(MainWindowController.showSettings(_:)), keyEquivalent: ",")
         settings.target = controller
         appMenu.addItem(settings)
         appMenu.addItem(.separator())
@@ -53,13 +53,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let worktreeMenuItem = NSMenuItem()
         let worktreeMenu = NSMenu(title: "Worktree")
-        let newWorktree = NSMenuItem(title: "新規 worktree…", action: #selector(MainWindowController.newWorktree(_:)), keyEquivalent: "n")
+        let newWorktree = NSMenuItem(title: L("New Worktree…"), action: #selector(MainWindowController.newWorktree(_:)), keyEquivalent: "n")
         newWorktree.target = controller
         worktreeMenu.addItem(newWorktree)
-        let merge = NSMenuItem(title: "デフォルトブランチにマージ…", action: #selector(MainWindowController.mergeCurrentWorktree(_:)), keyEquivalent: "")
+        let merge = NSMenuItem(title: L("Merge into Default Branch…"), action: #selector(MainWindowController.mergeCurrentWorktree(_:)), keyEquivalent: "")
         merge.target = controller
         worktreeMenu.addItem(merge)
-        let remove = NSMenuItem(title: "worktree を削除…", action: #selector(MainWindowController.removeCurrentWorktree(_:)), keyEquivalent: "")
+        let remove = NSMenuItem(title: L("Delete Worktree…"), action: #selector(MainWindowController.removeCurrentWorktree(_:)), keyEquivalent: "")
         remove.target = controller
         worktreeMenu.addItem(remove)
         worktreeMenuItem.submenu = worktreeMenu
@@ -67,35 +67,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let sessionMenuItem = NSMenuItem()
         let sessionMenu = NSMenu(title: "Session")
-        let newSession = NSMenuItem(title: "新規セッション", action: #selector(MainWindowController.newSession(_:)), keyEquivalent: "t")
+        let newSession = NSMenuItem(title: L("New Session"), action: #selector(MainWindowController.newSession(_:)), keyEquivalent: "t")
         newSession.target = controller
         sessionMenu.addItem(newSession)
 
-        let jump = NSMenuItem(title: "最新の入力待ちへ", action: #selector(MainWindowController.jumpToWaiting(_:)), keyEquivalent: "u")
+        let jump = NSMenuItem(title: L("Jump to Latest Waiting Session"), action: #selector(MainWindowController.jumpToWaiting(_:)), keyEquivalent: "u")
         jump.keyEquivalentModifierMask = [.command, .shift]
         jump.target = controller
         sessionMenu.addItem(jump)
 
         sessionMenu.addItem(.separator())
-        let splitRight = NSMenuItem(title: "右に分割", action: #selector(MainWindowController.splitPaneRight(_:)), keyEquivalent: "d")
+        let splitRight = NSMenuItem(title: L("Split Right"), action: #selector(MainWindowController.splitPaneRight(_:)), keyEquivalent: "d")
         splitRight.target = controller
         sessionMenu.addItem(splitRight)
-        let splitDown = NSMenuItem(title: "下に分割", action: #selector(MainWindowController.splitPaneDown(_:)), keyEquivalent: "d")
+        let splitDown = NSMenuItem(title: L("Split Down"), action: #selector(MainWindowController.splitPaneDown(_:)), keyEquivalent: "d")
         splitDown.keyEquivalentModifierMask = [.command, .shift]
         splitDown.target = controller
         sessionMenu.addItem(splitDown)
-        let closePane = NSMenuItem(title: "ペインを閉じる", action: #selector(MainWindowController.closePane(_:)), keyEquivalent: "w")
+        let closePane = NSMenuItem(title: L("Close Pane"), action: #selector(MainWindowController.closePane(_:)), keyEquivalent: "w")
         closePane.keyEquivalentModifierMask = [.command, .shift]
         closePane.target = controller
         sessionMenu.addItem(closePane)
-        let nextPane = NSMenuItem(title: "次のペイン", action: #selector(MainWindowController.focusNextPane(_:)), keyEquivalent: "]")
+        let nextPane = NSMenuItem(title: L("Next Pane"), action: #selector(MainWindowController.focusNextPane(_:)), keyEquivalent: "]")
         nextPane.target = controller
         sessionMenu.addItem(nextPane)
 
         sessionMenu.addItem(.separator())
         for number in 1...9 {
             let item = NSMenuItem(
-                title: "セッション \(number)",
+                title: L("Session \(number)"),
                 action: #selector(MainWindowController.selectShortcutSession(_:)),
                 keyEquivalent: "\(number)"
             )
@@ -108,14 +108,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let viewMenuItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
-        let palette = NSMenuItem(title: "コマンドパレット…", action: #selector(MainWindowController.showPalette(_:)), keyEquivalent: "k")
+        let palette = NSMenuItem(title: L("Command Palette…"), action: #selector(MainWindowController.showPalette(_:)), keyEquivalent: "k")
         palette.target = controller
         viewMenu.addItem(palette)
-        let addRepo = NSMenuItem(title: "リポジトリを追加…", action: #selector(MainWindowController.addRepository(_:)), keyEquivalent: "")
+        let addRepo = NSMenuItem(title: L("Add Repository…"), action: #selector(MainWindowController.addRepository(_:)), keyEquivalent: "")
         addRepo.target = controller
         viewMenu.addItem(addRepo)
         viewMenu.addItem(.separator())
-        let toggle = NSMenuItem(title: "サイドバー表示切替", action: #selector(MainWindowController.toggleSidebar2(_:)), keyEquivalent: "b")
+        let toggle = NSMenuItem(title: L("Toggle Sidebar"), action: #selector(MainWindowController.toggleSidebar2(_:)), keyEquivalent: "b")
         toggle.target = controller
         viewMenu.addItem(toggle)
         viewMenuItem.submenu = viewMenu

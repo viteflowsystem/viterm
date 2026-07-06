@@ -103,7 +103,7 @@ public final class PalettePanel: NSObject {
     private let scrollView = NSScrollView()
     private let searchField = NSTextField()
     private let tableView = NSTableView()
-    private let emptyLabel = NSTextField(labelWithString: "見つかりません")
+    private let emptyLabel = NSTextField(labelWithString: L("No Results"))
 
     private var observers: [NSObjectProtocol] = []
 
@@ -241,7 +241,7 @@ public final class PalettePanel: NSObject {
         searchField.isBordered = false
         searchField.focusRingType = .none
         searchField.drawsBackground = false
-        searchField.placeholderString = "コマンドを検索…"
+        searchField.placeholderString = L("Search commands…")
         searchField.delegate = self
         inputRow.addSubview(searchField)
         containerView.addSubview(inputRow)

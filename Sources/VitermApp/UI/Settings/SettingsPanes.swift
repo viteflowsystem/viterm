@@ -170,21 +170,21 @@ final class GeneralSettingsPane: SettingsPane {
         presetPopup.target = self
         presetPopup.action = #selector(presetChanged(_:))
         fixWidth(presetPopup)
-        addRow(label: "既定プリセット:", field: presetPopup)
+        addRow(label: L("Default Preset:"), field: presetPopup)
 
         let copyCheckbox = NSButton(
-            checkboxWithTitle: "worktree 作成時に Claude セッションデータをコピー",
+            checkboxWithTitle: L("Copy Claude session data when creating a worktree"),
             target: self,
             action: #selector(copyChanged(_:))
         )
         copyCheckbox.state = (config.copySessionDataByDefault ?? false) ? .on : .off
         addTrailingRow(copyCheckbox)
 
-        let openButton = NSButton(title: "config.json を開く…", target: self, action: #selector(openConfig))
+        let openButton = NSButton(title: L("Open config.json…"), target: self, action: #selector(openConfig))
         openButton.bezelStyle = .rounded
         addTrailingRow(openButton)
 
-        setFootnote("既定プリセットは ⌘T・「＋ セッションを追加」・worktree 作成時のセッション起動に使われます。プリセットの定義自体は config.json の presets で編集します。")
+        setFootnote(L("The default preset is used for ⌘T, “＋ Add Session”, and the session launched when creating a worktree. Presets themselves are edited in the presets section of config.json."))
     }
 
     @objc private func presetChanged(_ sender: NSPopUpButton) {
@@ -218,18 +218,18 @@ final class WorktreeSettingsPane: SettingsPane {
         (templateField as? CommitTextField)?.onLiveChange = { [weak self] value in
             self?.updatePreview(template: value)
         }
-        addRow(label: "作成先テンプレート:", field: fieldWithCaption(templateField, caption: previewLabel))
+        addRow(label: L("Destination Template:"), field: fieldWithCaption(templateField, caption: previewLabel))
         updatePreview(template: config.worktreePathTemplate)
 
         let hookField = makeTextField(
             value: config.postCreationHook ?? "",
-            placeholder: "npm install など(空で無効)"
+            placeholder: L("e.g. npm install (leave empty to disable)")
         ) { [weak self] value in
             self?.store.set(["postCreationHook": value.isEmpty ? nil : value])
         }
-        addRow(label: "作成後フック:", field: hookField)
+        addRow(label: L("Post-Creation Hook:"), field: hookField)
 
-        setFootnote("プレースホルダ: {project}(リポジトリ名)、{branch}(/ は - に正規化)、{branch_raw}(そのまま)。フックには VITERM_WORKTREE_PATH / VITERM_BRANCH / VITERM_GIT_ROOT が渡されます。")
+        setFootnote(L("Placeholders: {project} (repository name), {branch} (/ normalized to -), {branch_raw} (as is). The hook receives VITERM_WORKTREE_PATH / VITERM_BRANCH / VITERM_GIT_ROOT."))
     }
 
     private func updatePreview(template: String) {
@@ -238,7 +238,7 @@ final class WorktreeSettingsPane: SettingsPane {
             branch: "feat/x",
             repositoryRoot: "/path/to/myapp"
         ))
-        previewLabel.stringValue = "例: myapp の feat/x → \(preview)"
+        previewLabel.stringValue = L("Example: feat/x in myapp → \(preview)")
     }
 }
 
@@ -248,15 +248,15 @@ final class HooksSettingsPane: SettingsPane {
     override func buildForm() {
         let hooks = store.currentConfig().statusHooks
 
-        addRow(label: "busy になったとき:", field: hookField(hooks.onBusy, key: "onBusy"))
-        addRow(label: "入力待ちになったとき:", field: hookField(hooks.onWaitingInput, key: "onWaitingInput"))
-        addRow(label: "idle になったとき:", field: hookField(hooks.onIdle, key: "onIdle"))
+        addRow(label: L("When busy:"), field: hookField(hooks.onBusy, key: "onBusy"))
+        addRow(label: L("When waiting for input:"), field: hookField(hooks.onWaitingInput, key: "onWaitingInput"))
+        addRow(label: L("When idle:"), field: hookField(hooks.onIdle, key: "onIdle"))
 
-        setFootnote("セッション状態の変化時に /bin/sh -c で実行されます(空で無効)。環境変数: VITERM_SESSION_NAME / VITERM_WORKTREE_PATH / VITERM_OLD_STATE / VITERM_NEW_STATE。例: 入力待ちで音を鳴らす → afplay /System/Library/Sounds/Glass.aiff")
+        setFootnote(L("Runs via /bin/sh -c when a session state changes (leave empty to disable). Environment variables: VITERM_SESSION_NAME / VITERM_WORKTREE_PATH / VITERM_OLD_STATE / VITERM_NEW_STATE. Example: play a sound on waiting for input → afplay /System/Library/Sounds/Glass.aiff"))
     }
 
     private func hookField(_ value: String?, key: String) -> NSTextField {
-        makeTextField(value: value ?? "", placeholder: "コマンド(空で無効)") { [weak self] newValue in
+        makeTextField(value: value ?? "", placeholder: L("Command (leave empty to disable)")) { [weak self] newValue in
             guard let self else { return }
             var statusHooks = (self.store.rawJSON()["statusHooks"] as? [String: Any]) ?? [:]
             if newValue.isEmpty {
@@ -292,10 +292,10 @@ final class RepositoriesSettingsPane: SettingsPane, NSTableViewDataSource, NSTab
         scroll.borderType = .bezelBorder
         scroll.heightAnchor.constraint(equalToConstant: 140).isActive = true
         scroll.widthAnchor.constraint(equalToConstant: 380).isActive = true
-        addRow(label: "登録リポジトリ:", field: scroll)
+        addRow(label: L("Registered Repositories:"), field: scroll)
 
-        let addButton = NSButton(title: "追加…", target: self, action: #selector(addRepository))
-        let removeButton = NSButton(title: "削除", target: self, action: #selector(removeRepository))
+        let addButton = NSButton(title: L("Add…"), target: self, action: #selector(addRepository))
+        let removeButton = NSButton(title: L("Remove"), target: self, action: #selector(removeRepository))
         for button in [addButton, removeButton] { button.bezelStyle = .rounded }
         let buttons = NSStackView(views: [addButton, removeButton])
         buttons.orientation = .horizontal
@@ -305,16 +305,16 @@ final class RepositoriesSettingsPane: SettingsPane, NSTableViewDataSource, NSTab
         let config = store.currentConfig()
         let discoveryField = makeTextField(
             value: config.discoveryRoots.joined(separator: ", "),
-            placeholder: "~/repo, ~/work(カンマ区切り、空で無効)"
+            placeholder: L("~/repo, ~/work (comma-separated, leave empty to disable)")
         ) { [weak self] value in
             let roots = value.split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
             self?.store.set(["discoveryRoots": roots.isEmpty ? nil : roots])
         }
-        addRow(label: "自動検出ルート:", field: discoveryField)
+        addRow(label: L("Discovery Roots:"), field: discoveryField)
 
-        setFootnote("自動検出ルート配下の git リポジトリ(深さ4まで、node_modules 等は除外)は起動時・更新時に自動でサイドバーに追加されます。登録リポジトリはそれとは別に常に表示されます。")
+        setFootnote(L("Git repositories under the discovery roots (up to depth 4, excluding node_modules and the like) are added to the sidebar automatically at launch and on refresh. Registered repositories are always shown in addition to those."))
     }
 
     private func reloadRepositories() {
@@ -336,7 +336,7 @@ final class RepositoriesSettingsPane: SettingsPane, NSTableViewDataSource, NSTab
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.message = "git リポジトリのルートディレクトリを選択"
+        panel.message = L("Select the root directory of a git repository")
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
             if let index = self.repositories.firstIndex(where: { $0["path"] == url.path }) {

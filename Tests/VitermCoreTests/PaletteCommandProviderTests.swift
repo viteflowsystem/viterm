@@ -57,13 +57,13 @@ struct PaletteCommandProviderTests {
         }
         #expect(switches.count == 3)
 
-        let sidebarSwitch = switches.first { $0.title == "feat/sidebar に切替" }
+        let sidebarSwitch = switches.first { $0.title == L("Switch to \("feat/sidebar")") }
         #expect(sidebarSwitch?.subtitle == "↑3 ↓1")
 
-        let resizeSwitch = switches.first { $0.title == "fix/resize に切替" }
+        let resizeSwitch = switches.first { $0.title == L("Switch to \("fix/resize")") }
         #expect(resizeSwitch?.subtitle == "↑1", "behindが0の場合は↓を表示しない")
 
-        let mainSwitch = switches.first { $0.title == "main に切替" }
+        let mainSwitch = switches.first { $0.title == L("Switch to \("main")") }
         #expect(mainSwitch?.subtitle == nil, "ahead/behindが両方0ならsubtitleはnil")
     }
 
@@ -101,14 +101,14 @@ struct PaletteCommandProviderTests {
             mergeTargetBranch: "main"
         )
 
-        #expect(commands.contains { $0.title == "main にマージ…(merge / rebase)" })
-        #expect(commands.contains { $0.title == "削除…" })
+        #expect(commands.contains { $0.title == L("Merge into \("main")… (merge / rebase)") })
+        #expect(commands.contains { $0.title == L("Remove…") })
 
-        let claudeStart = commands.first { $0.title == "claude を起動(この worktree)" }
+        let claudeStart = commands.first { $0.title == L("Start \("claude") (this worktree)") }
         #expect(claudeStart?.action == .startSession(worktreeID: "/wt/feat-sidebar", presetName: "claude"))
         #expect(claudeStart?.keyboardHint == "⌘T", "既定プリセットにのみ⌘Tが付く")
 
-        let codexStart = commands.first { $0.title == "codex を起動(この worktree)" }
+        let codexStart = commands.first { $0.title == L("Start \("codex") (this worktree)") }
         #expect(codexStart?.keyboardHint == nil, "既定プリセット以外は⌘Tを持たない")
     }
 

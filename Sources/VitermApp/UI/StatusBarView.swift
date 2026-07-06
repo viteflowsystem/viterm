@@ -46,7 +46,7 @@ final class StatusBarView: NSView {
                 .compactMap { $0 }
                 .joined(separator: " · ")
         } else {
-            currentLabel.stringValue = "セッション未選択"
+            currentLabel.stringValue = L("No session selected")
         }
 
         let s = sidebar.stateSummary
@@ -54,6 +54,6 @@ final class StatusBarView: NSView {
         if s.busy > 0 { parts.append("● \(s.busy) busy") }
         if s.waitingInput > 0 { parts.append("◐ \(s.waitingInput) waiting") }
         if s.idle > 0 { parts.append("○ \(s.idle) idle") }
-        summaryLabel.stringValue = parts.isEmpty ? "" : parts.joined(separator: "   ") + "   ⌘⇧U 未読へ"
+        summaryLabel.stringValue = parts.isEmpty ? "" : parts.joined(separator: "   ") + "   " + L("⌘⇧U jump to waiting")
     }
 }

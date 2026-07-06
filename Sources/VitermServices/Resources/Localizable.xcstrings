@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Failed to copy Claude session data: %@" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Claude セッションデータのコピーに失敗しました: %@" } }
+      }
+    },
+    "Failed to load settings: %@" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "設定の読み込みに失敗しました: %@" } }
+      }
+    }
   },
   "version" : "1.0"
 }

@@ -109,28 +109,24 @@
   .repo-sep { border-top: 1px solid var(--line); margin: 7px 14px; }
   .wt { margin-bottom: 2px; }
   .wt-head {
-    padding: 5px 14px 3px 24px; display: flex; align-items: baseline; gap: 7px;
+    position: relative;
+    padding: 6px 14px 6px 24px; display: flex; align-items: center; gap: 7px;
     color: var(--text); white-space: nowrap;
   }
-  .wt-head .tri { color: var(--faint); font-size: 9px; }
+  .wt-head.active { background: #232a36; }
+  .wt-head.active::before {
+    content: ""; position: absolute; left: 0; width: 2px; height: 20px;
+    background: var(--accent);
+  }
   .wt-head .branch { font-weight: 600; }
   .wt-head .git { color: var(--faint); font-size: 11px; margin-left: auto; }
   .git .plus { color: #7fbf7f; } .git .minus { color: #cf7a7a; }
-  .sess {
-    display: flex; align-items: center; gap: 8px;
-    padding: 4px 14px 4px 40px; color: var(--muted); white-space: nowrap;
-  }
-  .sess.active { background: #232a36; color: var(--text); }
-  .sess.active::before {
-    content: ""; position: absolute; left: 0; width: 2px; height: 18px;
-    background: var(--accent);
-  }
-  .sess { position: relative; }
+  .dots { display: inline-flex; gap: 4px; align-items: center; }
   .st { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .st.sm { width: 7px; height: 7px; }
   .st.busy { background: var(--busy); box-shadow: 0 0 6px rgba(224,164,88,.55); }
   .st.wait { background: var(--wait); box-shadow: 0 0 6px rgba(107,163,245,.55); }
   .st.idle { background: transparent; border: 1.5px solid var(--idle); }
-  .sess .key { margin-left: auto; color: var(--faint); font-size: 10.5px; }
   .badge {
     background: var(--wait); color: #0d1420; font-size: 10px; font-weight: 700;
     border-radius: 8px; padding: 0 6px; line-height: 15px;
@@ -141,6 +137,36 @@
   }
   .sb-actions div { padding: 2px 0; }
   .sb-actions span { color: var(--muted); }
+
+  /* ---------- tab bar ---------- */
+  .tabbar {
+    display: flex; align-items: stretch;
+    background: var(--panel2);
+    border-bottom: 1px solid var(--line);
+    padding: 5px 8px 0; gap: 2px;
+    overflow-x: auto;
+  }
+  .tab {
+    display: flex; align-items: center; gap: 7px;
+    padding: 6px 12px; color: var(--muted); white-space: nowrap;
+    border: 1px solid transparent; border-bottom: none;
+    border-radius: 7px 7px 0 0;
+    position: relative;
+  }
+  .tab.active {
+    background: var(--panel); border-color: var(--line);
+    color: var(--text);
+  }
+  .tab.active::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+    background: var(--panel);
+  }
+  .tab.active::before {
+    content: ""; position: absolute; left: 10px; right: 10px; top: 0; height: 2px;
+    border-radius: 0 0 2px 2px; background: var(--accent);
+  }
+  .tab .key { color: var(--faint); font-size: 10.5px; }
+  .tab.add { color: var(--faint); padding: 6px 9px; align-self: center; }
 
   /* ---------- terminal pane ---------- */
   .term { flex: 1; display: flex; flex-direction: column; background: var(--panel); min-width: 0; }
@@ -264,13 +290,13 @@
   <section>
     <p class="eyebrow">Screen 01</p>
     <h2>メイン画面</h2>
-    <p class="lede">左にリポジトリ → worktree → セッションの3階層ツリー、右に libghostty サーフェス。複数リポジトリを1ウィンドウで一括管理する。アプリの chrome は AppKit、ターミナル描画はネイティブなので、ウィンドウをどうリサイズしても TUI が崩れない。</p>
+    <p class="lede">左はリポジトリ → worktree の2階層。worktree を選ぶと、その配下のセッションが右上のタブに並ぶ(タブ=セッション 1:1)。worktree 行には配下セッションの状態がロールアップされるので、どの worktree で何が起きているかはサイドバーだけで見渡せる。ターミナル描画は libghostty ネイティブなので、ウィンドウをどうリサイズしても TUI が崩れない。</p>
 
     <div class="screen-wrap">
       <div class="marker" style="top: 52px; left: -10px;">1</div>
-      <div class="marker" style="top: 118px; left: -10px;">2</div>
-      <div class="marker" style="top: 172px; left: -10px;">3</div>
-      <div class="marker" style="top: 150px; right: -10px;">4</div>
+      <div class="marker" style="top: 104px; left: -10px;">2</div>
+      <div class="marker" style="top: 46px; right: -10px;">3</div>
+      <div class="marker" style="top: 170px; right: -10px;">4</div>
       <div class="marker" style="bottom: 30px; left: -10px;">5</div>
 
       <div class="window" role="img" aria-label="vitermメイン画面のモック">
@@ -283,25 +309,24 @@
             <div class="repo-head"><span class="tri">▾</span>viterm<span class="meta">2 wt</span></div>
 
             <div class="wt">
-              <div class="wt-head"><span class="tri">▾</span><span class="branch">main</span><span class="git">clean</span></div>
-              <div class="sess"><span class="st idle"></span>zsh<span class="key">⌘1</span></div>
+              <div class="wt-head"><span class="branch">main</span>
+                <span class="dots"><span class="st sm idle"></span></span>
+                <span class="git">clean</span></div>
             </div>
 
             <div class="wt">
-              <div class="wt-head"><span class="tri">▾</span><span class="branch">feat/sidebar</span>
-                <span class="git">↑3 ↓1 <span style="color: var(--busy)">●</span> <span style="color: #cf7a7a">●</span></span></div>
-              <div class="sess active"><span class="st busy"></span>claude #1<span class="key">⌘2</span></div>
-              <div class="sess"><span class="st wait"></span>claude #2<span class="badge">1</span><span class="key">⌘3</span></div>
-              <div class="sess"><span class="st idle"></span>codex #1<span class="key">⌘4</span></div>
+              <div class="wt-head active"><span class="branch">feat/sidebar</span>
+                <span class="dots"><span class="st sm busy"></span><span class="st sm wait"></span><span class="st sm idle"></span></span><span class="badge">1</span>
+                <span class="git">↑3↓1 <span style="color: var(--busy)">●</span><span style="color: #cf7a7a">●</span></span></div>
             </div>
 
             <div class="repo-sep"></div>
             <div class="repo-head"><span class="tri">▾</span>webapp<span class="meta">1 wt</span></div>
 
             <div class="wt">
-              <div class="wt-head"><span class="tri">▾</span><span class="branch">fix/login</span>
+              <div class="wt-head"><span class="branch">fix/login</span>
+                <span class="dots"><span class="st sm busy"></span></span>
                 <span class="git">↑1 <span style="color: #cf7a7a">●</span></span></div>
-              <div class="sess"><span class="st busy"></span>claude #1<span class="key">⌘5</span></div>
             </div>
 
             <div class="repo-sep"></div>
@@ -309,12 +334,18 @@
 
             <div class="sb-actions">
               <div><span>⌘N</span> 新規 worktree</div>
-              <div><span>⌘T</span> 新規セッション</div>
+              <div><span>⌘T</span> 新規セッション(タブ)</div>
               <div><span>⌘K</span> コマンドパレット</div>
             </div>
           </div>
 
           <div class="term">
+            <div class="tabbar">
+              <div class="tab active"><span class="st busy"></span>claude #1<span class="key">⌘1</span></div>
+              <div class="tab"><span class="st wait"></span>claude #2<span class="badge">1</span><span class="key">⌘2</span></div>
+              <div class="tab"><span class="st idle"></span>codex #1<span class="key">⌘3</span></div>
+              <div class="tab add">＋</div>
+            </div>
             <div class="term-body">
 <pre><span class="t-user">❯ サイドバーのツリー描画を SwiftUI の OutlineGroup で実装して</span>
 
@@ -347,10 +378,10 @@
 
     <div class="notes">
       <div class="note"><span class="n">1</span><div><b>リポジトリ行。</b>複数リポジトリ(複数ディレクトリ)を登録して1つのサイドバーで管理。折りたたんでも waiting 数のバッジは集約表示される(最下段の infra 参照)。</div></div>
-      <div class="note"><span class="n">2</span><div><b>worktree 行。</b>ブランチ名、親ブランチとの ahead/behind(↑3 ↓1)、staged(オレンジ●)/unstaged(赤●)の有無を常時表示。変更が無ければ clean。</div></div>
-      <div class="note"><span class="n">3</span><div><b>セッション行。</b>同一 worktree 配下に claude #1 / claude #2 / codex #1 と複数セッションをぶら下げられる(核心要件)。⌘1〜9 で直接ジャンプ。</div></div>
+      <div class="note"><span class="n">2</span><div><b>worktree 行(選択単位)。</b>ブランチ名と git 情報(↑3↓1、staged=オレンジ●/unstaged=赤●)に加え、配下セッションの状態ドットをロールアップ表示。全 worktree・全セッションの状態がサイドバーだけで一覧できる。入力待ちがあれば青バッジ。</div></div>
+      <div class="note"><span class="n">3</span><div><b>タブバー。</b>選択中 worktree のセッションをタブで表現(タブ=セッション 1:1。1 worktree : N セッションが核心要件)。状態ドット+入力待ちバッジ付き。⌘1〜9 は worktree 内のタブ番号、＋(⌘T)で追加。将来ペイン分割を入れる場合も「同一 worktree 内の一時的な複数表示」としてタブモデルとは直交させる。</div></div>
       <div class="note"><span class="n">4</span><div><b>libghostty サーフェス。</b>フル機能のターミナル。~/.config/ghostty/config のテーマ・フォントを継承。非表示のセッションもバックグラウンドで生存。</div></div>
-      <div class="note"><span class="n">5</span><div><b>ステータスバー。</b>リポジトリ横断で全セッションの状態を集計。⌘⇧U で最新の入力待ちへジャンプ(別リポジトリでも飛べる)。</div></div>
+      <div class="note"><span class="n">5</span><div><b>ステータスバー。</b>リポジトリ横断で全セッションの状態を集計。⌘⇧U で最新の入力待ちへジャンプ(別リポジトリでも飛べる)。タブ化で個別セッションが常時見えなくなるぶん、ここと worktree 行ロールアップ+macOS 通知が「気づく」役割を担う。</div></div>
     </div>
   </section>
 
@@ -368,10 +399,13 @@
       <div class="app" style="min-height: 340px;">
         <div class="sidebar" style="opacity:.35">
           <div class="repo-head"><span class="tri">▾</span>viterm<span class="meta">2 wt</span></div>
-          <div class="wt"><div class="wt-head"><span class="tri">▾</span><span class="branch">feat/sidebar</span></div>
-            <div class="sess"><span class="st busy"></span>claude #1</div></div>
+          <div class="wt"><div class="wt-head active"><span class="branch">feat/sidebar</span>
+            <span class="dots"><span class="st sm busy"></span></span></div></div>
         </div>
-        <div class="term" style="opacity:.35"><div class="term-body"><pre><span class="t-dim">…</span></pre></div></div>
+        <div class="term" style="opacity:.35">
+          <div class="tabbar"><div class="tab active"><span class="st busy"></span>claude #1</div><div class="tab add">＋</div></div>
+          <div class="term-body"><pre><span class="t-dim">…</span></pre></div>
+        </div>
         <div class="overlay-dim"></div>
         <div class="palette">
           <div class="input"><span class="caret">❯</span>wt<span class="ph"> — コマンドを検索…</span></div>
@@ -446,10 +480,12 @@
         <table class="keys">
           <tr><td class="k"><kbd>⌘K</kbd></td><td>コマンドパレット</td></tr>
           <tr><td class="k"><kbd>⌘N</kbd></td><td>worktree 新規作成</td></tr>
-          <tr><td class="k"><kbd>⌘T</kbd></td><td>現在の worktree にセッション追加</td></tr>
-          <tr><td class="k"><kbd>⌘1</kbd>–<kbd>9</kbd></td><td>セッション直接切替</td></tr>
-          <tr><td class="k"><kbd>⌘⇧U</kbd></td><td>最新の入力待ちセッションへ</td></tr>
-          <tr><td class="k"><kbd>⌘D</kbd> / <kbd>⌘⇧D</kbd></td><td>ペイン分割(右 / 下)— フェーズ2</td></tr>
+          <tr><td class="k"><kbd>⌘T</kbd></td><td>現在の worktree にセッション(タブ)追加</td></tr>
+          <tr><td class="k"><kbd>⌘1</kbd>–<kbd>9</kbd></td><td>タブ切替(選択中 worktree 内)</td></tr>
+          <tr><td class="k"><kbd>⌘⌥↑</kbd> / <kbd>⌘⌥↓</kbd></td><td>前 / 次の worktree へ</td></tr>
+          <tr><td class="k"><kbd>⌘W</kbd></td><td>タブ(セッション)を閉じる</td></tr>
+          <tr><td class="k"><kbd>⌘⇧U</kbd></td><td>最新の入力待ちセッションへ(リポジトリ横断)</td></tr>
+          <tr><td class="k"><kbd>⌘D</kbd> / <kbd>⌘⇧D</kbd></td><td>ペイン分割(同一 worktree 内・右 / 下)— 将来解禁</td></tr>
           <tr><td class="k"><kbd>⌘B</kbd></td><td>サイドバー表示切替</td></tr>
         </table>
       </div>
@@ -457,7 +493,7 @@
   </section>
 
   <footer>
-    viterm UI mock v1 — 2026-07-04 · 技術スタック: Swift + AppKit / libghostty (C API) / git CLI · 詳細は docs/requirements.md
+    viterm UI mock v2 — 2026-07-06(サイドバー2階層+セッションタブ化)· 技術スタック: Swift + AppKit / libghostty (C API) / git CLI · 詳細は docs/requirements.md
   </footer>
 </div>
 

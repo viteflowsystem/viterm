@@ -278,15 +278,23 @@ public final class PalettePanel: NSObject {
     }
 
     /// `height` に合わせてコンテナ内の各フレームだけを再配置する(ビューは作り直さない)。
+    /// コンテナは flipped(y=0 が上)なので「入力欄を上端に、リストをその下に」を素直に書ける。
+    /// 高さの増減はすべて下端で吸収されるため、絞り込みでパネルが縮む途中でも
+    /// 入力欄とリスト上端の位置は一切動かない(行が下端で切れて見える崩れの根治)。
     private func layoutContainer(height: CGFloat) {
-        containerView.frame = NSRect(x: 0, y: 0, width: PalettePanel.panelWidth, height: height)
         inputRow.frame = NSRect(
-            x: 0, y: height - PalettePanel.inputHeight,
+            x: 0, y: 0,
             width: PalettePanel.panelWidth, height: PalettePanel.inputHeight
         )
-        let listHeight = height - PalettePanel.inputHeight
-        scrollView.frame = NSRect(x: 0, y: 0, width: PalettePanel.panelWidth, height: listHeight)
-        emptyLabel.frame = NSRect(x: 0, y: listHeight / 2 - 10, width: PalettePanel.panelWidth, height: 20)
+        let listHeight = max(0, height - PalettePanel.inputHeight)
+        scrollView.frame = NSRect(
+            x: 0, y: PalettePanel.inputHeight,
+            width: PalettePanel.panelWidth, height: listHeight
+        )
+        emptyLabel.frame = NSRect(
+            x: 0, y: PalettePanel.inputHeight + listHeight / 2 - 10,
+            width: PalettePanel.panelWidth, height: 20
+        )
     }
 
     private func contentHeight() -> CGFloat {
@@ -473,6 +481,9 @@ private final class PaletteRowView: NSTableRowView {
 /// ショットになり `NSColor(name:dynamicProvider:)` の自動追従が効かないため、外観変化時に
 /// `performAsCurrentDrawingAppearance` で明示的に解決し直す。
 private final class PaletteContainerView: NSView {
+    // 上から積むレイアウト(layoutContainer)のため flipped にする。
+    override var isFlipped: Bool { true }
+
     var backgroundDynamicColor: NSColor? {
         didSet { updateLayerColors() }
     }

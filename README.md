@@ -2,14 +2,12 @@
 
 # viterm
 
-AI coding agent(Claude Code / Codex 等)を並列運用するためのネイティブ macOS ターミナルアプリケーション。
+AI coding agent(Claude Code / Codex 等)を並列運用するためのネイティブ macOS ターミナル。
 
-一言でいうと「cmux の UI 品質 × ccmanager の worktree 管理 × 1 worktree に複数セッション」。
-ターミナルエミュレーションは libghostty(ネイティブレイヤ)に任せ、サイドバーやダイアログといったアプリの
-chrome は AppKit で描画する構成により、TUI in TUI 構成([ccmanager](https://github.com/kbwo/ccmanager))で
-起きがちなリサイズ時の描画崩れを構造的に避けている。git worktree ごとに複数のエージェントセッションを
-同時に立ち上げられる点(1 worktree : N セッション)が、[cmux](https://github.com/manaflow-ai/cmux) や
-ccmanager にはない差別化点。背景・要件の詳細は [docs/requirements.md](docs/requirements.md) を参照。
+git worktree ごとにエージェントセッションを何本でも立ち上げ、全セッションの状態
+(busy / 入力待ち / idle)をサイドバーで一望する。ターミナル描画は
+[Ghostty](https://ghostty.org) と同じエンジン(libghostty)がネイティブに担当するため、
+ウィンドウをリサイズしても TUI が崩れない。Electron 不使用。
 
 ## インストール
 
@@ -22,115 +20,91 @@ DMG を直接ダウンロードする場合は
 [homebrew-tap の Releases](https://github.com/viteflowsystem/homebrew-tap/releases) から。
 配布物は Developer ID 署名 + Apple 公証済み。要件: macOS 15+ / Apple Silicon。
 
-## 主要機能
+## なにができるか
 
-- **git worktree 管理**: 新規ブランチ / 既存ローカルブランチ / リモートブランチからの worktree 作成、
-  パステンプレートによる作成先パスの設定、Claude Code セッションデータ(`~/.claude/projects/…`)の
-  コピー、post-creation hook、削除(dirty チェック付き確認)、マージ支援(merge `--no-ff` / rebase →
-  `--ff-only` の2モード、完了後の worktree 後始末)
-- **1 worktree : N セッション**: 任意コマンド(`claude` / `codex` / シェル等)を PTY 上で起動するエージェント
-  プリセットを設定可能。既定プリセット(`defaultPreset`)は特に設定しなければ `shell`
-- **サイドバー**: リポジトリ → worktree → セッション の3階層ツリー。worktree 行にブランチ・ahead/behind、
-  セッション行に状態インジケータ(`●` busy / `◐` waiting / `○` idle)と未読バッジ。セッションが無い
-  worktree には「＋ セッションを追加」行が常設され、クリックで既定プリセットのセッションを起動する
-- **右クリックメニュー**: セッション行(リネーム / セッションを終了)、worktree 行(セッションを追加 /
-  Finder で表示 / デフォルトブランチにマージ… / worktree を削除…)
-- **セッション構成の自動保存・復元**: 起動中のセッション構成(worktree とプリセットの組)・選択中セッションを
-  `~/Library/Application Support/viterm/sessions.json` に自動保存し、次回起動時に自動復元する。復元時は
-  PTY を新規に起動し直すため、スクロールバックや実行中プロセスの状態そのものは引き継がれない
-- **設定シート(⌘,)**: `worktreePathTemplate` / `defaultPreset` / `copySessionDataByDefault` /
-  `discoveryRoots` を GUI から編集し、グローバル設定(`~/.config/viterm/config.json`)へ保存。
-  それ以外のキー(`presets` / `statusHooks` 等)は保全されたまま
-- **ステータスバー**: リポジトリ横断の状態集計(`● N busy` `◐ N waiting` `○ N idle`)
-- キーボード中心の操作(下記キーマップ参照)
-
-## セットアップ
-
-前提: macOS(arm64)、Metal Toolchain コンポーネントを含む完全な Xcode(Command Line Tools のみでは
-Metal シェーダのコンパイルができず `scripts/build-ghostty.sh` の最終ステップが失敗する。
-libghostty ビルドで踏んだ既知の問題と回避策は [docs/ghostty-integration.md](docs/ghostty-integration.md) 参照)。
-
-```sh
-scripts/setup-zig.sh     # ghostty が要求する pinned Zig(0.15.2)を vendor/zig/ に展開
-scripts/fetch-ghostty.sh # vendor/ghostty を固定コミット(scripts/ghostty-commit)で取得し、viterm用パッチを適用
-scripts/build-ghostty.sh # zig build で GhosttyKit.xcframework を生成(vendor/ghostty/macos/ 配下)
-swift build              # 全ターゲット(VitermCore / GitKit / VitermServices / VitermApp)をビルド
-```
-
-起動方法は2つ:
-
-```sh
-swift run VitermApp        # 開発時: そのまま実行
-scripts/make-app.sh       # .build/viterm.app バンドルを組み立てる(既定 release。debug も指定可)
-open .build/viterm.app     # バンドルとして起動する場合
-```
-
-`vendor/` 以下はすべて git 管理外(スクリプトで生成)なので、clone 直後は必ず上記4ステップを
-この順番で実行する必要がある。
+- **1 worktree : N セッション** — 同じブランチで Claude に実装させながら、隣で Codex に
+  テストを書かせ、素のシェルも並べる。セッションは何本でも
+- **git worktree 管理** — 新規ブランチ / 既存ブランチ / リモートブランチから worktree を作成。
+  作成先はパステンプレート(例 `~/worktrees/{project}/{branch}`)で自由に設定。作成と同時に
+  エージェントを起動し、終わったら merge(`--no-ff`)か rebase → `--ff-only` で取り込んで、
+  サイドバーからそのまま削除
+- **状態検出と通知** — 各セッションの busy / 入力待ち / idle をサイドバーのドットで常時表示。
+  エージェントが入力を求めると macOS 通知が飛び、`⌘⇧U` で最新の入力待ちへジャンプ。
+  OSC 通知シーケンス(9/777)を一次シグナルに、画面テキスト検出をフォールバックにした二段構え
+- **ペイン分割** — `⌘D`(右)/ `⌘⇧D`(下)で同一画面に複数セッションを並べる。
+  ペインを閉じてもセッションはサイドバーで生き続ける
+- **マルチリポジトリ** — 複数リポジトリを1つのサイドバーで管理。`discoveryRoots` を設定すれば
+  指定ディレクトリ配下の git リポジトリを自動検出
+- **セッション復元** — セッション構成(worktree × プリセット)を自動保存し、次回起動時に復元
+  (PTY は新規起動。スクロールバックは引き継がれない)
+- **Claude Code セッションデータの引き継ぎ** — worktree 作成時に `~/.claude/projects/…` を
+  コピーして、新しい worktree でも会話履歴から再開できる
+- **ターミナル設定の継承** — フォント・テーマは `~/.config/ghostty/config` をそのまま読む
 
 ## キーマップ
 
-| ショートカット | 動作 |
+| キー | 動作 |
 |---|---|
-| `⌘N` | 新規 worktree 作成シートを開く |
-| `⌘T` | 現在選択中の worktree(無ければ先頭の worktree)に新規セッションを起動 |
-| `⌘1`..`⌘9` | サイドバーのセッションへ直接切替 |
-| `⌘⇧U` | 最新の入力待ち(waiting_input)セッションへジャンプ(リポジトリ横断) |
+| `⌘K` | コマンドパレット(worktree 作成・マージ・削除、セッション起動、リポジトリ追加) |
+| `⌘N` | 新規 worktree |
+| `⌘T` | 選択中の worktree にセッションを追加 |
+| `⌘1`–`⌘9` | セッション直接切替 |
+| `⌘⇧U` | 最新の入力待ちセッションへジャンプ(リポジトリ横断) |
+| `⌘D` / `⌘⇧D` | ペインを右 / 下に分割 |
+| `⌘⇧W` | ペインを閉じる(セッションは維持) |
+| `⌘]` | 次のペインへフォーカス |
 | `⌘B` | サイドバー表示切替 |
-| `⌘K` | コマンドパレット(worktree 作成・マージ・削除・セッション起動・リポジトリ追加をファジー検索で実行) |
-| `⌘,` | 設定シート(`worktreePathTemplate` / `defaultPreset` / `copySessionDataByDefault` / `discoveryRoots` を編集) |
-
-worktree のマージ(デフォルトブランチへ)・削除は、`Worktree` メニューまたはサイドバーの worktree 行の
-右クリックメニューから実行可能(ショートカット未割り当て)。
+| `⌘,` | 設定 |
 
 ## 設定
 
-グローバル設定(`~/.config/viterm/config.json`)とプロジェクト別設定(`<リポジトリルート>/.viterm.json`)を
-マージして使う。キー一覧・マージ規則・パステンプレートの展開規則などの詳細は
-[docs/configuration.md](docs/configuration.md) を参照。主要なキー(`worktreePathTemplate` /
-`defaultPreset` / `copySessionDataByDefault` / `discoveryRoots`)は `⌘,` の設定シートからも編集できる
-(それ以外のキーは `config.json` を直接編集する)。最小サンプル:
+グローバル設定 `~/.config/viterm/config.json` とプロジェクト別 `.viterm.json` をマージして使う。
+主要なキーは `⌘,` の設定ウィンドウ(一般 / Worktree / リポジトリ / 通知フック)からも編集できる。
 
 ```json
 {
   "worktreePathTemplate": "~/worktrees/{project}/{branch}",
   "defaultPreset": "claude",
   "repositories": [
-    { "name": "viterm", "path": "/Users/me/dev/viterm" }
-  ]
+    { "name": "myapp", "path": "/Users/me/dev/myapp" }
+  ],
+  "discoveryRoots": ["~/dev"]
 }
 ```
 
-両方のファイルが存在しなくても組み込みの既定値(`claude` / `codex` / `shell` プリセットなど)で動作する。
+キー一覧・マージ規則・プリセット定義・状態変化フック(`statusHooks`)などの詳細は
+[docs/configuration.md](docs/configuration.md) を参照。設定ファイルが無くても組み込みの
+既定値(`claude` / `codex` / `shell` プリセット)で動く。
 
-## 開発
+## ソースからビルド
+
+前提: macOS(arm64)/ Xcode(Metal Toolchain 込み。Command Line Tools のみでは不可)。
 
 ```sh
-swift build          # 全ターゲット
-swift test           # ユニットテスト(VitermCore / GitKit / VitermServices)
-swift run VitermApp    # アプリ起動
+scripts/setup-zig.sh     # ghostty が要求する pinned Zig を vendor/zig/ に展開
+scripts/fetch-ghostty.sh # ghostty を固定コミットで取得し、viterm 用パッチを適用
+scripts/build-ghostty.sh # GhosttyKit.xcframework を生成
+swift build              # 全ターゲットをビルド
+swift test               # ユニットテスト
+scripts/make-app.sh      # .build/viterm.app を組み立て → open .build/viterm.app
 ```
+
+libghostty ビルドの既知の問題と回避策は
+[docs/ghostty-integration.md](docs/ghostty-integration.md) にまとめてある。
 
 ### アーキテクチャ
 
 | ターゲット | 役割 |
 |---|---|
-| `Sources/VitermCore` | ドメインモデル(Repository / Worktree / AgentSession)・設定ロード(`VitermConfig`)・worktree パステンプレート・worktree作成フォームの状態。UI 非依存 |
-| `Sources/GitKit` | `git` CLI ラッパー(worktree の作成・削除・一覧、ブランチ一覧、ahead/behind、diffstat、merge/rebase)。UI 非依存 |
-| `Sources/VitermServices` | `VitermCore` と `GitKit` を束ねるオーケストレーション層。`AppModel` が設定リロード・リポジトリ自動検出・worktree 状態スキャン・セッション一覧を統合してサイドバー用の状態を組み立てる。UI 非依存で、全依存はプロトコル越しに注入されるためフェイクでユニットテストできる |
-| `Sources/VitermApp` | AppKit アプリ本体。サイドバー・ターミナルホスト(libghostty サーフェス)・ステータスバー・worktree作成ダイアログ・コマンドパレット等 |
-| `vendor/` | ghostty ソースと `zig build` の生成物。git 管理外(上記セットアップ手順で取得・生成) |
+| `VitermCore` | ドメインモデル・設定ロード・パステンプレート・状態検出・各種 ViewModel。UI 非依存 |
+| `GitKit` | `git` CLI ラッパー(worktree / branch / merge)。UI 非依存 |
+| `VitermServices` | Core と GitKit を束ねるオーケストレーション層(`AppModel`)。全依存をプロトコル注入でテスト可能 |
+| `VitermApp` | AppKit アプリ本体(サイドバー・libghostty サーフェス・ダイアログ・パレット) |
+| `vendor/` | ghostty ソースとビルド生成物(git 管理外、スクリプトで取得) |
 
-### ドキュメント一覧(`docs/`)
+リリース手順(署名・公証・DMG)は [docs/RELEASE.md](docs/RELEASE.md)。
 
-- [requirements.md](docs/requirements.md) — 要件定義(背景・コンセプト・機能要件・技術スタック)
-- [tasks.md](docs/tasks.md) — マイルストーン・タスク分解
-- [configuration.md](docs/configuration.md) — 設定ファイルのキー・マージ規則・パステンプレート・hook 等のリファレンス
-- [ghostty-integration.md](docs/ghostty-integration.md) — libghostty 統合(T2/T3)で得た知見。特にこの開発環境固有のビルド阻害要因と回避策
-- [research.md](docs/research.md) — cmux / ccmanager の調査メモ
-- [ui-mock.html](docs/ui-mock.html) — UI モック(ブラウザで直接開いて確認する)
-
-## ライセンス・サポート
+## ライセンス
 
 MIT License([LICENSE](LICENSE))。viterm は無料の OSS です。
-開発を支援したい方は GitHub Sponsors(準備中)からどうぞ。
+バグ報告・機能要望は [Issues](https://github.com/viteflowsystem/viterm/issues) へ。

@@ -1,28 +1,31 @@
 # viterm
 
 AI coding agent(Claude Code / Codex 等)を並列運用するためのネイティブ macOS ターミナル。
-Swift + AppKit + libghostty。コンセプトは docs/requirements.md、タスクは docs/tasks.md 参照。
+Swift + AppKit + libghostty。概要と機能は README.md 参照。
 
 ## ビルド・テスト
 
 ```sh
 swift build          # 全ターゲット
-swift test           # ユニットテスト(VitermCore / GitKit)
-swift run VitermApp   # アプリ起動
+swift test           # ユニットテスト(VitermCore / GitKit / VitermServices)
+scripts/make-app.sh  # .build/viterm.app を組み立て(実行確認はこちらで)
 ```
 
-libghostty のセットアップ(T2 完了後): `scripts/setup-zig.sh` → `scripts/build-ghostty.sh`
+初回は libghostty のセットアップが必要: `scripts/setup-zig.sh` → `scripts/fetch-ghostty.sh`
+→ `scripts/build-ghostty.sh`(既知の問題は docs/ghostty-integration.md)
 
 ## 構成
 
-- `Sources/VitermCore` — ドメインモデル(Repo/Worktree/Session)・設定ロード・パステンプレート。UI 非依存
+- `Sources/VitermCore` — ドメインモデル・設定・状態検出・ViewModel。UI 非依存
 - `Sources/GitKit` — git CLI ラッパー(worktree / branch / merge)。UI 非依存
-- `Sources/VitermApp` — AppKit アプリ本体(サイドバー、ターミナルホスト、ダイアログ)
+- `Sources/VitermServices` — オーケストレーション層(AppModel)。UI 非依存
+- `Sources/VitermApp` — AppKit アプリ本体
 - `vendor/` — ghostty ソースと生成物。**git 管理外**、スクリプトで取得・生成
-- `docs/` — 要件・調査・UIモック・タスク
+- `docs/ui-mock.html` — UI のデザインリファレンス。UI 変更時はこれと見比べる
 
 ## 規約
 
-- Swift 6、UI 非依存層(VitermCore / GitKit)には必ずユニットテストを付ける
+- Swift 6、UI 非依存層(VitermCore / GitKit / VitermServices)には必ずユニットテストを付ける
 - `vendor/` 以下・ビルド生成物・`*.xcframework` はコミットしない
-- チーム開発時: タスクは TaskList で管理し、着手時に owner を自分に設定。担当タスクのディレクトリ以外は変更しない(Package.swift の編集は libghostty 統合担当のみ)。git commit はリードが行う
+- 変更が動作確認できたらコミットして push する(溜めない)
+- リリースは `scripts/release.sh <version>`(署名・公証。docs/RELEASE.md 参照)

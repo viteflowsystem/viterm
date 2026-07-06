@@ -152,7 +152,7 @@ return String(cString: text.text).split(separator: "\n", omittingEmptySubsequenc
 
 ## OSC 通知の一次シグナル化(P7 向け)
 
-要件定義(docs/requirements.md 3.2)は「状態検出は OSC シーケンス優先、テキストパターンはフォールバック」の
+当初の要件定義では「状態検出は OSC シーケンス優先、テキストパターンはフォールバック」の
 二段構えを想定しているが、T3 スパイク時点では `GhosttyRuntime` の `action_cb` は全アクションを無視して
 `false` を返すだけだった。ここでは `ghostty_action_tag_e` / `ghostty_target_s` を調査し、対応する
 `GhosttySurfaceView` へ中継する仕組みを実装した内容を記録する。

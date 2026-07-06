@@ -55,12 +55,11 @@ scripts/release.sh 0.1.0
 ## 配布
 
 1. **GitHub Releases** にタグ `v0.1.0` で DMG をアップロード
-2. **Homebrew Cask**(`Casks/viterm.rb`)の `version` と `sha256` を、release.sh の
+2. **Homebrew Cask**([viteflowsystem/homebrew-tap](https://github.com/viteflowsystem/homebrew-tap) の `Casks/viterm.rb`)の `version` と `sha256` を、release.sh の
    出力値で更新してタップリポジトリに push
    - `brew install --cask viteflowsystem/tap/viterm`
-   - ⚠️ Homebrew は DMG を**公開URL**から取得する。リポジトリが private の場合、
-     Releases アセットも認証が要るため、DMG は公開リポジトリの Releases か
-     Cloudflare R2 等の公開ストレージに置く必要がある
+   - DMG は homebrew-tap リポジトリの Releases(タグ `viterm_v<version>`)にアップロードする:
+     `gh release create viterm_v<version> <dmg> -R viteflowsystem/homebrew-tap`
 
 ## CI 化(将来・任意)
 

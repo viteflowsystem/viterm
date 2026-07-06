@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Developer ID 配布(非サンドボックス)+ Hardened Runtime 用の最小 entitlements。
+	  viterm は libghostty(自前の xcframework)を組み込み、任意のシェル/エージェントを
+	  子プロセスとして起動する。ライブラリ検証を無効化しておくことで、埋め込みコードや
+	  将来的な dylib 同梱でも Hardened Runtime 下で読み込めるようにする。
+	-->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

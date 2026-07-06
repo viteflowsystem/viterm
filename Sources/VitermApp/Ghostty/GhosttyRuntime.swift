@@ -1,5 +1,6 @@
 import AppKit
 import GhosttyKit
+import VitermCore
 
 /// libghostty のアプリ全体シングルトン(`ghostty_app_t`)を保持するランタイム。
 ///
@@ -73,6 +74,28 @@ final class GhosttyRuntime {
             // progress は「-1 なら未報告、それ以外は 0-100」(ghostty.h のコメント)。
             let progress: Int? = payload.progress >= 0 ? Int(payload.progress) : nil
             view.onProgressReport?(payload.state, progress)
+            return true
+
+        case GHOSTTY_ACTION_MOUSE_SHAPE:
+            view.setCursorShape(action.action.mouse_shape)
+            return true
+
+        case GHOSTTY_ACTION_MOUSE_OVER_LINK:
+            // ホバー中リンクの下線は libghostty のレンダラーが描画する。URL プレビュー UI は
+            // 持たないため中継先は無いが、handled として扱う。
+            return true
+
+        case GHOSTTY_ACTION_OPEN_URL:
+            // cmd+クリックされたリンク(URL 正規表現マッチ or OSC 8)。url は NUL 終端が
+            // 保証されないため len でバイト列として読む。
+            let payload = action.action.open_url
+            guard let urlPtr = payload.url, payload.len > 0 else { return false }
+            let raw = String(
+                decoding: UnsafeRawBufferPointer(start: urlPtr, count: Int(payload.len)),
+                as: UTF8.self
+            )
+            guard let url = LinkTargetResolver.resolve(raw) else { return false }
+            NSWorkspace.shared.open(url)
             return true
 
         default:

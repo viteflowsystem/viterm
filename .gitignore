@@ -1,7 +1,8 @@
 .build/
 .swiftpm/
 DerivedData/
-vendor/
+# 末尾スラッシュ無し: worktree ではメインチェックアウトの vendor への symlink を置くため
+vendor
 *.xcframework
 .DS_Store
 xcuserdata/

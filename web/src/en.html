@@ -138,20 +138,27 @@
   .repo .tri, .wt .tri { color: var(--faint); font-size: 9px; }
   .repo .plus { margin-left: auto; color: var(--faint); }
   .repo-sep { border-top: 1px solid var(--line); margin: 7px 14px; }
-  .wt { padding: 5px 14px 3px 22px; display: flex; align-items: baseline; gap: 7px; white-space: nowrap; }
-  .wt .b { font-weight: 600; }
+  .wt { padding: 6px 14px 6px 22px; display: flex; align-items: center; gap: 7px; white-space: nowrap; position: relative; color: var(--muted); }
+  .wt .b { font-weight: 600; color: var(--text); }
+  .wt.on { background: #262c3d; }
+  .wt.on::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px; background: linear-gradient(#ffbe3d, #ff5c7f); }
   .wt .git { margin-left: auto; font-size: 10.5px; display: flex; gap: 5px; }
   .git .up { color: var(--muted); } .git .o { color: var(--busy); } .git .rd { color: var(--minus); }
-  .sess { padding: 4px 14px 4px 38px; display: flex; align-items: center; gap: 8px; color: var(--muted); white-space: nowrap; position: relative; }
-  .sess.on { background: #262c3d; color: var(--text); }
-  .sess.on::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px; background: linear-gradient(#ffbe3d, #ff5c7f); }
+  .dots { display: inline-flex; gap: 4px; align-items: center; }
   .st { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .st.sm { width: 7px; height: 7px; }
   .st.busy { background: var(--busy); box-shadow: 0 0 7px rgba(224,164,88,.6); }
   .st.wait { background: var(--wait); box-shadow: 0 0 7px rgba(107,163,245,.6); }
   .st.idle { border: 1.5px solid var(--idle); }
-  .sess .k { margin-left: auto; color: var(--faint); font-size: 10px; }
-  .sess .badge { margin-left: auto; background: var(--wait); color: #0b1220; font-weight: 700; font-size: 9.5px; border-radius: 8px; padding: 0 6px; line-height: 15px; }
-  .add { padding: 4px 14px 4px 38px; color: var(--faint); }
+  .badge { background: var(--wait); color: #0b1220; font-weight: 700; font-size: 9.5px; border-radius: 8px; padding: 0 6px; line-height: 15px; }
+
+  .tabbar { display: flex; align-items: stretch; background: var(--bg2); border-bottom: 1px solid var(--line); padding: 5px 8px 0; gap: 2px; overflow-x: auto; }
+  .tab { display: flex; align-items: center; gap: 7px; padding: 6px 12px; color: var(--muted); white-space: nowrap; border: 1px solid transparent; border-bottom: none; border-radius: 7px 7px 0 0; position: relative; }
+  .tab.on { background: var(--panel); border-color: var(--line); color: var(--text); }
+  .tab.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--panel); }
+  .tab.on::before { content: ""; position: absolute; left: 10px; right: 10px; top: 0; height: 2px; border-radius: 0 0 2px 2px; background: linear-gradient(90deg, #ffbe3d, #ff5c7f); }
+  .tab .k { color: var(--faint); font-size: 10px; }
+  .tab.addt { color: var(--faint); padding: 6px 9px; align-self: center; border: none; }
 
   .term { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--panel); }
   .term-body { padding: 14px 18px; flex: 1; overflow-x: auto; }
@@ -313,7 +320,7 @@
     </div>
 
     <div class="wrap shot reveal">
-      <div class="window" role="img" aria-label="viterm app window: sidebar with multiple repositories and parallel sessions, terminal on the right">
+      <div class="window" role="img" aria-label="viterm app window: sidebar with repositories and worktrees, session tabs above the terminal">
         <div class="titlebar">
           <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
           <span class="t">viterm — feat/palette · claude #1</span>
@@ -321,18 +328,19 @@
         <div class="app">
           <div class="sidebar">
             <div class="repo"><span class="tri">▾</span>viterm<span class="plus">＋</span></div>
-            <div class="wt"><span class="tri">▾</span><span class="b">feat/palette</span><span class="git"><span class="up">↑3</span> <span class="o">●</span></span></div>
-            <div class="sess on"><span class="st busy"></span>claude #1<span class="k">⌘1</span></div>
-            <div class="sess"><span class="st wait"></span>claude #2<span class="badge">1</span></div>
-            <div class="sess"><span class="st idle"></span>codex #1<span class="k">⌘3</span></div>
-            <div class="add">＋ New session</div>
+            <div class="wt on"><span class="b">feat/palette</span><span class="dots"><span class="st sm busy"></span><span class="st sm wait"></span><span class="st sm idle"></span></span><span class="badge">1</span><span class="git"><span class="up">↑3</span> <span class="o">●</span></span></div>
+            <div class="wt"><span class="b">main</span><span class="dots"><span class="st sm idle"></span></span><span class="git"><span class="up">clean</span></span></div>
             <div class="repo-sep"></div>
             <div class="repo"><span class="tri">▾</span>comoru<span class="plus">＋</span></div>
-            <div class="wt"><span class="tri">▾</span><span class="b">fix/login</span><span class="git"><span class="rd">●</span></span></div>
-            <div class="sess"><span class="st busy"></span>claude #1<span class="k">⌘4</span></div>
-            <div class="add">＋ New session</div>
+            <div class="wt"><span class="b">fix/login</span><span class="dots"><span class="st sm busy"></span></span><span class="git"><span class="rd">●</span></span></div>
           </div>
           <div class="term">
+            <div class="tabbar">
+              <div class="tab on"><span class="st busy"></span>claude #1<span class="k">⌘1</span></div>
+              <div class="tab"><span class="st wait"></span>claude #2<span class="badge">1</span><span class="k">⌘2</span></div>
+              <div class="tab"><span class="st idle"></span>codex #1<span class="k">⌘3</span></div>
+              <div class="tab addt">＋</div>
+            </div>
             <div class="term-body">
 <pre><span class="c-user">❯ Match the sidebar colors to the brand palette</span>
 
@@ -365,7 +373,7 @@
     <div class="wrap reveal">
       <p class="sec-eyebrow">Not just tabs</p>
       <h2 class="punch">Tabs don't run in parallel.<br>They just <span class="grad-text">switch</span>.</h2>
-      <p class="lead">Ten tabs open, and you still can't tell which agent is waiting on you, which is working, and which just finished — not without opening each one. viterm shows you all of it at once.</p>
+      <p class="lead">Ten tabs open, and you still can't tell which agent is waiting on you, which is working, and which just finished — not without opening each one. viterm's tabs carry their state, and the sidebar shows all of it at once.</p>
       <div class="vs-grid">
         <div class="vs-card them">
           <div class="vs-label">Terminal tabs</div>
@@ -379,10 +387,10 @@
         <div class="vs-card me">
           <div class="vs-label">viterm</div>
           <ul class="vs-list">
-            <li><span class="mk">✓</span>Every session's busy / waiting / idle, always in the sidebar</li>
+            <li><span class="mk">✓</span>Every session's busy / waiting / idle, rolled up on its worktree row</li>
+            <li><span class="mk">✓</span>State dots on the tabs too — you know before you switch</li>
             <li><span class="mk">✓</span>Waiting fires a notification; ⌘⇧U jumps you there</li>
             <li><span class="mk">✓</span>Spin a worktree off a branch and launch an agent in it</li>
-            <li><span class="mk">✓</span>The app holds the state. You just watch</li>
           </ul>
         </div>
       </div>
@@ -401,16 +409,18 @@
         <div class="f-copy">
           <span class="f-tag">1 worktree : N sessions</span>
           <h3>As many sessions as you want, per worktree.</h3>
-          <p>Have Claude implement on a branch while Codex writes the tests right next to it — and a plain shell alongside. ⌘T stacks sessions in the sidebar; ⌘1–9 moves between them. Switch away and the background sessions keep running.</p>
+          <p>Have Claude implement on a branch while Codex writes the tests right next to it — and a plain shell alongside. ⌘T lines sessions up as tabs; ⌘1–9 moves between them. Leave the worktree and come back — you land on the tab you left open.</p>
         </div>
         <div class="f-visual">
           <div class="fv-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
-          <div class="fv-body">
-            <div class="wt" style="padding-left:0"><span class="b">feat/palette</span></div>
-            <div class="mini-row"><span class="st busy"></span>claude #1 <span style="color:var(--faint);margin-left:auto">⌘1</span></div>
-            <div class="mini-row"><span class="st wait"></span>codex #1 <span style="color:var(--faint);margin-left:auto">⌘2</span></div>
-            <div class="mini-row"><span class="st idle"></span>zsh <span style="color:var(--faint);margin-left:auto">⌘3</span></div>
-            <div class="mini-row" style="color:var(--faint)">＋ New session</div>
+          <div class="fv-body" style="padding:0">
+            <div class="tabbar">
+              <div class="tab on"><span class="st busy"></span>claude #1<span class="k">⌘1</span></div>
+              <div class="tab"><span class="st wait"></span>codex #1<span class="k">⌘2</span></div>
+              <div class="tab"><span class="st idle"></span>zsh<span class="k">⌘3</span></div>
+              <div class="tab addt">＋</div>
+            </div>
+            <div style="padding:14px 16px; color:var(--faint)">feat/palette — 3 sessions</div>
           </div>
         </div>
       </div>
@@ -459,7 +469,7 @@
         <div class="f-copy">
           <span class="f-tag">Status &amp; notifications</span>
           <h3>Never miss a prompt for input.</h3>
-          <p>Each session shows busy / waiting / idle as a dot in the sidebar. When an agent asks for confirmation, a macOS notification fires, and ⌘⇧U jumps to the latest one waiting. OSC notification sequences are the primary signal; screen detection is the fallback.</p>
+          <p>Each session shows busy / waiting / idle as a dot on its tab and its worktree row. Worktrees you're not looking at stay visible too, rolled up in the sidebar. When an agent asks for confirmation, a macOS notification fires, and ⌘⇧U jumps to the latest one waiting.</p>
         </div>
         <div class="f-visual">
           <div class="fv-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
@@ -482,10 +492,10 @@
       <div class="keygrid">
         <div class="keycard"><kbd>⌘K</kbd><span>Command palette</span></div>
         <div class="keycard"><kbd>⌘N</kbd><span>New worktree</span></div>
-        <div class="keycard"><kbd>⌘T</kbd><span>New session</span></div>
-        <div class="keycard"><kbd>⌘1–9</kbd><span>Switch session</span></div>
+        <div class="keycard"><kbd>⌘T</kbd><span>New session (tab)</span></div>
+        <div class="keycard"><kbd>⌘1–9</kbd><span>Switch tab (in worktree)</span></div>
         <div class="keycard"><kbd>⌘⇧U</kbd><span>Jump to waiting</span></div>
-        <div class="keycard"><kbd>⌘D</kbd><span>Split pane</span></div>
+        <div class="keycard"><kbd>⌘⌥↑↓</kbd><span>Switch worktree</span></div>
         <div class="keycard"><kbd>⌘,</kbd><span>Settings</span></div>
         <div class="keycard"><kbd>⌘B</kbd><span>Toggle sidebar</span></div>
       </div>

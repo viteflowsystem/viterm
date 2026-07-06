@@ -69,33 +69,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let newSession = NSMenuItem(title: "新規セッション", action: #selector(MainWindowController.newSession(_:)), keyEquivalent: "t")
         newSession.target = controller
         sessionMenu.addItem(newSession)
+        let closeTab = NSMenuItem(title: "タブを閉じる", action: #selector(MainWindowController.closeTab(_:)), keyEquivalent: "w")
+        closeTab.target = controller
+        sessionMenu.addItem(closeTab)
 
+        sessionMenu.addItem(.separator())
         let jump = NSMenuItem(title: "最新の入力待ちへ", action: #selector(MainWindowController.jumpToWaiting(_:)), keyEquivalent: "u")
         jump.keyEquivalentModifierMask = [.command, .shift]
         jump.target = controller
         sessionMenu.addItem(jump)
 
         sessionMenu.addItem(.separator())
-        let splitRight = NSMenuItem(title: "右に分割", action: #selector(MainWindowController.splitPaneRight(_:)), keyEquivalent: "d")
-        splitRight.target = controller
-        sessionMenu.addItem(splitRight)
-        let splitDown = NSMenuItem(title: "下に分割", action: #selector(MainWindowController.splitPaneDown(_:)), keyEquivalent: "d")
-        splitDown.keyEquivalentModifierMask = [.command, .shift]
-        splitDown.target = controller
-        sessionMenu.addItem(splitDown)
-        let closePane = NSMenuItem(title: "ペインを閉じる", action: #selector(MainWindowController.closePane(_:)), keyEquivalent: "w")
-        closePane.keyEquivalentModifierMask = [.command, .shift]
-        closePane.target = controller
-        sessionMenu.addItem(closePane)
-        let nextPane = NSMenuItem(title: "次のペイン", action: #selector(MainWindowController.focusNextPane(_:)), keyEquivalent: "]")
-        nextPane.target = controller
-        sessionMenu.addItem(nextPane)
+        let previousWorktree = NSMenuItem(
+            title: "前の worktree へ",
+            action: #selector(MainWindowController.selectPreviousWorktree(_:)),
+            keyEquivalent: String(UnicodeScalar(NSUpArrowFunctionKey)!)
+        )
+        previousWorktree.keyEquivalentModifierMask = [.command, .option]
+        previousWorktree.target = controller
+        sessionMenu.addItem(previousWorktree)
+        let nextWorktree = NSMenuItem(
+            title: "次の worktree へ",
+            action: #selector(MainWindowController.selectNextWorktree(_:)),
+            keyEquivalent: String(UnicodeScalar(NSDownArrowFunctionKey)!)
+        )
+        nextWorktree.keyEquivalentModifierMask = [.command, .option]
+        nextWorktree.target = controller
+        sessionMenu.addItem(nextWorktree)
 
         sessionMenu.addItem(.separator())
         for number in 1...9 {
             let item = NSMenuItem(
-                title: "セッション \(number)",
-                action: #selector(MainWindowController.selectShortcutSession(_:)),
+                title: "タブ \(number)",
+                action: #selector(MainWindowController.selectShortcutTab(_:)),
                 keyEquivalent: "\(number)"
             )
             item.tag = number

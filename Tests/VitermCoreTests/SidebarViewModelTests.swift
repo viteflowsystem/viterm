@@ -71,8 +71,8 @@ struct SidebarViewModelTests {
         #expect(viewModel.flattenedSessions.isEmpty)
     }
 
-    @Test("⌘1..9のショートカット番号は表示順の先頭9件にのみ振られる")
-    func shortcutNumbersAssignedToFirstNine() {
+    @Test("⌘1..9はタブ局所(TabBarViewModel)の役割なのでshortcutNumberは振らない")
+    func shortcutNumberIsNeverAssigned() {
         let viterm = Repository(name: "viterm", path: "/repo/viterm")
         let wt = Worktree(path: "/repo/viterm", repositoryPath: viterm.path, branch: "main")
         let sessions = (1...11).map {
@@ -80,12 +80,8 @@ struct SidebarViewModelTests {
         }
 
         let viewModel = SidebarViewModel(repositories: [viterm], worktrees: [wt], sessions: sessions)
-        let flat = viewModel.flattenedSessions
 
-        #expect(flat.count == 11)
-        #expect(flat.prefix(9).map(\.shortcutNumber) == (1...9).map { $0 })
-        #expect(flat[9].shortcutNumber == nil)
-        #expect(flat[10].shortcutNumber == nil)
+        #expect(viewModel.flattenedSessions.allSatisfy { $0.shortcutNumber == nil })
     }
 
     @Test("リポジトリ折りたたみ用のwaitingセッション数はworktree横断で集計される")
@@ -157,19 +153,6 @@ struct SidebarViewModelTests {
         #expect(viewModel.selectedSessionID == viewModel.flattenedSessions.last?.id)
     }
 
-    @Test("selectShortcutは対応する番号のセッションを選択する")
-    func selectShortcutSelectsCorrectSession() {
-        let fixture = makeFixture()
-        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
-
-        let ok = viewModel.selectShortcut(3)
-        #expect(ok == true)
-        #expect(viewModel.selectedSessionID == viewModel.flattenedSessions[2].id)
-
-        let notFound = viewModel.selectShortcut(9)
-        #expect(notFound == false, "5セッションしかないので9番は存在しない")
-    }
-
     @Test("jumpToLatestWaitingはstateChangedAtが最も新しいwaitingInputを選ぶ")
     func jumpToLatestWaitingPicksMostRecent() {
         let viterm = Repository(name: "viterm", path: "/repo/viterm")
@@ -218,5 +201,201 @@ struct SidebarViewModelTests {
         viewModel.selectPrevious()
         #expect(viewModel.selectedSessionID == nil)
         #expect(viewModel.stateSummary == SessionStateSummary())
+    }
+
+    // MARK: - worktree 選択
+
+    @Test("selectはselectedWorktreePathとactiveSessionByWorktreeも更新する")
+    func selectSyncsWorktreeSelection() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        let target = viewModel.repositories[0].worktrees[1].sessions[1] // claude #2 (feat/sidebar)
+
+        viewModel.select(sessionID: target.id)
+
+        #expect(viewModel.selectedWorktreePath == "/wt/viterm/feat-sidebar")
+        #expect(viewModel.activeSessionByWorktree["/wt/viterm/feat-sidebar"] == target.id)
+    }
+
+    @Test("worktree Aを選択中にworktree Bのセッションをselectすると選択中worktreeがBに切り替わる")
+    func selectSwitchesActiveWorktreeAcrossWorktrees() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+
+        // worktree A(main, zsh)を選択している状態を作る。
+        viewModel.selectWorktree("/repo/viterm")
+        #expect(viewModel.selectedWorktreePath == "/repo/viterm")
+
+        // worktree B(feat/sidebar)に属する既知のセッションを直接selectする。
+        let sessionInWorktreeB = fixture.sessions.first { $0.displayName == "claude #1" && $0.worktreePath == "/wt/viterm/feat-sidebar" }!
+        viewModel.select(sessionID: sessionInWorktreeB.id)
+
+        #expect(viewModel.selectedWorktreePath == "/wt/viterm/feat-sidebar", "selectしたセッションが属するworktree Bに切り替わる")
+        #expect(viewModel.selectedSessionID == sessionInWorktreeB.id)
+        #expect(viewModel.activeSessionByWorktree["/wt/viterm/feat-sidebar"] == sessionInWorktreeB.id)
+    }
+
+    @Test("存在しないセッションIDをselectしてもselectedWorktreePathは変化しない")
+    func selectWithUnknownSessionIDDoesNotTouchWorktree() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(
+            repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions,
+            selectedWorktreePath: "/repo/viterm"
+        )
+
+        viewModel.select(sessionID: UUID())
+
+        #expect(viewModel.selectedSessionID != nil)
+        #expect(viewModel.selectedSession == nil)
+        #expect(viewModel.selectedWorktreePath == "/repo/viterm", "紐付く worktree が特定できないので既存の選択を保つ")
+    }
+
+    @Test("selectWorktreeは記憶があればそのセッションに復帰する")
+    func selectWorktreeRestoresRememberedSession() {
+        let fixture = makeFixture()
+        let sidebarWorktree = fixture.worktrees[1] // feat/sidebar
+        let claude2 = fixture.sessions.first { $0.displayName == "claude #2" }!
+
+        var viewModel = SidebarViewModel(
+            repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions,
+            activeSessionByWorktree: [sidebarWorktree.path: claude2.id]
+        )
+
+        viewModel.selectWorktree(sidebarWorktree.path)
+
+        #expect(viewModel.selectedWorktreePath == sidebarWorktree.path)
+        #expect(viewModel.selectedSessionID == claude2.id, "worktree を離れて戻ったとき同じタブに復帰する")
+    }
+
+    @Test("selectWorktreeは記憶が無ければ先頭セッションを選ぶ")
+    func selectWorktreePicksFirstSessionWhenNoMemory() {
+        let fixture = makeFixture()
+        let sidebarWorktree = fixture.worktrees[1] // feat/sidebar
+
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.selectWorktree(sidebarWorktree.path)
+
+        #expect(viewModel.selectedSessionID == viewModel.repositories[0].worktrees[1].sessions.first?.id)
+        #expect(viewModel.activeSessionByWorktree[sidebarWorktree.path] == viewModel.selectedSessionID)
+    }
+
+    @Test("selectWorktreeは記憶が無効(そのworktreeに存在しないセッション)なら先頭セッションを選ぶ")
+    func selectWorktreeIgnoresStaleMemory() {
+        let fixture = makeFixture()
+        let sidebarWorktree = fixture.worktrees[1] // feat/sidebar
+        let webappSession = fixture.sessions.first { $0.displayName == "claude #1" && $0.worktreePath == "/wt/webapp/fix-login" }!
+
+        var viewModel = SidebarViewModel(
+            repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions,
+            activeSessionByWorktree: [sidebarWorktree.path: webappSession.id]
+        )
+        viewModel.selectWorktree(sidebarWorktree.path)
+
+        #expect(viewModel.selectedSessionID == viewModel.repositories[0].worktrees[1].sessions.first?.id)
+    }
+
+    @Test("空worktreeをselectWorktreeするとセッション選択は解除される")
+    func selectWorktreeWithEmptyWorktreeClearsSessionSelection() {
+        let viterm = Repository(name: "viterm", path: "/repo/viterm")
+        let empty = Worktree(path: "/wt/viterm/empty", repositoryPath: viterm.path, branch: "empty")
+
+        var viewModel = SidebarViewModel(repositories: [viterm], worktrees: [empty], sessions: [])
+        viewModel.selectWorktree(empty.path)
+
+        #expect(viewModel.selectedWorktreePath == empty.path)
+        #expect(viewModel.selectedSessionID == nil)
+    }
+
+    @Test("存在しないworktreeパスをselectWorktreeするとセッション選択は解除される")
+    func selectWorktreeWithUnknownPathClearsSessionSelection() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+
+        viewModel.selectWorktree("/does/not/exist")
+
+        #expect(viewModel.selectedWorktreePath == "/does/not/exist")
+        #expect(viewModel.selectedSessionID == nil)
+    }
+
+    @Test("nilをselectWorktreeするとworktree・セッションの両方が解除される")
+    func selectWorktreeWithNilClearsBoth() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.selectWorktree(fixture.worktrees[0].path)
+
+        viewModel.selectWorktree(nil)
+
+        #expect(viewModel.selectedWorktreePath == nil)
+        #expect(viewModel.selectedSessionID == nil)
+    }
+
+    @Test("selectNextWorktree/selectPreviousWorktreeは表示順で循環する")
+    func selectNextAndPreviousWorktreeWrapAround() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        let flat = viewModel.flattenedWorktrees
+
+        viewModel.selectWorktree(flat[0].id)
+        viewModel.selectNextWorktree()
+        #expect(viewModel.selectedWorktreePath == flat[1].id)
+
+        viewModel.selectWorktree(flat.last!.id)
+        viewModel.selectNextWorktree()
+        #expect(viewModel.selectedWorktreePath == flat[0].id, "末尾から次へ進むと先頭に循環する")
+
+        viewModel.selectWorktree(flat[0].id)
+        viewModel.selectPreviousWorktree()
+        #expect(viewModel.selectedWorktreePath == flat.last!.id, "先頭から前へ戻ると末尾に循環する")
+    }
+
+    @Test("worktreeが1件だけの場合、selectNextWorktree/selectPreviousWorktreeは自分自身に循環する")
+    func selectNextAndPreviousWorktreeWithSingleWorktreeStaysOnSelf() {
+        let viterm = Repository(name: "viterm", path: "/repo/viterm")
+        let wt = Worktree(path: "/repo/viterm", repositoryPath: viterm.path, branch: "main")
+
+        var viewModel = SidebarViewModel(repositories: [viterm], worktrees: [wt], sessions: [])
+        viewModel.selectWorktree(wt.path)
+
+        viewModel.selectNextWorktree()
+        #expect(viewModel.selectedWorktreePath == wt.path, "worktreeが1件だけなら次へ進んでも自分自身に留まる")
+
+        viewModel.selectPreviousWorktree()
+        #expect(viewModel.selectedWorktreePath == wt.path, "worktreeが1件だけなら前へ戻っても自分自身に留まる")
+    }
+
+    @Test("選択が無い状態でselectNextWorktreeを呼ぶと先頭が選ばれる")
+    func selectNextWorktreeWithNoSelectionPicksFirst() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.selectNextWorktree()
+        #expect(viewModel.selectedWorktreePath == viewModel.flattenedWorktrees.first?.id)
+    }
+
+    @Test("選択が無い状態でselectPreviousWorktreeを呼ぶと末尾が選ばれる")
+    func selectPreviousWorktreeWithNoSelectionPicksLast() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.selectPreviousWorktree()
+        #expect(viewModel.selectedWorktreePath == viewModel.flattenedWorktrees.last?.id)
+    }
+
+    @Test("worktreeが1件も無くてもselectNextWorktree/selectPreviousWorktreeはクラッシュしない")
+    func emptyWorktreeListSelectionIsNoOp() {
+        var viewModel = SidebarViewModel(repositories: [], worktrees: [], sessions: [])
+        viewModel.selectNextWorktree()
+        viewModel.selectPreviousWorktree()
+        #expect(viewModel.selectedWorktreePath == nil)
+    }
+
+    @Test("jumpToLatestWaitingはworktree選択も連動して切り替える")
+    func jumpToLatestWaitingSyncsWorktreeSelection() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+
+        #expect(viewModel.jumpToLatestWaiting() == true)
+
+        #expect(viewModel.selectedWorktreePath == "/wt/viterm/feat-sidebar")
+        #expect(viewModel.selectedSession?.session.displayName == "claude #2")
+        #expect(viewModel.activeSessionByWorktree["/wt/viterm/feat-sidebar"] == viewModel.selectedSessionID)
     }
 }

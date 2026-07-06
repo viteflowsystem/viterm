@@ -2,109 +2,98 @@
 
 # viterm
 
-AI coding agent(Claude Code / Codex 等)を並列運用するためのネイティブ macOS ターミナル。
+A native macOS terminal for running AI coding agents in parallel.
 
-git worktree ごとにエージェントセッションを何本でも立ち上げ、全セッションの状態
-(busy / 入力待ち / idle)をサイドバーで一望する。ターミナル描画は
-[Ghostty](https://ghostty.org) と同じエンジン(libghostty)がネイティブに担当するため、
-ウィンドウをリサイズしても TUI が崩れない。Electron 不使用。
+Spin up any number of agent sessions (Claude Code, Codex, plain shells) per git
+worktree, and see every session's state — busy / waiting for input / idle — at a
+glance in the sidebar. Terminal rendering is handled natively by
+[libghostty](https://ghostty.org), so nothing garbles on resize. Not Electron.
 
-## インストール
+[日本語 README](README.ja.md)
+
+## Install
 
 ```sh
 brew tap viteflowsystem/tap
 brew install --cask viterm
 ```
 
-DMG を直接ダウンロードする場合は
-[homebrew-tap の Releases](https://github.com/viteflowsystem/homebrew-tap/releases) から。
-配布物は Developer ID 署名 + Apple 公証済み。要件: macOS 15+ / Apple Silicon。
+Or grab the DMG from the
+[releases](https://github.com/viteflowsystem/homebrew-tap/releases)
+(Developer ID signed and notarized). Requires macOS 15+ on Apple Silicon.
 
-## なにができるか
+## Highlights
 
-- **1 worktree : N セッション** — 同じブランチで Claude に実装させながら、隣で Codex に
-  テストを書かせ、素のシェルも並べる。セッションは何本でも
-- **git worktree 管理** — 新規ブランチ / 既存ブランチ / リモートブランチから worktree を作成。
-  作成先はパステンプレート(例 `~/worktrees/{project}/{branch}`)で自由に設定。作成と同時に
-  エージェントを起動し、終わったら merge(`--no-ff`)か rebase → `--ff-only` で取り込んで、
-  サイドバーからそのまま削除
-- **状態検出と通知** — 各セッションの busy / 入力待ち / idle をサイドバーのドットで常時表示。
-  エージェントが入力を求めると macOS 通知が飛び、`⌘⇧U` で最新の入力待ちへジャンプ。
-  OSC 通知シーケンス(9/777)を一次シグナルに、画面テキスト検出をフォールバックにした二段構え
-- **ペイン分割** — `⌘D`(右)/ `⌘⇧D`(下)で同一画面に複数セッションを並べる。
-  ペインを閉じてもセッションはサイドバーで生き続ける
-- **マルチリポジトリ** — 複数リポジトリを1つのサイドバーで管理。`discoveryRoots` を設定すれば
-  指定ディレクトリ配下の git リポジトリを自動検出
-- **セッション復元** — セッション構成(worktree × プリセット)を自動保存し、次回起動時に復元
-  (PTY は新規起動。スクロールバックは引き継がれない)
-- **Claude Code セッションデータの引き継ぎ** — worktree 作成時に `~/.claude/projects/…` を
-  コピーして、新しい worktree でも会話履歴から再開できる
-- **ターミナル設定の継承** — フォント・テーマは `~/.config/ghostty/config` をそのまま読む
+- **1 worktree : N sessions** — run multiple agents and shells side by side on the same branch
+- **Worktree lifecycle** — create from any branch with a configurable path template
+  (`~/worktrees/{project}/{branch}`), launch an agent on creation, merge/rebase back, delete from the sidebar
+- **State & notifications** — per-session busy/waiting/idle dots; macOS notification when an
+  agent asks for input (OSC 9/777 first, screen-text detection as fallback); `⌘⇧U` jumps to the latest one waiting
+- **Pane splits** — `⌘D` / `⌘⇧D`; closing a pane keeps the session alive
+- **Multi-repo sidebar** with auto-discovery (`discoveryRoots`), session layout restore across
+  launches, and terminal appearance inherited from your `~/.config/ghostty/config`
 
-## キーマップ
+## Keymap
 
-| キー | 動作 |
+| Key | Action |
 |---|---|
-| `⌘K` | コマンドパレット(worktree 作成・マージ・削除、セッション起動、リポジトリ追加) |
-| `⌘N` | 新規 worktree |
-| `⌘T` | 選択中の worktree にセッションを追加 |
-| `⌘1`–`⌘9` | セッション直接切替 |
-| `⌘⇧U` | 最新の入力待ちセッションへジャンプ(リポジトリ横断) |
-| `⌘D` / `⌘⇧D` | ペインを右 / 下に分割 |
-| `⌘⇧W` | ペインを閉じる(セッションは維持) |
-| `⌘]` | 次のペインへフォーカス |
-| `⌘B` | サイドバー表示切替 |
-| `⌘,` | 設定 |
+| `⌘K` | Command palette |
+| `⌘N` | New worktree |
+| `⌘T` | New session in the selected worktree |
+| `⌘1`–`⌘9` | Switch session |
+| `⌘⇧U` | Jump to latest waiting session |
+| `⌘D` / `⌘⇧D` | Split pane right / down |
+| `⌘⇧W` | Close pane (session survives) |
+| `⌘]` | Focus next pane |
+| `⌘B` | Toggle sidebar |
+| `⌘,` | Settings |
 
-## 設定
+## Configuration
 
-グローバル設定 `~/.config/viterm/config.json` とプロジェクト別 `.viterm.json` をマージして使う。
-主要なキーは `⌘,` の設定ウィンドウ(一般 / Worktree / リポジトリ / 通知フック)からも編集できる。
+Global config lives at `~/.config/viterm/config.json`, merged with per-project
+`.viterm.json`. Common keys are editable from the settings window (`⌘,`).
 
 ```json
 {
   "worktreePathTemplate": "~/worktrees/{project}/{branch}",
   "defaultPreset": "claude",
-  "repositories": [
-    { "name": "myapp", "path": "/Users/me/dev/myapp" }
-  ],
   "discoveryRoots": ["~/dev"]
 }
 ```
 
-キー一覧・マージ規則・プリセット定義・状態変化フック(`statusHooks`)などの詳細は
-[docs/configuration.md](docs/configuration.md) を参照。設定ファイルが無くても組み込みの
-既定値(`claude` / `codex` / `shell` プリセット)で動く。
+See [docs/configuration.md](docs/configuration.md) for the full reference
+(presets, status hooks, merge rules). Everything works with zero config too.
 
-## ソースからビルド
+## Building from source
 
-前提: macOS(arm64)/ Xcode(Metal Toolchain 込み。Command Line Tools のみでは不可)。
+Requires macOS (arm64) and full Xcode (with the Metal Toolchain — Command Line
+Tools alone can't compile the Metal shaders).
 
 ```sh
-scripts/setup-zig.sh     # ghostty が要求する pinned Zig を vendor/zig/ に展開
-scripts/fetch-ghostty.sh # ghostty を固定コミットで取得し、viterm 用パッチを適用
-scripts/build-ghostty.sh # GhosttyKit.xcframework を生成
-swift build              # 全ターゲットをビルド
-swift test               # ユニットテスト
-scripts/make-app.sh      # .build/viterm.app を組み立て → open .build/viterm.app
+scripts/setup-zig.sh     # pinned Zig toolchain into vendor/zig/
+scripts/fetch-ghostty.sh # ghostty at a pinned commit + viterm patches
+scripts/build-ghostty.sh # produces GhosttyKit.xcframework
+swift build
+swift test
+scripts/make-app.sh      # assemble .build/viterm.app
 ```
 
-libghostty ビルドの既知の問題と回避策は
-[docs/ghostty-integration.md](docs/ghostty-integration.md) にまとめてある。
+Known libghostty build issues and workarounds are documented in
+[docs/ghostty-integration.md](docs/ghostty-integration.md).
 
-### アーキテクチャ
+### Architecture
 
-| ターゲット | 役割 |
+| Target | Role |
 |---|---|
-| `VitermCore` | ドメインモデル・設定ロード・パステンプレート・状態検出・各種 ViewModel。UI 非依存 |
-| `GitKit` | `git` CLI ラッパー(worktree / branch / merge)。UI 非依存 |
-| `VitermServices` | Core と GitKit を束ねるオーケストレーション層(`AppModel`)。全依存をプロトコル注入でテスト可能 |
-| `VitermApp` | AppKit アプリ本体(サイドバー・libghostty サーフェス・ダイアログ・パレット) |
-| `vendor/` | ghostty ソースとビルド生成物(git 管理外、スクリプトで取得) |
+| `VitermCore` | Domain models, config, path templates, state detection, view models. UI-independent |
+| `GitKit` | `git` CLI wrapper (worktree / branch / merge). UI-independent |
+| `VitermServices` | Orchestration layer (`AppModel`); all dependencies injected via protocols |
+| `VitermApp` | The AppKit app: sidebar, libghostty surfaces, dialogs, palette |
+| `vendor/` | ghostty sources and build artifacts (not tracked; fetched by scripts) |
 
-リリース手順(署名・公証・DMG)は [docs/RELEASE.md](docs/RELEASE.md)。
+Release process (signing, notarization, DMG): [docs/RELEASE.md](docs/RELEASE.md).
 
-## ライセンス
+## License
 
-MIT License([LICENSE](LICENSE))。viterm は無料の OSS です。
-バグ報告・機能要望は [Issues](https://github.com/viteflowsystem/viterm/issues) へ。
+MIT — see [LICENSE](LICENSE). Bug reports and feature requests welcome in
+[Issues](https://github.com/viteflowsystem/viterm/issues).

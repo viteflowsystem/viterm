@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & test (core targets)
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      # UI 非依存ターゲット(VitermCore / GitKit / VitermServices)のみを対象にする。
+      # VitermApp は libghostty の xcframework(Zig + Metal でのビルド)を要求するため
+      # CI では除外する(Package.swift 参照)。
+      VITERM_CORE_ONLY: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app || sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Configure git for fixture tests
+        run: |
+          git config --global user.name "ci"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test

@@ -14,8 +14,6 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
     private let sidebar = SidebarViewController()
     private let splitHost = SplitHostView()
-    /// タイトルバー中央の自前タイトル(システムタイトルは左寄せなので隠して置き換える)。
-    private let titlebarTitle = NSTextField(labelWithString: "viterm")
     /// ペインが1つも無いときに表示するプレースホルダ。
     private let placeholderView: NSView = {
         let view = NSView()
@@ -51,15 +49,11 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         // UIモック準拠: タイトルバーはコンテンツと一体の暗色(独立した明るい帯にしない)。
         window.titlebarAppearsTransparent = true
         window.backgroundColor = .textBackgroundColor
-        // macOS 26 はウィンドウタイトルを既定で左寄せする。UIモックに合わせて中央寄せに
-        // したいので、システムのタイトルは隠し、タイトルバーに自前の中央ラベルを載せる。
-        window.titleVisibility = .hidden
         window.center()
         window.setFrameAutosaveName("viterm.main")
         super.init(window: window)
 
         setUpContent()
-        setUpCenteredTitle(in: window)
         sidebar.onSelectSession = { [weak self] sessionID in
             self?.select(sessionID: sessionID)
         }
@@ -205,35 +199,6 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    /// タイトルバー中央に自前タイトルを載せる。ラベルの centerX を contentView(= ウィンドウ全幅)の
-    /// 中央に固定することで、信号機ボタンに依存せず正確に中央寄せする。
-    private func setUpCenteredTitle(in window: NSWindow) {
-        let accessory = NSTitlebarAccessoryViewController()
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        // アクセサリ自体は左端に極小サイズで置き、ラベルだけを contentView 中央へ逃がす。
-        container.widthAnchor.constraint(equalToConstant: 1).isActive = true
-        container.heightAnchor.constraint(equalToConstant: 28).isActive = true
-
-        titlebarTitle.font = .systemFont(ofSize: 13, weight: .semibold)
-        titlebarTitle.textColor = .labelColor
-        titlebarTitle.alignment = .center
-        titlebarTitle.lineBreakMode = .byTruncatingTail
-        titlebarTitle.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(titlebarTitle)
-        titlebarTitle.centerYAnchor.constraint(equalTo: container.centerYAnchor).isActive = true
-
-        accessory.view = container
-        accessory.layoutAttribute = .leading
-        window.addTitlebarAccessoryViewController(accessory)
-
-        if let content = window.contentView {
-            titlebarTitle.centerXAnchor.constraint(equalTo: content.centerXAnchor).isActive = true
-            // 信号機やサイドバーに被らない範囲で伸びるように最大幅を緩く制約。
-            titlebarTitle.widthAnchor.constraint(lessThanOrEqualTo: content.widthAnchor, multiplier: 0.6).isActive = true
-        }
-    }
-
     private func setUpContent() {
         splitView.isVertical = true
         splitView.dividerStyle = .thin
@@ -302,17 +267,13 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         stateMonitor.setVisibleSession(selectedID)
 
         // タイトルに現在のコンテキストを反映(モック: "viterm — feat/sidebar · claude #1")。
-        let title: String
         if let selected = appModel.sidebar.selectedSession {
             let branch = appModel.worktrees.first { $0.path == selected.session.worktreePath }?.branch
             let parts = [branch, selected.session.displayName].compactMap { $0 }
-            title = "viterm — " + parts.joined(separator: " · ")
+            window?.title = "viterm — " + parts.joined(separator: " · ")
         } else {
-            title = "viterm"
+            window?.title = "viterm"
         }
-        // window.title は Mission Control 等の名前用に維持しつつ、表示は中央ラベルで行う。
-        window?.title = title
-        titlebarTitle.stringValue = title
     }
 
     func refreshAndRender() {

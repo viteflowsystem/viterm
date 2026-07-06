@@ -8,7 +8,7 @@ Swift + AppKit + libghostty。概要と機能は README.md 参照。
 ```sh
 swift build          # 全ターゲット
 swift test           # ユニットテスト(VitermCore / GitKit / VitermServices)
-scripts/make-app.sh  # .build/viterm.app を組み立て(実行確認はこちらで)
+scripts/make-app.sh  # .build/viterm-dev.app を組み立て(実行確認はこちらで。brew 版と区別できる Dev フレーバー)
 ```
 
 初回は libghostty のセットアップが必要: `scripts/setup-zig.sh` → `scripts/fetch-ghostty.sh`

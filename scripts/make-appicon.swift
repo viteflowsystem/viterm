@@ -1,15 +1,16 @@
-// viterm の AppIcon を Core Graphics で決定的に生成するスクリプト。
-// ロゴ案01「Prompt」(docs/brand/logo-candidates.html)の最終版。
+// Deterministically renders the viterm AppIcon with Core Graphics.
+// Final version of logo candidate 01 "Prompt" (docs/brand/logo-candidates.html).
 //
-// 使い方: swift scripts/make-appicon.swift        → Resources/AppIcon.icns
-//        swift scripts/make-appicon.swift dev    → Resources/AppIcon-Dev.icns(DEV バッジ付き)
-// 出力: iconutil 経由、全サイズ
+// Usage: swift scripts/make-appicon.swift        → Resources/AppIcon.icns
+//        swift scripts/make-appicon.swift dev    → Resources/AppIcon-Dev.icns (with DEV badge)
+// Output: all sizes, via iconutil.
 //
-// デザイン(256pt キャンバス基準):
-// - macOS アイコングリッド準拠: 1024px 中 824px の角丸スクエア(角丸 185px)+ 透明マージン
-// - 背景: ネイビー #1E2442(viteflow system ブランド)
-// - ❯ プロンプト: ブランドグラデーション #FF8A47→#FFBE3D→#FF7A4C→#FF3B8E のストローク
-// - カーソルブロック: 同グラデーション(横方向)
+// Design (on a 256pt canvas):
+// - Follows the macOS icon grid: 824px rounded square (corner radius 185px)
+//   within 1024px, plus transparent margin
+// - Background: navy #1E2442 (viteflow system brand)
+// - ❯ prompt: stroke filled with the brand gradient #FF8A47→#FFBE3D→#FF7A4C→#FF3B8E
+// - Cursor block: same gradient, horizontal
 
 import AppKit
 import CoreGraphics
@@ -33,24 +34,24 @@ func makeGradient() -> CGGradient {
     return CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!, colors: colors, locations: locations)!
 }
 
-/// 1024px キャンバスにアイコンを描く。
+/// Draws the icon onto a 1024px canvas.
 func draw(in ctx: CGContext) {
     let canvas: CGFloat = 1024
 
-    // 角丸スクエア(Apple のアイコングリッド: 1024 中 824、角丸 ~185)
+    // Rounded square (Apple icon grid: 824 within 1024, corner radius ~185)
     let plateRect = CGRect(x: 100, y: 100, width: 824, height: 824)
     let plate = CGPath(roundedRect: plateRect, cornerWidth: 185, cornerHeight: 185, transform: nil)
     ctx.addPath(plate)
     ctx.setFillColor(navy)
     ctx.fillPath()
 
-    // 以降は 256pt のデザイン座標系(上原点)で描く。
-    // プレート内に収めるため、プレート領域(824px)に 256pt をマップする。
+    // From here on, draw in the 256pt design coordinate space (top origin),
+    // mapped onto the plate area (824px) so everything stays inside the plate.
     ctx.saveGState()
     ctx.translateBy(x: plateRect.minX, y: plateRect.minY + plateRect.height)
     ctx.scaleBy(x: plateRect.width / 256, y: -plateRect.height / 256)
 
-    // ❯ プロンプト(ストロークをパス化してグラデーションで塗る)
+    // ❯ prompt (convert the stroke to a path and fill it with the gradient)
     let chevron = CGMutablePath()
     chevron.move(to: CGPoint(x: 74, y: 82))
     chevron.addLine(to: CGPoint(x: 136, y: 128))
@@ -72,7 +73,7 @@ func draw(in ctx: CGContext) {
     )
     ctx.restoreGState()
 
-    // カーソルブロック(横グラデーション)
+    // Cursor block (horizontal gradient)
     let cursor = CGPath(
         roundedRect: CGRect(x: 148, y: 152, width: 52, height: 21),
         cornerWidth: 7, cornerHeight: 7, transform: nil
@@ -90,7 +91,8 @@ func draw(in ctx: CGContext) {
 
     ctx.restoreGState()
 
-    // DEV バッジ: プレート下部にアンバーのリボン+「DEV」(小さい Dock サイズでも判別できるように)
+    // DEV badge: amber ribbon with "DEV" at the bottom of the plate,
+    // so dev builds are recognizable even at small Dock sizes
     if isDev {
         let amber = CGColor(red: 0xFF / 255, green: 0xBE / 255, blue: 0x3D / 255, alpha: 1)
         let banner = CGPath(

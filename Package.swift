@@ -5,13 +5,13 @@ import PackageDescription
 // UI 非依存ターゲット(+テスト)。CI はこれだけをビルド・テストする。
 var targets: [Target] = [
     // ドメインモデル・設定(UI非依存)
-    .target(name: "VitermCore"),
+    .target(name: "VitermCore", resources: [.process("Resources")]),
     .testTarget(name: "VitermCoreTests", dependencies: ["VitermCore"]),
     // git CLI ラッパー(UI非依存)
     .target(name: "GitKit"),
     .testTarget(name: "GitKitTests", dependencies: ["GitKit"]),
     // ドメイン+git を束ねるサービス層(UI非依存)
-    .target(name: "VitermServices", dependencies: ["VitermCore", "GitKit"]),
+    .target(name: "VitermServices", dependencies: ["VitermCore", "GitKit"], resources: [.process("Resources")]),
     .testTarget(name: "VitermServicesTests", dependencies: ["VitermServices"]),
 ]
 
@@ -27,6 +27,7 @@ if ProcessInfo.processInfo.environment["VITERM_CORE_ONLY"] == nil {
         .executableTarget(
             name: "VitermApp",
             dependencies: ["VitermCore", "GitKit", "VitermServices", "GhosttyKit"],
+            resources: [.process("Resources")],
             linkerSettings: [
                 .linkedLibrary("stdc++"),
                 .linkedFramework("AppKit"),
@@ -45,6 +46,7 @@ if ProcessInfo.processInfo.environment["VITERM_CORE_ONLY"] == nil {
 
 let package = Package(
     name: "viterm",
+    defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     targets: targets
 )

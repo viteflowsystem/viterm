@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import GitKit
 
-// MARK: - Parsing (pure logic, git 不要)
+// MARK: - Parsing (pure logic, no git required)
 
 @Test func parseWorktreeList_parsesMultipleEntriesIncludingDetached() {
     let output = """
@@ -60,7 +60,7 @@ import Testing
 @Test func gitRunner_timesOutOnHangingProcess() async throws {
     try await withTemporaryDirectory { dir in
         let scriptURL = dir.appendingPathComponent("slow-git")
-        // exec で置き換えることで sleep が Process の直接の子になり、terminate() が確実に効くようにする。
+        // Using exec makes sleep a direct child of Process, so terminate() reliably takes effect.
         let script = "#!/bin/sh\nexec sleep 5\n"
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
@@ -102,7 +102,7 @@ import Testing
         try await Fixture.makeRepository(at: repo)
         let service = GitService()
 
-        // {branch_raw} テンプレートのようにサブディレクトリになるケースも兼ねて検証する。
+        // Also covers the case where the path becomes a subdirectory, as with the {branch_raw} template.
         let wtPath = dir.appendingPathComponent("worktrees/feature-x")
         try await service.addWorktree(in: repo, path: wtPath, source: .newBranch(name: "feature-x"))
 
@@ -192,7 +192,7 @@ import Testing
             }
         }
 
-        // force していないので worktree はまだ残っている。
+        // Since force was not used, the worktree still remains.
         let worktrees = try await service.worktrees(in: repo)
         #expect(worktrees.count == 2)
     }
@@ -323,7 +323,7 @@ import Testing
         try await service.addWorktree(in: repo, path: featurePath, source: .newBranch(name: "feature"))
         try await Fixture.commitFile(named: "feature.txt", content: "feature\n", message: "add feature", in: featurePath)
 
-        // feature が古い main を基点にしたままになるよう、main だけ先に進める。
+        // Advance only main so that feature stays based on the old main.
         try await Fixture.commitFile(named: "main-only.txt", content: "main\n", message: "advance main", in: repo)
 
         try await service.merge(
@@ -377,10 +377,10 @@ import Testing
     }
 }
 
-// MARK: - parseWorkingState (pure logic, git 不要)
+// MARK: - parseWorkingState (pure logic, no git required)
 
 @Test func parseWorkingState_stagedAndUnstagedColumns() {
-    // X=staged, Y=unstaged, ??=untracked(unstaged 扱い)
+    // X=staged, Y=unstaged, ??=untracked (treated as unstaged)
     #expect(GitService.parseWorkingState("") == WorkingState(hasStagedChanges: false, hasUnstagedChanges: false))
     #expect(GitService.parseWorkingState("M  a.txt\n") == WorkingState(hasStagedChanges: true, hasUnstagedChanges: false))
     #expect(GitService.parseWorkingState(" M a.txt\n") == WorkingState(hasStagedChanges: false, hasUnstagedChanges: true))

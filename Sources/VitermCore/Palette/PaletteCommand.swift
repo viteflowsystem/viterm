@@ -1,15 +1,15 @@
 import Foundation
 
-/// コマンドパレット(⌘K)に列挙される1コマンド。
-/// docs/ui-mock.html の Screen 02(コマンドパレット)が表示仕様。
+/// A single command listed in the command palette (⌘K).
+/// Screen 02 (command palette) of docs/ui-mock.html is the display spec.
 public struct PaletteCommand: Sendable, Equatable, Hashable, Identifiable {
-    /// パレット上のカテゴリ見出し。
+    /// Category heading in the palette.
     public enum Category: Sendable, Equatable, Hashable, CaseIterable {
         case worktree
         case session
         case repository
 
-        /// パレットに表示するカテゴリ見出し文字列(docs/ui-mock.html 準拠)。
+        /// Category heading string shown in the palette (per docs/ui-mock.html).
         public var displayName: String {
             switch self {
             case .worktree: return "Worktree"
@@ -19,15 +19,15 @@ public struct PaletteCommand: Sendable, Equatable, Hashable, Identifiable {
         }
     }
 
-    /// 一意な安定コマンドID(同一コンテキストなら再生成しても変わらない)。
+    /// Unique, stable command ID (unchanged across regeneration given the same context).
     public var id: String
     public var category: Category
     public var title: String
-    /// 右側に表示する補助情報(ahead/behind の `↑3 ↓1` 等)。無ければ `nil`。
+    /// Auxiliary info shown on the right (e.g. ahead/behind `↑3 ↓1`). `nil` if none.
     public var subtitle: String?
-    /// 右端に表示するキーボードヒント(`⌘N` 等)。無ければ `nil`。
+    /// Keyboard hint shown at the right edge (e.g. `⌘N`). `nil` if none.
     public var keyboardHint: String?
-    /// UI 側が switch して実行するアクション。
+    /// Action that the UI switches over and executes.
     public var action: PaletteAction
 
     public init(
@@ -46,26 +46,27 @@ public struct PaletteCommand: Sendable, Equatable, Hashable, Identifiable {
         self.action = action
     }
 
-    /// ファジー検索の対象になるテキスト。カテゴリ名を先頭に含めることで、
-    /// カテゴリ名に対するクエリ(例: "wt")がそのカテゴリのコマンドを優先的に浮かび上がらせる。
+    /// Text targeted by fuzzy search. Prepending the category name lets a query for
+    /// the category name (e.g. "wt") surface that category's commands preferentially.
     public var searchableText: String {
         "\(category.displayName) \(title)"
     }
 }
 
-/// `PaletteCommand` が実行する操作。UI 側がこれを switch して実際の処理(GitService 呼び出し・
-/// ダイアログ表示・SessionManager 起動 等)にディスパッチする。ここには実行ロジックは含まない。
+/// Operation executed by a `PaletteCommand`. The UI switches over this and dispatches
+/// to the actual work (GitService calls, dialog display, SessionManager launch, etc.).
+/// No execution logic lives here.
 public enum PaletteAction: Sendable, Equatable, Hashable {
-    /// worktree 新規作成ダイアログを開く。
+    /// Open the new-worktree dialog.
     case createWorktree
-    /// 指定した worktree に切り替える。
+    /// Switch to the specified worktree.
     case switchToWorktree(worktreeID: String)
-    /// 指定した worktree のブランチをマージする(merge / rebase の選択は UI 側)。
+    /// Merge the specified worktree's branch (merge vs. rebase choice is on the UI side).
     case mergeWorktree(worktreeID: String)
-    /// 指定した worktree を削除する(確認ダイアログは UI 側)。
+    /// Remove the specified worktree (confirmation dialog is on the UI side).
     case removeWorktree(worktreeID: String)
-    /// 指定した worktree で、指定プリセットのセッションを起動する。
+    /// Start a session with the specified preset in the specified worktree.
     case startSession(worktreeID: String, presetName: String)
-    /// リポジトリ追加ダイアログ(ディレクトリ選択)を開く。
+    /// Open the add-repository dialog (directory picker).
     case addRepository
 }

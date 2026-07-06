@@ -1,12 +1,13 @@
 import Foundation
 import VitermCore
 
-/// 設定ウィンドウの書き込み窓口。グローバル設定 `~/.config/viterm/config.json` を
-/// 「既存 JSON を読み、対象キーだけ差し替えて書き戻す」方式で更新する
-/// (この画面で扱わないキーは保全される)。変更は即時保存(macOS 設定の流儀)。
+/// Write gateway for the settings window. Updates the global config
+/// `~/.config/viterm/config.json` by reading the existing JSON, replacing only the target
+/// keys, and writing it back (keys not handled by this screen are preserved). Changes are
+/// saved immediately (the macOS settings convention).
 @MainActor
 final class SettingsStore {
-    /// 保存が成功するたびに呼ばれる(アプリ側の設定リロード用)。
+    /// Called every time a save succeeds (for the app-side config reload).
     let onChanged: () -> Void
 
     static var globalConfigURL: URL {
@@ -18,12 +19,12 @@ final class SettingsStore {
         self.onChanged = onChanged
     }
 
-    /// 現在の解決済み設定(組み込み既定値とのマージ後)。ペインの初期値表示に使う。
+    /// The currently resolved config (after merging with built-in defaults). Used for panes' initial values.
     func currentConfig() -> VitermConfig {
         (try? ConfigLoader.load(globalURL: Self.globalConfigURL, repositoryRoot: nil)) ?? .default
     }
 
-    /// 生の JSON(ファイルに書かれているキーのみ)。リスト編集(repositories 等)に使う。
+    /// The raw JSON (only the keys written in the file). Used for list editing (repositories, etc.).
     func rawJSON() -> [String: Any] {
         guard let data = try? Data(contentsOf: Self.globalConfigURL),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -32,7 +33,7 @@ final class SettingsStore {
         return json
     }
 
-    /// JSON の対象キーだけを差し替えて保存する。値に `nil` を渡すとキーを削除する。
+    /// Save the JSON, replacing only the target keys. Passing `nil` as a value deletes the key.
     func set(_ values: [String: Any?]) {
         var json = rawJSON()
         for (key, value) in values {
@@ -55,7 +56,7 @@ final class SettingsStore {
         }
     }
 
-    /// config.json を既定のエディタで開く(無ければ空の JSON を作ってから)。
+    /// Open config.json in the default editor (creating an empty JSON file first if absent).
     func openInEditor() {
         let url = Self.globalConfigURL
         if !FileManager.default.fileExists(atPath: url.path) {

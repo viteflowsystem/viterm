@@ -49,7 +49,7 @@ struct FuzzyMatcherTests {
 
     @Test("連続一致は飛び飛びの一致よりスコアが高い")
     func contiguousMatchScoresHigherThanScatteredMatch() {
-        // "wo" は worktree の先頭2文字(連続)、"wt" は w(0), t(4) で飛び飛び。
+        // "wo" is the first 2 chars of worktree (contiguous); "wt" is scattered at w(0), t(4).
         let contiguous = FuzzyMatcher.score(query: "wo", target: "xworktree")!
         let scattered = FuzzyMatcher.score(query: "wt", target: "xworktree")!
         #expect(contiguous > scattered)
@@ -57,7 +57,7 @@ struct FuzzyMatcherTests {
 
     @Test("単語境界(空白の直後)にマッチすると境界ボーナスが付く")
     func wordBoundaryBonus() {
-        // "wt" は "aworktree"(境界なしの位置)より " worktree"(空白直後)の方が高スコア。
+        // "wt" scores higher in " worktree" (right after a space) than in "aworktree" (no boundary).
         let atBoundary = FuzzyMatcher.score(query: "wt", target: "a worktree")!
         let notAtBoundary = FuzzyMatcher.score(query: "wt", target: "aaworktree")!
         #expect(atBoundary > notAtBoundary)

@@ -1,8 +1,8 @@
 import Foundation
 
-/// 設定ファイル読み込みで発生しうるエラー。
+/// Errors that can occur while loading config files.
 public enum ConfigLoaderError: Error, Equatable, CustomStringConvertible {
-    /// ファイルは存在するが JSON として不正、またはスキーマに合わない。
+    /// The file exists but is invalid JSON or does not match the schema.
     case invalidJSON(path: String, underlying: String)
 
     public var description: String {
@@ -20,9 +20,9 @@ public enum ConfigLoaderError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-/// グローバル設定・プロジェクト設定を読み込み、マージ済みの `VitermConfig` を生成する。
+/// Loads the global and project configs and produces a merged `VitermConfig`.
 public enum ConfigLoader {
-    /// グローバル設定ファイルの既定パス: `~/.config/viterm/config.json`
+    /// Default path of the global config file: `~/.config/viterm/config.json`
     public static func defaultGlobalConfigURL(
         fileManager: FileManager = .default
     ) -> URL {
@@ -32,14 +32,14 @@ public enum ConfigLoader {
             .appendingPathComponent("config.json", isDirectory: false)
     }
 
-    /// プロジェクト設定ファイルのパス: `<repositoryRoot>/.viterm.json`
+    /// Path of the project config file: `<repositoryRoot>/.viterm.json`
     public static func projectConfigURL(repositoryRoot: URL) -> URL {
         repositoryRoot.appendingPathComponent(".viterm.json", isDirectory: false)
     }
 
-    /// 指定された URL から設定ファイルを読み込む。
-    /// ファイルが存在しない場合は `nil` を返す(エラーにしない)。
-    /// ファイルは存在するが JSON が不正な場合は `ConfigLoaderError.invalidJSON` を投げる。
+    /// Loads a config file from the given URL.
+    /// Returns `nil` if the file does not exist (not treated as an error).
+    /// Throws `ConfigLoaderError.invalidJSON` if the file exists but the JSON is invalid.
     public static func loadFile(
         at url: URL,
         fileManager: FileManager = .default
@@ -58,12 +58,12 @@ public enum ConfigLoader {
         }
     }
 
-    /// グローバル設定 + プロジェクト設定(あれば)を読み込みマージした `VitermConfig` を返す。
-    /// どちらのファイルも存在しなければ `VitermConfig.default` を返す。
+    /// Loads and merges the global config plus the project config (if any) into a `VitermConfig`.
+    /// Returns `VitermConfig.default` if neither file exists.
     ///
     /// - Parameters:
-    ///   - globalURL: グローバル設定ファイルの URL。省略時は既定パスを使う。
-    ///   - repositoryRoot: プロジェクト設定 `.viterm.json` を探すリポジトリルート。`nil` ならプロジェクト設定は読まない。
+    ///   - globalURL: URL of the global config file. Uses the default path if omitted.
+    ///   - repositoryRoot: Repository root to look for the project config `.viterm.json` in. `nil` skips reading the project config.
     public static func load(
         globalURL: URL? = nil,
         repositoryRoot: URL? = nil,

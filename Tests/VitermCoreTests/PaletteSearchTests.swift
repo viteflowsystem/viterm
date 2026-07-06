@@ -36,9 +36,9 @@ struct PaletteSearchTests {
         let commands = makeCommands()
         let results = PaletteSearch.search(commands, query: "wt")
 
-        // Worktree カテゴリの2件(カテゴリ名 "Worktree" が先頭一致)が、
-        // "worktree" を本文中に含むだけの Session の1件より上位に来る。
-        // Repo の項目は "w" を含まないためマッチしない。
+        // The two Worktree-category entries (category name "Worktree" matches at the start)
+        // rank above the one Session entry that merely contains "worktree" in its body.
+        // The Repo entry does not contain "w" and therefore does not match.
         #expect(results.count == 3)
         #expect(Set(results.prefix(2).map(\.id)) == ["worktree.create", "worktree.switch.a"])
         #expect(results.last?.id == "session.start.a.claude")

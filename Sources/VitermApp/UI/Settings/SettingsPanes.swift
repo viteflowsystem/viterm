@@ -1,18 +1,18 @@
 import AppKit
 import VitermCore
 
-// 設定ウィンドウの各ペイン。共通の SettingsPane 基底がフォーム構築ヘルパー
-// (grid 行の追加、変更の即時保存)を提供し、各ペインはフィールド定義に集中する。
-// ペインを増やす場合は SettingsPane サブクラスを書いて
-// SettingsWindowController.panes に1行追加するだけでよい。
+// The individual panes of the settings window. The shared SettingsPane base class provides
+// form-building helpers (adding grid rows, immediate saving of changes), so each pane can
+// focus on its field definitions. To add a pane, write a SettingsPane subclass and add a
+// single line to SettingsWindowController.panes.
 
-// MARK: - 基底
+// MARK: - Base
 
 @MainActor
 class SettingsPane: NSViewController, NSTextFieldDelegate {
     let store: SettingsStore
 
-    /// フォームのレイアウト定数(全ペイン共通。ここだけで一貫性を担保する)。
+    /// Form layout constants (shared by all panes; consistency is guaranteed here alone).
     private enum Layout {
         static let labelColumnWidth: CGFloat = 168
         static let fieldWidth: CGFloat = 380
@@ -46,7 +46,7 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
         stack.alignment = .leading
         stack.spacing = 16
         stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
-        // 注釈はフィールド列の開始位置に揃える。
+        // Align the footnote with the start of the field column.
         footnote.leadingAnchor.constraint(
             equalTo: stack.leadingAnchor,
             constant: 24 + Layout.labelColumnWidth + 12
@@ -59,27 +59,28 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
             stack.topAnchor.constraint(equalTo: container.topAnchor),
             stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            // fittingSize でウィンドウ高さが決まるため、bottom は equal で固定する
-            // (lessThanOrEqual だと高さが 0 に潰れてウィンドウが見えなくなる)。
+            // The window height is determined by fittingSize, so pin bottom with equal
+            // (with lessThanOrEqual the height collapses to 0 and the window becomes invisible).
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             container.widthAnchor.constraint(equalToConstant: Layout.contentWidth),
         ])
         view = container
         buildForm()
-        // 列は行追加時に生成されるため、設定は buildForm 後でないと範囲外例外になる。
+        // Columns are created when rows are added, so configuring them before buildForm
+        // raises an out-of-range exception.
         if grid.numberOfColumns > 0 {
             grid.column(at: 0).xPlacement = .trailing
             grid.column(at: 0).width = Layout.labelColumnWidth
         }
-        // NSTabViewController(.toolbar)はこの値でウィンドウをペインごとにリサイズする。
-        // 未設定だと初期ウィンドウサイズのまま巨大な余白ができる。
+        // NSTabViewController (.toolbar) resizes the window per pane using this value.
+        // If unset, the window keeps its initial size and a huge blank margin appears.
         preferredContentSize = container.fittingSize
     }
 
-    /// サブクラスがフォーム行を追加する。
+    /// Subclasses add their form rows here.
     func buildForm() {}
 
-    // MARK: フォーム構築ヘルパー
+    // MARK: Form-building helpers
 
     func addRow(label: String, field: NSView) {
         let labelField = NSTextField(labelWithString: label)
@@ -90,7 +91,7 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
         grid.addRow(with: [labelField, field])
     }
 
-    /// ラベル無しで右カラムだけに置く(チェックボックスや補足)。
+    /// Place a view in the right column only, without a label (checkboxes, supplementary text).
     func addTrailingRow(_ view: NSView) {
         grid.addRow(with: [NSGridCell.emptyContentView, view])
     }
@@ -107,12 +108,12 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
         field.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         field.onCommit = onCommit
         field.delegate = field
-        // 全ペインで同一のフィールド幅(伸縮させない。一貫性のため equal 固定)。
+        // Same field width across all panes (no stretching; pinned equal for consistency).
         field.widthAnchor.constraint(equalToConstant: Layout.fieldWidth).isActive = true
         return field
     }
 
-    /// フィールドの直下に補足(プレビュー等)を沿わせる縦スタック。行のフィールドとして使う。
+    /// Vertical stack that places a caption (preview, etc.) directly under a field. Use as a row's field.
     func fieldWithCaption(_ field: NSView, caption: NSTextField) -> NSView {
         caption.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         caption.textColor = .secondaryLabelColor
@@ -125,16 +126,16 @@ class SettingsPane: NSViewController, NSTextFieldDelegate {
         return stack
     }
 
-    /// ポップアップ等の固定幅(テキストフィールドと開始位置・見た目を揃える)。
+    /// Fixed width for popups etc. (aligns start position and appearance with text fields).
     func fixWidth(_ view: NSView, _ width: CGFloat = 200) {
         view.widthAnchor.constraint(equalToConstant: width).isActive = true
     }
 }
 
-/// フォーカスが外れる/Enter で確定したときだけ onCommit を呼ぶテキストフィールド。
+/// Text field that calls onCommit only when focus leaves or Enter commits the value.
 final class CommitTextField: NSTextField, NSTextFieldDelegate {
     var onCommit: ((String) -> Void)?
-    /// 変更の都度(確定前)呼ばれる。プレビュー更新用。
+    /// Called on every change (before commit). For preview updates.
     var onLiveChange: ((String) -> Void)?
     private var lastCommitted: String?
 
@@ -153,7 +154,7 @@ final class CommitTextField: NSTextField, NSTextFieldDelegate {
     }
 }
 
-// MARK: - 一般
+// MARK: - General
 
 final class GeneralSettingsPane: SettingsPane {
     override func buildForm() {
@@ -241,7 +242,7 @@ final class WorktreeSettingsPane: SettingsPane {
     }
 }
 
-// MARK: - 通知フック
+// MARK: - Notification hooks
 
 final class HooksSettingsPane: SettingsPane {
     override func buildForm() {
@@ -268,7 +269,7 @@ final class HooksSettingsPane: SettingsPane {
     }
 }
 
-// MARK: - リポジトリ
+// MARK: - Repositories
 
 final class RepositoriesSettingsPane: SettingsPane, NSTableViewDataSource, NSTableViewDelegate {
     private let tableView = NSTableView()

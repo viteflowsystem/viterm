@@ -1,23 +1,23 @@
 import Foundation
 
-/// 現在のアプリ状態(`SidebarViewModel.repositories` 相当のツリー)から、
-/// コマンドパレットに列挙する `PaletteCommand` を動的に生成する。
-/// docs/ui-mock.html の Screen 02 に準拠: Worktree(新規作成/切替/マージ/削除)、
-/// Session(プリセット起動)、Repo(追加)。
+/// Dynamically generates the `PaletteCommand`s listed in the command palette from
+/// the current app state (a tree equivalent to `SidebarViewModel.repositories`).
+/// Follows Screen 02 of docs/ui-mock.html: Worktree (create/switch/merge/remove),
+/// Session (launch preset), Repo (add).
 public enum PaletteCommandProvider {
     /// - Parameters:
-    ///   - repositories: サイドバーのツリー(`SidebarViewModel.repositories`)。
-    ///   - presets: 現在利用可能なセッションプリセット一覧(`VitermConfig.presets`)。
-    ///   - defaultPresetName: 既定プリセット名(`VitermConfig.defaultPreset`)。
-    ///     このプリセットのセッション起動コマンドにのみ `⌘T` のキーボードヒントを付ける
-    ///     (docs/ui-mock.html で claude だけに ⌘T が付いているのと同じ扱い)。
-    ///   - currentWorktreeID: 現在アクティブな worktree(= ターミナルペインで表示中の worktree)の ID。
-    ///     マージ・削除・セッション起動は「この worktree」に対する操作なので、
-    ///     これが `nil` またはツリー内に存在しない場合はそれらのコマンドを生成しない。
-    ///   - mergeTargetBranch: マージ先ブランチの表示名(例: `"main"`)。
-    ///     現在の `Worktree` モデルは実際のベースブランチを保持していないため、
-    ///     呼び出し側が共通の既定値を渡す暫定対応。worktree ごとの実ベースブランチ追跡が
-    ///     必要になった時点で `Worktree` 側の拡張を検討する。
+    ///   - repositories: The sidebar tree (`SidebarViewModel.repositories`).
+    ///   - presets: The list of currently available session presets (`VitermConfig.presets`).
+    ///   - defaultPresetName: Name of the default preset (`VitermConfig.defaultPreset`).
+    ///     Only this preset's session-launch command gets the `⌘T` keyboard hint
+    ///     (same treatment as docs/ui-mock.html, where only claude has ⌘T).
+    ///   - currentWorktreeID: ID of the currently active worktree (= the worktree shown in the terminal pane).
+    ///     Merge, remove, and session launch are operations on "this worktree",
+    ///     so if this is `nil` or not present in the tree, those commands are not generated.
+    ///   - mergeTargetBranch: Display name of the merge target branch (e.g. `"main"`).
+    ///     The current `Worktree` model does not hold the actual base branch, so as a
+    ///     stopgap the caller passes a shared default. When per-worktree tracking of the
+    ///     real base branch becomes necessary, consider extending `Worktree`.
     public static func commands(
         repositories: [RepositoryNode],
         presets: [SessionPreset],
@@ -86,7 +86,7 @@ public enum PaletteCommandProvider {
         repositories.contains { $0.worktrees.contains { $0.worktree.id == id } }
     }
 
-    /// `↑3 ↓1` のような ahead/behind 表示。0 の側は表示しない。両方0なら `nil`。
+    /// Ahead/behind label like `↑3 ↓1`. A side that is 0 is omitted. `nil` if both are 0.
     private static func aheadBehindLabel(_ worktree: Worktree) -> String? {
         var parts: [String] = []
         if worktree.ahead > 0 { parts.append("↑\(worktree.ahead)") }

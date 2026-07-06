@@ -1,11 +1,11 @@
 import Foundation
 import GitKit
 
-/// merge/rebase → worktree 削除 → ローカルブランチ削除、を順に行うリクエスト。
+/// Request to run, in order: merge/rebase → worktree removal → local branch deletion.
 public struct MergeCleanupRequest: Sendable {
-    /// 取り込む側のブランチ(例: フィーチャーブランチ)。
+    /// The branch being merged in (e.g. a feature branch).
     public var source: String
-    /// 取り込まれる側のブランチ(例: main)。
+    /// The branch being merged into (e.g. main).
     public var target: String
     public var sourceWorktree: URL
     public var targetWorktree: URL
@@ -35,14 +35,14 @@ public struct MergeCleanupRequest: Sendable {
     }
 }
 
-/// `MergeCleanupCoordinator` の各ステップ。
+/// The individual steps of `MergeCleanupCoordinator`.
 public enum MergeCleanupStep: String, Sendable {
     case merge
     case removeWorktree
     case deleteBranch
 }
 
-/// 1ステップの結果。`error == nil` が成功。
+/// Result of a single step. `error == nil` means success.
 public struct MergeCleanupStepResult: Sendable {
     public var step: MergeCleanupStep
     public var error: String?
@@ -55,8 +55,8 @@ public struct MergeCleanupStepResult: Sendable {
     public var isSuccess: Bool { error == nil }
 }
 
-/// `mergeAndCleanUp` 全体の結果。実行されたステップのみが `steps` に含まれる
-/// (前段が失敗した場合、後続ステップは記録されず実行もされない)。
+/// The overall result of `mergeAndCleanUp`. Only steps that were executed appear in `steps`
+/// (if an earlier step failed, subsequent steps are neither recorded nor executed).
 public struct MergeCleanupResult: Sendable {
     public var steps: [MergeCleanupStepResult]
 
@@ -71,10 +71,10 @@ public struct MergeCleanupResult: Sendable {
     }
 }
 
-/// マージ(または rebase)後の後始末を1つのフローとしてまとめる。
-/// merge が失敗した場合はその時点で停止する(未マージの状態で worktree/ブランチを消すと
-/// 変更を失うため)。worktree 削除が失敗した場合もブランチ削除は行わない
-/// (force 未指定の dirty 検出等、安全のため人手の確認を挟むべきケース)。
+/// Bundles post-merge (or post-rebase) cleanup into a single flow.
+/// If the merge fails, stops right there (deleting the worktree/branch while unmerged
+/// would lose changes). If the worktree removal fails, the branch deletion is also skipped
+/// (cases like a dirty tree detected without force — safety demands human confirmation).
 public struct MergeCleanupCoordinator: Sendable {
     public var gitService: GitService
 

@@ -1,11 +1,11 @@
 import Foundation
 import VitermCore
 
-/// セッション構成の永続化(再起動時の復元用)。
+/// Persistence of the session configuration (for restore on relaunch).
 ///
-/// 保存するのは「どの worktree にどのプリセットのセッションが何本あったか」と選択中セッション。
-/// PTY の中身(スクロールバック・実行中プロセス)は復元しない。
-/// 保存先: ~/Library/Application Support/viterm/sessions.json
+/// What is saved: which worktree had how many sessions of which preset, plus the selected
+/// session. PTY contents (scrollback, running processes) are not restored.
+/// Location: ~/Library/Application Support/viterm/sessions.json
 struct SessionRestoreStore {
     struct PersistedSession: Codable {
         var worktreePath: String
@@ -14,7 +14,7 @@ struct SessionRestoreStore {
 
     struct State: Codable {
         var sessions: [PersistedSession]
-        /// 選択していたセッションの(復元順での)インデックス。
+        /// Index (in restore order) of the session that was selected.
         var selectedIndex: Int?
     }
 
@@ -35,7 +35,7 @@ struct SessionRestoreStore {
             let data = try JSONEncoder().encode(state)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            // 永続化失敗は致命的ではないので無視(次回保存で上書きされる)。
+            // Persistence failure is not fatal, so ignore it (overwritten by the next save).
         }
     }
 

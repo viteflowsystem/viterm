@@ -1,27 +1,27 @@
 import Foundation
 
-/// detector 実装間で共有する、テキストパターンマッチの小さなヘルパー集。
+/// Small collection of text-pattern-matching helpers shared across detector implementations.
 enum TextSignals {
-    /// Claude Code / Codex 等のCLIが「作業中」の表現に使うスピナー・装飾記号。
-    /// 点字スピナー(⠋⠙…)は Codex 等向けの当初セット。花形・幾何学記号(✱✲…○●)は
-    /// ccmanager(kbwo/ccmanager)の claude.ts (2026-07 時点の main) で実戦検証済みのセットを移植したもの。
+    /// Spinner/decoration symbols that CLIs such as Claude Code / Codex use to indicate "working".
+    /// The braille spinners (⠋⠙…) are the original set for Codex and the like. The asterisk/geometric
+    /// symbols (✱✲…○●) are ported from the battle-tested set in ccmanager (kbwo/ccmanager)'s claude.ts (main as of 2026-07).
     static let spinnerCharacters: Set<Character> = Set(
         "⠋⠙⠸⠼⠴⠦⠧⠇⠏⠹"
             + "✱✲✳✴✵✶✷✸✹✺✻✼✽✾✿❀❁❂❃❇❈❉❊❋✢✣✤✥✦✧✨⊛⊕⊙◉◎◍⁂⁕※⍟☼★☆·•⏺▸▹∙⋅○●"
     )
 
-    /// 大小文字を無視して、いずれかの部分文字列を含むか。
+    /// Whether the line contains any of the substrings, case-insensitively.
     static func containsAny(_ line: String, of needles: [String]) -> Bool {
         let lower = line.lowercased()
         return needles.contains { lower.contains($0) }
     }
 
-    /// 正規表現(ICU)でのマッチ判定。
+    /// Regular-expression (ICU) match check.
     static func matchesRegex(_ line: String, pattern: String) -> Bool {
         line.range(of: pattern, options: .regularExpression) != nil
     }
 
-    /// 行頭(前後の空白を無視)がスピナー文字で始まっているか。
+    /// Whether the line starts (ignoring surrounding whitespace) with a spinner character.
     static func startsWithSpinner(_ line: String) -> Bool {
         guard let first = line.trimmingCharacters(in: .whitespaces).first else { return false }
         return spinnerCharacters.contains(first)

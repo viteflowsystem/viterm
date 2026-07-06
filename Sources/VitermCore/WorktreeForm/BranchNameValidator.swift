@@ -1,6 +1,6 @@
 import Foundation
 
-/// ブランチ名として不正な理由。`git check-ref-format --branch` 相当のルールのサブセット。
+/// Reason a branch name is invalid. A subset of the rules equivalent to `git check-ref-format --branch`.
 public enum BranchNameValidationError: Sendable, Equatable, CustomStringConvertible {
     case empty
     case containsWhitespace
@@ -10,13 +10,13 @@ public enum BranchNameValidationError: Sendable, Equatable, CustomStringConverti
     case endsWithDotLock
     case containsDoubleDot
     case containsConsecutiveSlashes
-    /// `/` で始まる、`/` で終わる、または `//` を含む結果として空になる階層があるか、
-    /// いずれかの階層が `.` から始まっている。
+    /// A path component is empty (as a result of starting with `/`, ending with `/`,
+    /// or containing `//`), or some component starts with `.`.
     case containsEmptyOrDotPathComponent
     case containsInvalidCharacter(Character)
     case containsAtBrace
     case isSingleAt
-    /// 既に同名のローカルブランチが存在する(新規ブランチ作成時のみチェック)。
+    /// A local branch with the same name already exists (checked only when creating a new branch).
     case duplicatesExistingBranch
 
     public var description: String {
@@ -51,15 +51,15 @@ public enum BranchNameValidationError: Sendable, Equatable, CustomStringConverti
     }
 }
 
-/// `git check-ref-format --branch` が課すルールのサブセットでブランチ名を検証する。
+/// Validates a branch name against a subset of the rules imposed by `git check-ref-format --branch`.
 public enum BranchNameValidator {
-    /// ASCII 制御文字に加え、git が ref 名に許さない記号。
+    /// Symbols git does not allow in ref names, in addition to ASCII control characters.
     private static let invalidCharacters: Set<Character> = ["~", "^", ":", "?", "*", "[", "\\"]
 
-    /// `name` を検証する。問題が無ければ `nil`。
+    /// Validates `name`. Returns `nil` if there is no problem.
     /// - Parameters:
-    ///   - existingLocalBranchNames: 重複チェックに使う既存のローカルブランチ名一覧。
-    ///   - checkDuplicate: 重複チェックを行うかどうか(新規にローカルブランチを作らないモードでは `false` にする)。
+    ///   - existingLocalBranchNames: Names of existing local branches used for the duplicate check.
+    ///   - checkDuplicate: Whether to perform the duplicate check (set to `false` in modes that do not create a new local branch).
     public static func validate(
         _ name: String,
         existingLocalBranchNames: [String] = [],

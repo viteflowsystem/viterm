@@ -11,7 +11,7 @@ viterm は Swift + libghostty のネイティブアプリなので、electron-bu
 
 ```sh
 security find-identity -v -p codesigning
-# → "Developer ID Application: AKIFUMI AKAZAWA (Q2RDXJ2534)" が出れば OK
+# → "Developer ID Application: <Your Name> (TEAMID)" が出れば OK
 ```
 
 無ければ Xcode → Settings → Accounts → Manage Certificates → ＋ → Developer ID

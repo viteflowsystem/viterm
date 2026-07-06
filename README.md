@@ -11,6 +11,17 @@ chrome は AppKit で描画する構成により、TUI in TUI 構成([ccmanager]
 同時に立ち上げられる点(1 worktree : N セッション)が、[cmux](https://github.com/manaflow-ai/cmux) や
 ccmanager にはない差別化点。背景・要件の詳細は [docs/requirements.md](docs/requirements.md) を参照。
 
+## インストール
+
+```sh
+brew tap viteflowsystem/tap
+brew install --cask viterm
+```
+
+DMG を直接ダウンロードする場合は
+[homebrew-tap の Releases](https://github.com/viteflowsystem/homebrew-tap/releases) から。
+配布物は Developer ID 署名 + Apple 公証済み。要件: macOS 15+ / Apple Silicon。
+
 ## 主要機能
 
 - **git worktree 管理**: 新規ブランチ / 既存ローカルブランチ / リモートブランチからの worktree 作成、
@@ -118,3 +129,8 @@ swift run VitermApp    # アプリ起動
 - [ghostty-integration.md](docs/ghostty-integration.md) — libghostty 統合(T2/T3)で得た知見。特にこの開発環境固有のビルド阻害要因と回避策
 - [research.md](docs/research.md) — cmux / ccmanager の調査メモ
 - [ui-mock.html](docs/ui-mock.html) — UI モック(ブラウザで直接開いて確認する)
+
+## ライセンス・サポート
+
+MIT License([LICENSE](LICENSE))。viterm は無料の OSS です。
+開発を支援したい方は GitHub Sponsors(準備中)からどうぞ。

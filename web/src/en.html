@@ -1,4 +1,4 @@
-<title>viterm — AIエージェントを、並べて走らせる</title>
+<title>viterm — Run AI coding agents in parallel</title>
 <style>
   :root {
     --bg: #14161f;
@@ -284,9 +284,9 @@
       viterm
     </a>
     <nav class="nav-links">
-      <a href="#features" class="hide-sm">機能</a>
-      <a href="#keys" class="hide-sm">キーマップ</a>
-      <a href="/en/" class="lang" aria-label="English">EN</a>
+      <a href="#features" class="hide-sm">Features</a>
+      <a href="#keys" class="hide-sm">Keymap</a>
+      <a href="/" class="lang" aria-label="日本語">JA</a>
       <a href="https://github.com/viteflowsystem/viterm" class="chip" style="text-decoration:none">GitHub</a>
     </nav>
   </div>
@@ -297,23 +297,23 @@
   <section class="hero">
     <div class="wrap">
       <p class="eyebrow">Swift · AppKit · libghostty</p>
-      <h1 class="headline">AIエージェントを、<br><span class="grad-text">並べて</span>走らせる。</h1>
-      <p class="subhead">Claude Code も Codex も、git worktree ごとに何本でも。崩れない、待たせない、ネイティブな macOS ターミナル。</p>
+      <h1 class="headline">Run AI coding agents<br>in <span class="grad-text">parallel</span>.</h1>
+      <p class="subhead">Claude Code, Codex, as many as you want — one per git worktree. A native macOS terminal that never garbles on resize and never leaves you waiting.</p>
       <div class="cta-row">
-        <button class="install" type="button" data-copy="brew install --cask viteflowsystem/tap/viterm" title="クリックでコピー">
+        <button class="install" type="button" data-copy="brew install --cask viteflowsystem/tap/viterm" title="Click to copy">
           <span class="dollar">$</span>brew install --cask viteflowsystem/tap/viterm<span class="copy">⧉ copy</span>
         </button>
-        <a class="btn btn-ghost" href="#features">↓ 機能を見る</a>
+        <a class="btn btn-ghost" href="#features">↓ See the features</a>
       </div>
       <div class="hero-meta">
-        <span><b>1 worktree : N</b> セッション</span>
-        <span><b>非 Electron</b> ネイティブ描画</span>
+        <span><b>1 worktree : N</b> sessions</span>
+        <span><b>Not Electron</b> native rendering</span>
         <span><b>macOS 15+</b> Apple Silicon</span>
       </div>
     </div>
 
     <div class="wrap shot reveal">
-      <div class="window" role="img" aria-label="viterm のアプリ画面: サイドバーに複数リポジトリと並列セッション、右にターミナル">
+      <div class="window" role="img" aria-label="viterm app window: sidebar with multiple repositories and parallel sessions, terminal on the right">
         <div class="titlebar">
           <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
           <span class="t">viterm — feat/palette · claude #1</span>
@@ -325,18 +325,18 @@
             <div class="sess on"><span class="st busy"></span>claude #1<span class="k">⌘1</span></div>
             <div class="sess"><span class="st wait"></span>claude #2<span class="badge">1</span></div>
             <div class="sess"><span class="st idle"></span>codex #1<span class="k">⌘3</span></div>
-            <div class="add">＋ セッションを追加</div>
+            <div class="add">＋ New session</div>
             <div class="repo-sep"></div>
             <div class="repo"><span class="tri">▾</span>comoru<span class="plus">＋</span></div>
             <div class="wt"><span class="tri">▾</span><span class="b">fix/login</span><span class="git"><span class="rd">●</span></span></div>
             <div class="sess"><span class="st busy"></span>claude #1<span class="k">⌘4</span></div>
-            <div class="add">＋ セッションを追加</div>
+            <div class="add">＋ New session</div>
           </div>
           <div class="term">
             <div class="term-body">
-<pre><span class="c-user">❯ サイドバーの配色をブランドに合わせて整えて</span>
+<pre><span class="c-user">❯ Match the sidebar colors to the brand palette</span>
 
-<span class="c-dim">⏺</span> 配色トークンを確認します。
+<span class="c-dim">⏺</span> Let me check the color tokens.
 
 <span class="c-tool">⏺ Read</span><span class="c-dim">(Sources/VitermApp/UI/SidebarViewController.swift)</span>
   <span class="c-dim">└ 512 lines</span>
@@ -344,7 +344,7 @@
 <span class="c-tool">⏺ Edit</span><span class="c-dim">(SidebarViewController.swift)</span>
   <span class="c-dim">└ +18 −6</span>
 
-<span class="c-ok">⏺</span> ブランドのグラデーションに寄せました。ビルドして確認します。
+<span class="c-ok">⏺</span> Aligned to the brand gradient. Building to verify.
 
 <span class="c-warn"><span class="spin">✳</span> Forging…</span> <span class="c-dim">(1m 42s · ↓ 3.1k tokens · esc to interrupt)</span></pre>
             </div>
@@ -352,7 +352,7 @@
               <span class="cur">viterm · feat/palette · claude #1</span>
               <span class="chip2"><span class="st busy"></span>2 busy</span>
               <span class="chip2"><span class="st wait"></span>1 waiting</span>
-              <span class="r">⌘⇧U 未読へ</span>
+              <span class="r">⌘⇧U to unread</span>
             </div>
           </div>
         </div>
@@ -364,25 +364,25 @@
   <section class="versus">
     <div class="wrap reveal">
       <p class="sec-eyebrow">Not just tabs</p>
-      <h2 class="punch">タブは、並列じゃない。<span class="grad-text">切り替え</span>だ。</h2>
-      <p class="lead">10 個のタブを開いても、いま誰が入力待ちで、誰が動いていて、どれが終わったのかは、1つずつ開いて確かめるしかない。viterm は、それを一望させる。</p>
+      <h2 class="punch">Tabs don't run in parallel.<br>They just <span class="grad-text">switch</span>.</h2>
+      <p class="lead">Ten tabs open, and you still can't tell which agent is waiting on you, which is working, and which just finished — not without opening each one. viterm shows you all of it at once.</p>
       <div class="vs-grid">
         <div class="vs-card them">
-          <div class="vs-label">ターミナルのタブ</div>
+          <div class="vs-label">Terminal tabs</div>
           <ul class="vs-list">
-            <li><span class="mk">—</span>アクティブな1枚しか見えない。他は裏</li>
-            <li><span class="mk">—</span>どのタブが入力待ちか、開くまで分からない</li>
-            <li><span class="mk">—</span>worktree は自分で <span style="font-family:var(--mono)">cd</span> して作って名前をつける</li>
-            <li><span class="mk">—</span>タブが増えるほど、頭の中で状態を管理する</li>
+            <li><span class="mk">—</span>You see one active pane. The rest are hidden</li>
+            <li><span class="mk">—</span>No way to tell which tab is waiting until you open it</li>
+            <li><span class="mk">—</span>Worktrees are your job: <span style="font-family:var(--mono)">cd</span>, create, name</li>
+            <li><span class="mk">—</span>More tabs, more state to hold in your head</li>
           </ul>
         </div>
         <div class="vs-card me">
           <div class="vs-label">viterm</div>
           <ul class="vs-list">
-            <li><span class="mk">✓</span>全セッションの busy / 待ち / idle がサイドバーに常時</li>
-            <li><span class="mk">✓</span>入力待ちは通知が飛び、⌘⇧U で一発ジャンプ</li>
-            <li><span class="mk">✓</span>ブランチから worktree を作って即エージェント起動</li>
-            <li><span class="mk">✓</span>状態はアプリが覚えている。あなたは眺めるだけ</li>
+            <li><span class="mk">✓</span>Every session's busy / waiting / idle, always in the sidebar</li>
+            <li><span class="mk">✓</span>Waiting fires a notification; ⌘⇧U jumps you there</li>
+            <li><span class="mk">✓</span>Spin a worktree off a branch and launch an agent in it</li>
+            <li><span class="mk">✓</span>The app holds the state. You just watch</li>
           </ul>
         </div>
       </div>
@@ -394,14 +394,14 @@
     <div class="wrap">
       <div class="reveal" style="margin-bottom:64px">
         <p class="sec-eyebrow">Features</p>
-        <h2>並列で走らせるための、四つの土台。</h2>
+        <h2>Four foundations for working in parallel.</h2>
       </div>
       <!-- F1 -->
       <div class="feature reveal">
         <div class="f-copy">
           <span class="f-tag">1 worktree : N sessions</span>
-          <h3>1つの worktree に、何本でも。</h3>
-          <p>同じブランチで Claude に実装させながら、隣で Codex にテストを書かせる。素のシェルも一緒に。⌘T でセッションはサイドバーに積み上がり、⌘1〜9 で行き来する。ウィンドウを切り替えても、裏のセッションは生きたまま。</p>
+          <h3>As many sessions as you want, per worktree.</h3>
+          <p>Have Claude implement on a branch while Codex writes the tests right next to it — and a plain shell alongside. ⌘T stacks sessions in the sidebar; ⌘1–9 moves between them. Switch away and the background sessions keep running.</p>
         </div>
         <div class="f-visual">
           <div class="fv-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
@@ -410,7 +410,7 @@
             <div class="mini-row"><span class="st busy"></span>claude #1 <span style="color:var(--faint);margin-left:auto">⌘1</span></div>
             <div class="mini-row"><span class="st wait"></span>codex #1 <span style="color:var(--faint);margin-left:auto">⌘2</span></div>
             <div class="mini-row"><span class="st idle"></span>zsh <span style="color:var(--faint);margin-left:auto">⌘3</span></div>
-            <div class="mini-row" style="color:var(--faint)">＋ セッションを追加</div>
+            <div class="mini-row" style="color:var(--faint)">＋ New session</div>
           </div>
         </div>
       </div>
@@ -419,8 +419,8 @@
       <div class="feature flip reveal">
         <div class="f-copy">
           <span class="f-tag">Native rendering</span>
-          <h3>崩れない。ネイティブだから。</h3>
-          <p>ターミナル描画は Ghostty と同じエンジン(libghostty)がネイティブに担当する。ウィンドウをどうリサイズしても、vim も Claude Code も崩れない。TUI in TUI をやめた構造の勝利。起動は一瞬、Electron じゃない。</p>
+          <h3>Never garbles. Because it's native.</h3>
+          <p>The terminal is drawn by the same engine as Ghostty (libghostty), natively. Resize the window however you like — vim and Claude Code stay intact. That's the payoff of dropping the TUI-in-TUI. It launches instantly, and it isn't Electron.</p>
         </div>
         <div class="f-visual">
           <div class="fv-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span style="margin-left:auto;color:var(--faint);font-size:11px">↔ resize</span></div>
@@ -431,7 +431,7 @@
 │  3    override func    │
 │  4      layout() { ... │
 └───────────────────────┘
-<span style="color:var(--plus)">✓ リサイズしても行がずれない</span></pre>
+<span style="color:var(--plus)">✓ Lines stay put on resize</span></pre>
           </div>
         </div>
       </div>
@@ -440,16 +440,16 @@
       <div class="feature reveal">
         <div class="f-copy">
           <span class="f-tag">Worktree lifecycle</span>
-          <h3>作成先は、あなたの流儀で。</h3>
-          <p>worktree をどこに置くかはテンプレートで自由に決められる。<span style="font-family:var(--mono);color:var(--text)">~/worktrees/{project}/{branch}</span> でも、リポジトリ隣の <span style="font-family:var(--mono);color:var(--text)">../{branch}</span> でも。作った瞬間にエージェントを起動し、終わったら main に merge か rebase して、サイドバーからそのまま畳む。</p>
+          <h3>Put worktrees wherever you like.</h3>
+          <p>A template decides where worktrees land. <span style="font-family:var(--mono);color:var(--text)">~/worktrees/{project}/{branch}</span>, or <span style="font-family:var(--mono);color:var(--text)">../{branch}</span> next to the repo — your call. Launch an agent the moment it's created, then merge or rebase into main and fold it away from the sidebar when you're done.</p>
         </div>
         <div class="f-visual">
           <div class="fv-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span style="margin-left:auto;color:var(--faint);font-size:11px">⌘N</span></div>
           <div class="fv-body">
-            <div style="color:var(--faint);font-size:11px">作成先テンプレート</div>
+            <div style="color:var(--faint);font-size:11px">Path template</div>
             <div style="border:1px solid var(--line2);border-radius:6px;padding:6px 9px;margin:4px 0 8px;color:var(--text)">~/worktrees/{project}/{branch}</div>
             <div style="color:var(--muted)">→ ~/worktrees/viterm/feat-palette</div>
-            <div style="margin-top:11px;color:var(--plus)">◉ 作成後に claude を起動</div>
+            <div style="margin-top:11px;color:var(--plus)">◉ Launch claude after creating</div>
           </div>
         </div>
       </div>
@@ -458,15 +458,15 @@
       <div class="feature flip reveal">
         <div class="f-copy">
           <span class="f-tag">Status &amp; notifications</span>
-          <h3>入力待ちを、見逃さない。</h3>
-          <p>各セッションは busy / 入力待ち / idle をサイドバーのドットで示す。エージェントが確認を求めたら macOS 通知が飛び、⌘⇧U で最新の入力待ちへ一発でジャンプ。OSC 通知シーケンスを一次シグナルに、画面検出をフォールバックにした二段構え。</p>
+          <h3>Never miss a prompt for input.</h3>
+          <p>Each session shows busy / waiting / idle as a dot in the sidebar. When an agent asks for confirmation, a macOS notification fires, and ⌘⇧U jumps to the latest one waiting. OSC notification sequences are the primary signal; screen detection is the fallback.</p>
         </div>
         <div class="f-visual">
           <div class="fv-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
           <div class="fv-body">
-            <div class="mini-row"><span class="st busy"></span><span>busy</span><span style="color:var(--faint);margin-left:auto">処理中</span></div>
-            <div class="mini-row"><span class="st wait"></span><span>waiting</span><span style="color:var(--wait);margin-left:auto">通知 + バッジ</span></div>
-            <div class="mini-row"><span class="st idle"></span><span>idle</span><span style="color:var(--faint);margin-left:auto">1.5s デバウンス</span></div>
+            <div class="mini-row"><span class="st busy"></span><span>busy</span><span style="color:var(--faint);margin-left:auto">working</span></div>
+            <div class="mini-row"><span class="st wait"></span><span>waiting</span><span style="color:var(--wait);margin-left:auto">notify + badge</span></div>
+            <div class="mini-row"><span class="st idle"></span><span>idle</span><span style="color:var(--faint);margin-left:auto">1.5s debounce</span></div>
           </div>
         </div>
       </div>
@@ -477,17 +477,17 @@
   <section id="keys" class="keys">
     <div class="wrap reveal">
       <p class="sec-eyebrow">Keyboard-first</p>
-      <h2>手をホームポジションから離さない。</h2>
-      <p class="lead">worktree もセッションも通知も、⌘K のコマンドパレットから全部呼べる。マウスは要らない。</p>
+      <h2>Keep your hands on the home row.</h2>
+      <p class="lead">Worktrees, sessions, notifications — all reachable from the ⌘K command palette. No mouse required.</p>
       <div class="keygrid">
-        <div class="keycard"><kbd>⌘K</kbd><span>コマンドパレット</span></div>
-        <div class="keycard"><kbd>⌘N</kbd><span>新規 worktree</span></div>
-        <div class="keycard"><kbd>⌘T</kbd><span>セッションを追加</span></div>
-        <div class="keycard"><kbd>⌘1–9</kbd><span>セッション切替</span></div>
-        <div class="keycard"><kbd>⌘⇧U</kbd><span>入力待ちへジャンプ</span></div>
-        <div class="keycard"><kbd>⌘D</kbd><span>ペイン分割</span></div>
-        <div class="keycard"><kbd>⌘,</kbd><span>設定</span></div>
-        <div class="keycard"><kbd>⌘B</kbd><span>サイドバー切替</span></div>
+        <div class="keycard"><kbd>⌘K</kbd><span>Command palette</span></div>
+        <div class="keycard"><kbd>⌘N</kbd><span>New worktree</span></div>
+        <div class="keycard"><kbd>⌘T</kbd><span>New session</span></div>
+        <div class="keycard"><kbd>⌘1–9</kbd><span>Switch session</span></div>
+        <div class="keycard"><kbd>⌘⇧U</kbd><span>Jump to waiting</span></div>
+        <div class="keycard"><kbd>⌘D</kbd><span>Split pane</span></div>
+        <div class="keycard"><kbd>⌘,</kbd><span>Settings</span></div>
+        <div class="keycard"><kbd>⌘B</kbd><span>Toggle sidebar</span></div>
       </div>
     </div>
   </section>
@@ -496,13 +496,13 @@
   <section id="final" class="final">
     <div class="wrap reveal">
       <p class="sec-eyebrow" style="color:var(--muted)">Free &amp; open source</p>
-      <h2>並列で走らせる準備は、<span class="grad-text">できてる。</span></h2>
-      <p class="lead">viterm は MIT ライセンスの無料 OSS。Homebrew で今すぐ。</p>
+      <h2>Ready to run them <span class="grad-text">in parallel.</span></h2>
+      <p class="lead">viterm is free, MIT-licensed open source. Install it right now with Homebrew.</p>
       <div class="cta-row">
-        <button class="install" type="button" data-copy="brew install --cask viteflowsystem/tap/viterm" title="クリックでコピー">
+        <button class="install" type="button" data-copy="brew install --cask viteflowsystem/tap/viterm" title="Click to copy">
           <span class="dollar">$</span>brew install --cask viteflowsystem/tap/viterm<span class="copy">⧉ copy</span>
         </button>
-        <a class="btn btn-ghost" href="https://github.com/viteflowsystem/viterm">GitHub でソースを見る</a>
+        <a class="btn btn-ghost" href="https://github.com/viteflowsystem/viterm">View source on GitHub</a>
       </div>
     </div>
   </section>

@@ -33,26 +33,35 @@ final class NewWorktreeSheet: NSViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    private enum Layout {
+        static let contentWidth: CGFloat = 440
+        static let horizontalInset: CGFloat = 24
+        static let fieldWidth: CGFloat = contentWidth - horizontalInset * 2
+    }
+
     override func loadView() {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 16, right: 20)
+        stack.spacing = 14
+        stack.edgeInsets = NSEdgeInsets(top: 22, left: Layout.horizontalInset, bottom: 18, right: Layout.horizontalInset)
 
         let title = NSTextField(labelWithString: "新規 worktree — \(form.repository.name)")
-        title.font = .boldSystemFont(ofSize: 13)
+        title.font = .boldSystemFont(ofSize: 14)
         stack.addArrangedSubview(title)
 
-        stack.addArrangedSubview(fieldLabel("ブランチ名"))
         branchField.placeholderString = "feat/palette"
+        branchField.font = .systemFont(ofSize: 13)
         branchField.target = self
         branchField.action = #selector(formChanged)
-        // 入力のたびにプレビューを更新するため delegate も使う。
         branchField.delegate = self
-        stack.addArrangedSubview(branchField)
+        stack.addArrangedSubview(fieldGroup(label: "ブランチ名", control: branchField))
 
-        stack.addArrangedSubview(fieldLabel("ベースブランチ"))
+        // エラー(ブランチ名/パス衝突)はブランチ名フィールドの直下に沿わせる。
+        errorLabel.font = .systemFont(ofSize: 11)
+        errorLabel.textColor = .systemRed
+        errorLabel.isHidden = true
+
         basePopup.addItem(withTitle: "(現在の HEAD)")
         for branch in form.availableBranches {
             let suffix = branch.kind == .remote ? " (remote)" : ""
@@ -60,21 +69,22 @@ final class NewWorktreeSheet: NSViewController {
         }
         basePopup.target = self
         basePopup.action = #selector(formChanged)
-        stack.addArrangedSubview(basePopup)
+        stack.addArrangedSubview(fieldGroup(label: "ベースブランチ", control: basePopup))
 
-        stack.addArrangedSubview(fieldLabel("作成先テンプレート(その場上書き可)"))
         pathField.stringValue = form.defaultPathTemplate.raw
+        pathField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         pathField.target = self
         pathField.action = #selector(formChanged)
         pathField.delegate = self
-        stack.addArrangedSubview(pathField)
-
         pathPreviewLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         pathPreviewLabel.textColor = .secondaryLabelColor
-        stack.addArrangedSubview(pathPreviewLabel)
+        pathPreviewLabel.lineBreakMode = .byTruncatingMiddle
+        stack.addArrangedSubview(fieldGroup(
+            label: "作成先テンプレート(その場上書き可)",
+            control: pathField,
+            caption: pathPreviewLabel
+        ))
 
-        errorLabel.font = .systemFont(ofSize: 11)
-        errorLabel.textColor = .systemRed
         stack.addArrangedSubview(errorLabel)
 
         copyCheckbox.state = form.copySessionData ? .on : .off
@@ -88,31 +98,51 @@ final class NewWorktreeSheet: NSViewController {
         launchCheckbox.action = #selector(formChanged)
         stack.addArrangedSubview(launchCheckbox)
 
-        let buttons = NSStackView()
-        buttons.orientation = .horizontal
-        buttons.spacing = 12
+        // ボタン行は幅いっぱいに広げて右寄せする。
         let cancel = NSButton(title: "キャンセル", target: self, action: #selector(didCancel))
         cancel.keyEquivalent = "\u{1b}"
+        cancel.bezelStyle = .rounded
+        createButton.title = "作成して起動"
+        createButton.bezelStyle = .rounded
+        createButton.keyEquivalent = "\r"
         createButton.target = self
         createButton.action = #selector(didCommit)
-        createButton.keyEquivalent = "\r"
-        buttons.addArrangedSubview(cancel)
-        buttons.addArrangedSubview(createButton)
+        let buttons = NSStackView(views: [NSView(), cancel, createButton])
+        buttons.orientation = .horizontal
+        buttons.spacing = 12
+        buttons.setHuggingPriority(.defaultLow, for: .horizontal)
+        buttons.widthAnchor.constraint(equalToConstant: Layout.fieldWidth).isActive = true
         stack.addArrangedSubview(buttons)
 
-        for field in [branchField, pathField] {
-            field.widthAnchor.constraint(greaterThanOrEqualToConstant: 420).isActive = true
-        }
-
-        view = stack
+        let container = NSView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: container.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            container.widthAnchor.constraint(equalToConstant: Layout.contentWidth),
+        ])
+        view = container
         syncFromForm()
     }
 
-    private func fieldLabel(_ text: String) -> NSTextField {
+    /// ラベル + コントロール(+ 任意のキャプション)を縦に積んだ、幅固定の1グループ。
+    private func fieldGroup(label text: String, control: NSView, caption: NSView? = nil) -> NSView {
         let label = NSTextField(labelWithString: text)
         label.font = .systemFont(ofSize: 11)
         label.textColor = .secondaryLabelColor
-        return label
+
+        control.translatesAutoresizingMaskIntoConstraints = false
+        control.widthAnchor.constraint(equalToConstant: Layout.fieldWidth).isActive = true
+
+        let views = [label, control] + (caption.map { [$0] } ?? [])
+        let group = NSStackView(views: views)
+        group.orientation = .vertical
+        group.alignment = .leading
+        group.spacing = 5
+        return group
     }
 
     // MARK: - Form sync
@@ -139,20 +169,21 @@ final class NewWorktreeSheet: NSViewController {
     }
 
     private func syncFromForm() {
-        if let preview = form.pathPreview {
-            pathPreviewLabel.stringValue = "→ \(preview)"
-        } else {
-            pathPreviewLabel.stringValue = ""
-        }
+        pathPreviewLabel.stringValue = form.pathPreview.map { "→ \($0)" } ?? ""
+
+        let error: String?
         if form.branchName.isEmpty {
-            errorLabel.stringValue = ""
-        } else if let error = form.branchNameError {
-            errorLabel.stringValue = "ブランチ名: \(error)"
+            error = nil
+        } else if let branchError = form.branchNameError {
+            error = "ブランチ名: \(branchError)"
         } else if form.hasPathCollision {
-            errorLabel.stringValue = "作成先パスが既存の worktree と衝突しています"
+            error = "作成先パスが既存の worktree と衝突しています"
         } else {
-            errorLabel.stringValue = ""
+            error = nil
         }
+        errorLabel.stringValue = error ?? ""
+        errorLabel.isHidden = (error == nil)
+
         createButton.isEnabled = form.isValid
     }
 

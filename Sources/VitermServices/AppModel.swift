@@ -198,12 +198,16 @@ public final class AppModel {
     }
 
     private func rebuildSidebar() {
-        let previousSelection = sidebar.selectedSessionID
+        let previousSessionSelection = sidebar.selectedSessionID
+        let previousWorktreeSelection = sidebar.selectedWorktreePath
+        let previousActiveByWorktree = sidebar.activeSessionByWorktree
         sidebar = SidebarViewModel(
             repositories: repositories,
             worktrees: worktrees,
             sessions: sessions,
-            selectedSessionID: previousSelection
+            selectedSessionID: previousSessionSelection,
+            selectedWorktreePath: previousWorktreeSelection,
+            activeSessionByWorktree: previousActiveByWorktree
         )
     }
 
@@ -341,12 +345,17 @@ public final class AppModel {
     }
 
     /// セッションを一覧から取り除く(PTY/サーフェスの破棄は呼び出し側 = SessionManager の責務)。
+    ///
+    /// 閉じたのがアクティブタブ(選択中セッション)だった場合、選択中 worktree はそのままに
+    /// 同じ worktree の別タブへ自動的に付け替える(`selectWorktree` の記憶解決ロジックに委譲)。
+    /// worktree にタブが1つも残らなければ選択は解除される。
     public func removeSession(_ sessionID: AgentSession.ID) {
         sessions.removeAll { $0.id == sessionID }
-        if sidebar.selectedSessionID == sessionID {
-            sidebar.select(sessionID: nil)
-        }
+        let worktreePathToReselect = sidebar.selectedSessionID == sessionID ? sidebar.selectedWorktreePath : nil
         rebuildSidebar()
+        if let worktreePathToReselect {
+            sidebar.selectWorktree(worktreePathToReselect)
+        }
     }
 
     /// セッション状態変化の受け口。`SessionStateMachine` 等が確定させた新状態を渡す。
@@ -384,12 +393,22 @@ public final class AppModel {
     }
 
     @discardableResult
-    public func selectShortcut(_ number: Int) -> Bool {
-        sidebar.selectShortcut(number)
-    }
-
-    @discardableResult
     public func jumpToLatestWaitingSession() -> Bool {
         sidebar.jumpToLatestWaiting()
+    }
+
+    /// worktree を選択する(選択の主語の切り替え)。`nil` で選択解除。
+    public func selectWorktree(_ path: String?) {
+        sidebar.selectWorktree(path)
+    }
+
+    /// ⌘⌥↓ 相当: 表示順で次の worktree を選択する(リポジトリ横断・循環)。
+    public func selectNextWorktree() {
+        sidebar.selectNextWorktree()
+    }
+
+    /// ⌘⌥↑ 相当: 表示順で前の worktree を選択する(リポジトリ横断・循環)。
+    public func selectPreviousWorktree() {
+        sidebar.selectPreviousWorktree()
     }
 }

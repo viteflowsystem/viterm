@@ -3,8 +3,9 @@ import Foundation
 /// サイドバー(リポジトリ → worktree → セッションの3階層ツリー)の UI 非依存な状態。
 ///
 /// `Repository` / `Worktree` / `AgentSession` のフラットな配列から木構造を組み立て、
-/// ⌘1..9 のショートカット番号割当、リポジトリ折りたたみ時の waiting バッジ集約、
-/// 状態集計(busy/waiting/idle)、選択セッションの管理(次/前移動・⌘⇧U ジャンプ)を提供する。
+/// リポジトリ折りたたみ時の waiting バッジ集約、状態集計(busy/waiting/idle)、
+/// 選択セッションの管理(次/前移動・⌘⇧U ジャンプ)を提供する。⌘1..9 のショートカット番号は
+/// タブ局所(`TabBarViewModel`)の役割のため、ここでは割り当てない。
 ///
 /// 選択の主語は worktree(`selectedWorktreePath`)。worktree を離れて戻ったときに同じタブへ
 /// 復帰できるよう、worktree ごとの最終アクティブセッションを `activeSessionByWorktree` に記憶する。
@@ -56,14 +57,12 @@ public struct SidebarViewModel: Sendable, Equatable {
         let worktreesByRepository = Dictionary(grouping: worktrees, by: \.repositoryPath)
         let sessionsByWorktree = Dictionary(grouping: sessions, by: \.worktreePath)
 
-        var shortcutCounter = 0
-
         return repositories.map { repository in
             let childWorktrees = (worktreesByRepository[repository.path] ?? []).map { worktree -> WorktreeNode in
-                let childSessions = (sessionsByWorktree[worktree.path] ?? []).map { session -> SessionNode in
-                    shortcutCounter += 1
-                    let shortcutNumber = shortcutCounter <= 9 ? shortcutCounter : nil
-                    return SessionNode(session: session, shortcutNumber: shortcutNumber)
+                // サイドバーにセッション行は無く ⌘1..9 はタブ局所(TabBarViewModel)の役割なので、
+                // ここでは番号を振らない。
+                let childSessions = (sessionsByWorktree[worktree.path] ?? []).map { session in
+                    SessionNode(session: session, shortcutNumber: nil)
                 }
                 return WorktreeNode(worktree: worktree, sessions: childSessions)
             }
@@ -139,16 +138,6 @@ public struct SidebarViewModel: Sendable, Equatable {
             return
         }
         select(sessionID: flat[(index - 1 + flat.count) % flat.count].id)
-    }
-
-    /// ⌘1..9 に対応するセッションを選択する。該当が無ければ何もせず `false` を返す。
-    @discardableResult
-    public mutating func selectShortcut(_ number: Int) -> Bool {
-        guard let node = flattenedSessions.first(where: { $0.shortcutNumber == number }) else {
-            return false
-        }
-        select(sessionID: node.id)
-        return true
     }
 
     /// ⌘⇧U 相当: 最新の waitingInput セッションへジャンプする。

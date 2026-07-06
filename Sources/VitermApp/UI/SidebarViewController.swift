@@ -1,22 +1,20 @@
 import AppKit
 import VitermCore
 
-/// サイドバー: リポジトリ → worktree → セッション の3階層ツリー(T7b)。
+/// サイドバー: リポジトリ → worktree の2階層ツリー。セッションはタブバー(`TabBarView`)側に
+/// 表示されるためサイドバーには現れず、worktree 行に配下セッションの状態がロールアップ表示される。
 /// データソースは VitermCore.SidebarViewModel(値型)。set(viewModel:) で丸ごと差し替える。
 @MainActor
 final class SidebarViewController: NSViewController {
-    var onSelectSession: ((AgentSession.ID) -> Void)?
-    /// worktree 行の選択(セッションが無い worktree でも ⌘T のターゲットにするため)。
+    /// worktree 行の選択(選択の主語は worktree)。
     var onSelectWorktree: ((String) -> Void)?
     var onAddRepository: (() -> Void)?
     var onNewWorktree: (() -> Void)?
     var onNewSession: (() -> Void)?
     var onShowPalette: (() -> Void)?
-    /// 「＋ セッションを追加」行のクリック(引数は worktree パス)。
+    /// worktree の右クリックメニュー「セッションを追加」(引数は worktree パス)。
     var onAddSession: ((String) -> Void)?
     // コンテキストメニュー(右クリック)のアクション。
-    var onRenameSession: ((AgentSession.ID, String) -> Void)?
-    var onTerminateSession: ((AgentSession.ID) -> Void)?
     var onMergeWorktree: ((String) -> Void)?
     var onRemoveWorktree: ((String) -> Void)?
     /// リポジトリ行の「＋」/右クリック→新規 worktree(引数はリポジトリパス)。
@@ -26,17 +24,12 @@ final class SidebarViewController: NSViewController {
     private let scrollView = NSScrollView()
     private let emptyState = NSStackView()
     private var viewModel = SidebarViewModel(repositories: [], worktrees: [], sessions: [])
-    /// セッション未起動の worktree を選択中の場合のハイライト対象。
-    private var selectedWorktreePath: String?
 
     // NSOutlineView の item は参照同一性で管理されるため、ツリーを class ノードに変換して保持する。
     private final class Node {
         enum Kind {
             case repository(RepositoryNode)
             case worktree(WorktreeNode)
-            case session(SessionNode)
-            /// セッションが無い worktree に表示する「＋ セッションを追加」アクション行。
-            case addSession(worktreePath: String)
         }
         let kind: Kind
         var children: [Node]
@@ -152,14 +145,13 @@ final class SidebarViewController: NSViewController {
     @objc private func didTapNewSession() { onNewSession?() }
     @objc private func didTapShowPalette() { onShowPalette?() }
 
-    func set(viewModel: SidebarViewModel, selectedWorktreePath: String? = nil) {
+    func set(viewModel: SidebarViewModel) {
         // 選択変更だけの再描画ではツリーを作り直さない(reloadData は展開状態を破棄するうえ、
         // 行クリックの delegate 通知中に同期 reload すると NSOutlineView の状態を壊しやすい)。
-        // ツリーの内容(リポジトリ/worktree/セッションの構成・状態)が前回と同一なら、
-        // 選択ハイライトの同期だけで返す。
+        // ツリーの内容(リポジトリ/worktree の構成・状態)が前回と同一なら、選択ハイライトの
+        // 同期だけで返す。
         let treeUnchanged = viewModel.repositories == self.viewModel.repositories
         self.viewModel = viewModel
-        self.selectedWorktreePath = selectedWorktreePath
         emptyState.isHidden = !viewModel.repositories.isEmpty
         if treeUnchanged {
             syncSelection()
@@ -174,10 +166,7 @@ final class SidebarViewController: NSViewController {
 
         rootNodes = viewModel.repositories.map { repo in
             Node(kind: .repository(repo), children: repo.worktrees.map { wt in
-                // セッション数に関係なく、末尾に「＋ セッションを追加」行を常設する。
-                let children = wt.sessions.map { Node(kind: .session($0)) }
-                    + [Node(kind: .addSession(worktreePath: wt.id))]
-                return Node(kind: .worktree(wt), children: children)
+                Node(kind: .worktree(wt))
             })
         }
         outlineView.reloadData()
@@ -185,7 +174,7 @@ final class SidebarViewController: NSViewController {
         syncSelection()
     }
 
-    /// 現在のツリー(再構築前の rootNodes)から、畳まれている repo/worktree の ID を集める。
+    /// 現在のツリー(再構築前の rootNodes)から、畳まれているリポジトリ行の ID を集める。
     /// 初回(rootNodes が空)は空集合 = 全展開が既定。
     private func snapshotCollapsedIDs() -> Set<String> {
         var collapsed: Set<String> = []
@@ -193,24 +182,15 @@ final class SidebarViewController: NSViewController {
             if let id = nodeID(repoNode), !outlineView.isItemExpanded(repoNode) {
                 collapsed.insert(id)
             }
-            for wtNode in repoNode.children {
-                if let id = nodeID(wtNode), !outlineView.isItemExpanded(wtNode) {
-                    collapsed.insert(id)
-                }
-            }
         }
         return collapsed
     }
 
-    /// reloadData 後、スナップショットで畳まれていなかった行を展開状態に戻す。
+    /// reloadData 後、スナップショットで畳まれていなかったリポジトリ行を展開状態に戻す。
     private func restoreExpansion(collapsedIDs: Set<String>) {
         for repoNode in rootNodes {
             guard let repoID = nodeID(repoNode), !collapsedIDs.contains(repoID) else { continue }
             outlineView.expandItem(repoNode)
-            for wtNode in repoNode.children {
-                guard let wtID = nodeID(wtNode), !collapsedIDs.contains(wtID) else { continue }
-                outlineView.expandItem(wtNode)
-            }
         }
     }
 
@@ -218,7 +198,6 @@ final class SidebarViewController: NSViewController {
         switch node.kind {
         case let .repository(repo): return repo.repository.path
         case let .worktree(wt): return wt.id
-        case .session, .addSession: return nil
         }
     }
 
@@ -231,17 +210,10 @@ final class SidebarViewController: NSViewController {
         defer { isSyncingSelection = false }
         for row in 0..<outlineView.numberOfRows {
             guard let node = outlineView.item(atRow: row) as? Node else { continue }
-            switch node.kind {
-            case let .session(s) where s.id == viewModel.selectedSessionID:
+            if case let .worktree(wt) = node.kind, wt.id == viewModel.selectedWorktreePath {
                 outlineView.selectRowIndexes([row], byExtendingSelection: false)
                 outlineView.scrollRowToVisible(row)
                 return
-            case let .worktree(wt) where viewModel.selectedSessionID == nil && wt.id == selectedWorktreePath:
-                outlineView.selectRowIndexes([row], byExtendingSelection: false)
-                outlineView.scrollRowToVisible(row)
-                return
-            default:
-                continue
             }
         }
         outlineView.deselectAll(nil)
@@ -251,12 +223,8 @@ final class SidebarViewController: NSViewController {
         let row = outlineView.clickedRow >= 0 ? outlineView.clickedRow : outlineView.selectedRow
         guard row >= 0, let node = outlineView.item(atRow: row) as? Node else { return }
         switch node.kind {
-        case let .session(s):
-            onSelectSession?(s.id)
         case let .worktree(wt):
             onSelectWorktree?(wt.id)
-        case let .addSession(worktreePath):
-            onAddSession?(worktreePath)
         case .repository:
             break
         }
@@ -304,6 +272,19 @@ extension SidebarViewController: NSOutlineViewDelegate {
 
         case let .worktree(wt):
             stack.addArrangedSubview(label(wt.worktree.branch, size: 11, weight: .semibold))
+            // 配下セッションの状態ドットをロールアップ表示(セッションごとに1ドット、表示順)。
+            // タブ化でセッション行が無くなったぶん、ここが「どの worktree で何が起きているか」を
+            // 一覧できる唯一の場所になる(必須要件)。
+            if !wt.sessions.isEmpty {
+                let dotsStack = NSStackView(views: wt.sessions.map { stateDot(for: $0.session.state, size: 7) })
+                dotsStack.orientation = .horizontal
+                dotsStack.spacing = 4
+                stack.addArrangedSubview(dotsStack)
+            }
+            let waiting = wt.waitingSessionCount
+            if waiting > 0 {
+                stack.addArrangedSubview(badge("\(waiting)"))
+            }
             stack.addArrangedSubview(spacer())
             // git 情報: ↑↓(main との commit 差)+ staged(オレンジ●)/ unstaged(赤●)の有無。
             // 差分行数は「base との差か未コミット差か」が紛らわしいため表示しない。
@@ -329,26 +310,6 @@ extension SidebarViewController: NSOutlineViewDelegate {
                     self?.onRemoveWorktree?(path)
                 }, trashTooltip: "worktree を削除")
             }
-
-        case let .session(s):
-            stack.addArrangedSubview(stateDot(for: s.session.state))
-            stack.addArrangedSubview(label(s.session.displayName, size: 11))
-            stack.addArrangedSubview(spacer())
-            if s.session.state == .waitingInput {
-                stack.addArrangedSubview(badge("1"))
-            }
-            if let n = s.shortcutNumber {
-                stack.addArrangedSubview(label("⌘\(n)", size: 10, color: .tertiaryLabelColor, mono: true))
-            }
-            // セッション行はホバーでゴミ箱(終了)ボタンを出すセルにする。
-            let sessionID = s.id
-            return makeCell(stack: stack, hoverTrash: { [weak self] in
-                self?.onTerminateSession?(sessionID)
-            })
-
-        case .addSession:
-            stack.addArrangedSubview(label("＋ セッションを追加", size: 11, color: .secondaryLabelColor))
-            stack.addArrangedSubview(spacer())
         }
 
         return makeCell(stack: stack, hoverTrash: nil)
@@ -407,15 +368,16 @@ extension SidebarViewController: NSOutlineViewDelegate {
     }
 
     /// 状態ドット(busy=オレンジ ● / waiting=青 ◐ / idle=枠のみ ○)。UIモックの .st 相当。
-    private func stateDot(for state: AgentSession.State) -> NSView {
+    /// worktree 行のロールアップ表示は一回り小さい `size: 7`(モックの `.st.sm` 相当)を使う。
+    private func stateDot(for state: AgentSession.State, size: CGFloat = 8) -> NSView {
         let dot = NSView()
         dot.wantsLayer = true
         dot.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            dot.widthAnchor.constraint(equalToConstant: 8),
-            dot.heightAnchor.constraint(equalToConstant: 8),
+            dot.widthAnchor.constraint(equalToConstant: size),
+            dot.heightAnchor.constraint(equalToConstant: size),
         ])
-        dot.layer?.cornerRadius = 4
+        dot.layer?.cornerRadius = size / 2
         switch state {
         case .busy:
             dot.layer?.backgroundColor = NSColor.systemOrange.cgColor
@@ -469,10 +431,8 @@ extension SidebarViewController: NSOutlineViewDelegate {
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
         guard let node = item as? Node else { return false }
         switch node.kind {
-        case .session, .worktree: return true
-        // addSession は選択不可(クリックアクションのみ)。選択可能にすると
-        // selectionDidChange とクリックアクションの両方から発火して二重起動する。
-        case .repository, .addSession: return false
+        case .worktree: return true
+        case .repository: return false
         }
     }
 
@@ -488,16 +448,6 @@ extension SidebarViewController: NSOutlineViewDelegate {
         let row = outlineView.clickedRow
         guard row >= 0 else { return nil }
         return outlineView.item(atRow: row) as? Node
-    }
-
-    @objc private func menuRenameSession(_ sender: NSMenuItem) {
-        guard let node = clickedNode(), case let .session(s) = node.kind else { return }
-        onRenameSession?(s.id, s.session.displayName)
-    }
-
-    @objc private func menuTerminateSession(_ sender: NSMenuItem) {
-        guard let node = clickedNode(), case let .session(s) = node.kind else { return }
-        onTerminateSession?(s.id)
     }
 
     @objc private func menuAddSession(_ sender: NSMenuItem) {
@@ -531,17 +481,16 @@ extension SidebarViewController: NSOutlineViewDelegate {
     }
 }
 
-/// ホバー時のみゴミ箱(セッション終了)ボタンを表示するセッション行セル。
+/// ホバー時のみゴミ箱ボタンを表示する行セル(worktree 削除に使用)。
 private final class HoverTrashCellView: NSTableCellView {
     var onTrash: (() -> Void)?
 
     let trashButton: NSButton = {
         let button = NSButton()
-        button.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "セッションを終了")
+        button.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "削除")
         button.isBordered = false
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = .secondaryLabelColor
-        button.toolTip = "セッションを終了"
         button.isHidden = true
         button.setContentHuggingPriority(.required, for: .horizontal)
         return button
@@ -591,10 +540,6 @@ extension SidebarViewController: NSMenuDelegate {
         menu.removeAllItems()
         guard let node = clickedNode() else { return }
         switch node.kind {
-        case .session:
-            menu.addItem(makeItem("リネーム…", #selector(menuRenameSession(_:))))
-            menu.addItem(.separator())
-            menu.addItem(makeItem("セッションを終了", #selector(menuTerminateSession(_:))))
         case .worktree:
             menu.addItem(makeItem("セッションを追加", #selector(menuAddSession(_:))))
             menu.addItem(makeItem("Finder で表示", #selector(menuRevealWorktree(_:))))
@@ -603,8 +548,6 @@ extension SidebarViewController: NSMenuDelegate {
             menu.addItem(makeItem("worktree を削除…", #selector(menuRemoveWorktree(_:))))
         case .repository:
             menu.addItem(makeItem("新規 worktree…", #selector(menuNewWorktree(_:))))
-        case .addSession:
-            break
         }
     }
 

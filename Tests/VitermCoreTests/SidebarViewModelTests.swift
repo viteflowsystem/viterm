@@ -71,8 +71,8 @@ struct SidebarViewModelTests {
         #expect(viewModel.flattenedSessions.isEmpty)
     }
 
-    @Test("⌘1..9のショートカット番号は表示順の先頭9件にのみ振られる")
-    func shortcutNumbersAssignedToFirstNine() {
+    @Test("⌘1..9はタブ局所(TabBarViewModel)の役割なのでshortcutNumberは振らない")
+    func shortcutNumberIsNeverAssigned() {
         let viterm = Repository(name: "viterm", path: "/repo/viterm")
         let wt = Worktree(path: "/repo/viterm", repositoryPath: viterm.path, branch: "main")
         let sessions = (1...11).map {
@@ -80,12 +80,8 @@ struct SidebarViewModelTests {
         }
 
         let viewModel = SidebarViewModel(repositories: [viterm], worktrees: [wt], sessions: sessions)
-        let flat = viewModel.flattenedSessions
 
-        #expect(flat.count == 11)
-        #expect(flat.prefix(9).map(\.shortcutNumber) == (1...9).map { $0 })
-        #expect(flat[9].shortcutNumber == nil)
-        #expect(flat[10].shortcutNumber == nil)
+        #expect(viewModel.flattenedSessions.allSatisfy { $0.shortcutNumber == nil })
     }
 
     @Test("リポジトリ折りたたみ用のwaitingセッション数はworktree横断で集計される")
@@ -155,19 +151,6 @@ struct SidebarViewModelTests {
         var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
         viewModel.selectPrevious()
         #expect(viewModel.selectedSessionID == viewModel.flattenedSessions.last?.id)
-    }
-
-    @Test("selectShortcutは対応する番号のセッションを選択する")
-    func selectShortcutSelectsCorrectSession() {
-        let fixture = makeFixture()
-        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
-
-        let ok = viewModel.selectShortcut(3)
-        #expect(ok == true)
-        #expect(viewModel.selectedSessionID == viewModel.flattenedSessions[2].id)
-
-        let notFound = viewModel.selectShortcut(9)
-        #expect(notFound == false, "5セッションしかないので9番は存在しない")
     }
 
     @Test("jumpToLatestWaitingはstateChangedAtが最も新しいwaitingInputを選ぶ")

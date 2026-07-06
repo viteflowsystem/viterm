@@ -699,7 +699,91 @@ struct AppModelTests {
         model.selectPreviousSession()
         #expect(model.sidebar.selectedSessionID == first)
 
-        #expect(model.selectShortcut(1) == true)
         #expect(model.jumpToLatestWaitingSession() == false, "waitingInputのセッションが無いのでfalse")
+    }
+
+    @Test("worktree選択系メソッドはSidebarViewModelへ委譲される")
+    func worktreeSelectionMethodsDelegateToSidebar() async {
+        let configStore = FakeConfigStore(config: VitermConfig.merge(
+            global: VitermConfigFile(repositories: [repository]),
+            project: nil
+        ))
+        let scanner = FakeWorktreeStatusScanner()
+        let main = VitermCore.Worktree(path: "/repo/viterm", repositoryPath: repository.path, branch: "main")
+        let feature = VitermCore.Worktree(path: "/wt/viterm/feat", repositoryPath: repository.path, branch: "feat")
+        scanner.worktreesToReturn = [main, feature]
+
+        let model = makeModel(configStore: configStore, scanner: scanner)
+        await model.refresh()
+
+        model.selectWorktree(main.path)
+        #expect(model.sidebar.selectedWorktreePath == main.path)
+
+        model.selectNextWorktree()
+        #expect(model.sidebar.selectedWorktreePath == feature.path)
+
+        model.selectPreviousWorktree()
+        #expect(model.sidebar.selectedWorktreePath == main.path)
+
+        model.selectWorktree(nil)
+        #expect(model.sidebar.selectedWorktreePath == nil)
+    }
+
+    // MARK: removeSession
+
+    private func makeModelWithRegisteredWorktree(
+        launcher: FakeSessionLauncher = FakeSessionLauncher()
+    ) async -> (model: AppModel, worktree: VitermCore.Worktree) {
+        let configStore = FakeConfigStore(config: VitermConfig.merge(
+            global: VitermConfigFile(repositories: [repository]),
+            project: nil
+        ))
+        let scanner = FakeWorktreeStatusScanner()
+        let worktree = VitermCore.Worktree(path: repository.path, repositoryPath: repository.path, branch: "main")
+        scanner.worktreesToReturn = [worktree]
+
+        let model = makeModel(configStore: configStore, scanner: scanner, launcher: launcher)
+        await model.refresh()
+        return (model, worktree)
+    }
+
+    @Test("removeSessionでアクティブタブを閉じると同じworktreeの別タブへ自動的に切り替わる")
+    func removeSessionReselectsAnotherTabInSameWorktree() async throws {
+        let (model, worktree) = await makeModelWithRegisteredWorktree()
+
+        let first = try await model.startSession(worktreePath: worktree.path, presetName: "claude")
+        let second = try await model.startSession(worktreePath: worktree.path, presetName: "codex")
+        model.selectSession(first.id)
+
+        model.removeSession(first.id)
+
+        #expect(model.sidebar.selectedWorktreePath == worktree.path, "worktreeの選択は維持される")
+        #expect(model.sidebar.selectedSessionID == second.id, "残った別タブに自動的に切り替わる")
+    }
+
+    @Test("removeSessionで非選択タブを閉じても現在の選択には影響しない")
+    func removeSessionOfNonActiveTabDoesNotChangeSelection() async throws {
+        let (model, worktree) = await makeModelWithRegisteredWorktree()
+
+        let first = try await model.startSession(worktreePath: worktree.path, presetName: "claude")
+        let second = try await model.startSession(worktreePath: worktree.path, presetName: "codex")
+        model.selectSession(first.id)
+
+        model.removeSession(second.id)
+
+        #expect(model.sidebar.selectedSessionID == first.id)
+    }
+
+    @Test("removeSessionでworktree内最後のタブを閉じるとセッション選択は解除される")
+    func removeSessionClearsSelectionWhenWorktreeBecomesEmpty() async throws {
+        let (model, worktree) = await makeModelWithRegisteredWorktree()
+
+        let only = try await model.startSession(worktreePath: worktree.path, presetName: "claude")
+        model.selectSession(only.id)
+
+        model.removeSession(only.id)
+
+        #expect(model.sidebar.selectedWorktreePath == worktree.path, "worktreeの選択自体は維持される")
+        #expect(model.sidebar.selectedSessionID == nil)
     }
 }

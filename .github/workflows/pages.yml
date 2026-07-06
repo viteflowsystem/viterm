@@ -1,0 +1,49 @@
+name: Deploy landing page
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # web/src/*.html はページ本文のみ(doctype/html/head/body 無し)なので、
+      # 配信用に完全な HTML 文書へラップする。
+      - name: Build site
+        run: |
+          set -eu
+          mkdir -p _site/en
+          wrap() { # $1=src $2=dest $3=lang $4=asset-prefix
+            {
+              printf '<!doctype html>\n<html lang="%s">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<link rel="icon" href="%sicon.svg" type="image/svg+xml">\n</head>\n<body>\n' "$3" "$4"
+              cat "$1"
+              printf '\n</body>\n</html>\n'
+            } > "$2"
+          }
+          wrap web/src/landing.html _site/index.html ja ""
+          wrap web/src/en.html _site/en/index.html en "../"
+          cp docs/brand/icon.svg _site/icon.svg
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

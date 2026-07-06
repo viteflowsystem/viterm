@@ -42,7 +42,7 @@ if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>
 fi
 
 # --- 1. アプリバンドルを組み立てる(この時点ではアドホック署名) ----------
-"$ROOT/scripts/make-app.sh" release
+VARIANT=dist "$ROOT/scripts/make-app.sh" release
 
 # --- 2. バージョンを Info.plist に反映 ------------------------------------
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"

@@ -1,8 +1,9 @@
 // viterm の AppIcon を Core Graphics で決定的に生成するスクリプト。
 // ロゴ案01「Prompt」(docs/brand/logo-candidates.html)の最終版。
 //
-// 使い方: swift scripts/make-appicon.swift
-// 出力: Resources/AppIcon.icns(iconutil 経由、全サイズ)
+// 使い方: swift scripts/make-appicon.swift        → Resources/AppIcon.icns
+//        swift scripts/make-appicon.swift dev    → Resources/AppIcon-Dev.icns(DEV バッジ付き)
+// 出力: iconutil 経由、全サイズ
 //
 // デザイン(256pt キャンバス基準):
 // - macOS アイコングリッド準拠: 1024px 中 824px の角丸スクエア(角丸 185px)+ 透明マージン
@@ -12,8 +13,11 @@
 
 import AppKit
 import CoreGraphics
+import CoreText
 import ImageIO
 import UniformTypeIdentifiers
+
+let isDev = CommandLine.arguments.contains("dev")
 
 let brandStops: [(CGFloat, NSColor)] = [
     (0.00, NSColor(red: 0xFF / 255, green: 0x8A / 255, blue: 0x47 / 255, alpha: 1)),
@@ -85,6 +89,28 @@ func draw(in ctx: CGContext) {
     ctx.restoreGState()
 
     ctx.restoreGState()
+
+    // DEV バッジ: プレート下部にアンバーのリボン+「DEV」(小さい Dock サイズでも判別できるように)
+    if isDev {
+        let amber = CGColor(red: 0xFF / 255, green: 0xBE / 255, blue: 0x3D / 255, alpha: 1)
+        let banner = CGPath(
+            roundedRect: CGRect(x: 232, y: 140, width: 560, height: 190),
+            cornerWidth: 44, cornerHeight: 44, transform: nil
+        )
+        ctx.addPath(banner)
+        ctx.setFillColor(amber)
+        ctx.fillPath()
+
+        let text = NSAttributedString(string: "DEV", attributes: [
+            .font: NSFont.systemFont(ofSize: 140, weight: .black),
+            .foregroundColor: NSColor(red: 0x1E / 255, green: 0x24 / 255, blue: 0x42 / 255, alpha: 1),
+            .kern: 8,
+        ])
+        let line = CTLineCreateWithAttributedString(text)
+        let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+        ctx.textPosition = CGPoint(x: 512 - bounds.midX, y: 235 - bounds.midY)
+        CTLineDraw(line, ctx)
+    }
     _ = canvas
 }
 
@@ -107,7 +133,8 @@ func renderPNG(pixels: Int, to url: URL) {
 let fm = FileManager.default
 let scriptDir = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
 let repoRoot = scriptDir.deletingLastPathComponent()
-let iconset = repoRoot.appendingPathComponent(".build/AppIcon.iconset")
+let suffix = isDev ? "-Dev" : ""
+let iconset = repoRoot.appendingPathComponent(".build/AppIcon\(suffix).iconset")
 try? fm.removeItem(at: iconset)
 try! fm.createDirectory(at: iconset, withIntermediateDirectories: true)
 
@@ -122,7 +149,7 @@ for (name, px) in entries {
     renderPNG(pixels: px, to: iconset.appendingPathComponent(name))
 }
 
-let out = repoRoot.appendingPathComponent("Resources/AppIcon.icns")
+let out = repoRoot.appendingPathComponent("Resources/AppIcon\(suffix).icns")
 let task = Process()
 task.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
 task.arguments = ["-c", "icns", iconset.path, "-o", out.path]

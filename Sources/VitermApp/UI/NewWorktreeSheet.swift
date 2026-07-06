@@ -14,9 +14,9 @@ final class NewWorktreeSheet: NSViewController {
     private let pathField = NSTextField(string: "")
     private let pathPreviewLabel = NSTextField(labelWithString: "")
     private let errorLabel = NSTextField(labelWithString: "")
-    private let copyCheckbox = NSButton(checkboxWithTitle: "Claude セッションデータをコピー(~/.claude/projects)", target: nil, action: nil)
-    private let launchCheckbox = NSButton(checkboxWithTitle: "作成後にセッションを起動", target: nil, action: nil)
-    private let createButton = NSButton(title: "作成して起動", target: nil, action: nil)
+    private let copyCheckbox = NSButton(checkboxWithTitle: L("Copy Claude session data (~/.claude/projects)"), target: nil, action: nil)
+    private let launchCheckbox = NSButton(checkboxWithTitle: L("Launch a session after creation"), target: nil, action: nil)
+    private let createButton = NSButton(title: L("Create and Launch"), target: nil, action: nil)
     private let launchPresetName: String
 
     init(
@@ -46,7 +46,7 @@ final class NewWorktreeSheet: NSViewController {
         stack.spacing = 14
         stack.edgeInsets = NSEdgeInsets(top: 22, left: Layout.horizontalInset, bottom: 18, right: Layout.horizontalInset)
 
-        let title = NSTextField(labelWithString: "新規 worktree — \(form.repository.name)")
+        let title = NSTextField(labelWithString: L("New Worktree — \(form.repository.name)"))
         title.font = .boldSystemFont(ofSize: 14)
         stack.addArrangedSubview(title)
 
@@ -55,21 +55,21 @@ final class NewWorktreeSheet: NSViewController {
         branchField.target = self
         branchField.action = #selector(formChanged)
         branchField.delegate = self
-        stack.addArrangedSubview(fieldGroup(label: "ブランチ名", control: branchField))
+        stack.addArrangedSubview(fieldGroup(label: L("Branch Name"), control: branchField))
 
         // Errors (branch name / path collision) sit directly below the branch name field.
         errorLabel.font = .systemFont(ofSize: 11)
         errorLabel.textColor = .systemRed
         errorLabel.isHidden = true
 
-        basePopup.addItem(withTitle: "(現在の HEAD)")
+        basePopup.addItem(withTitle: L("(current HEAD)"))
         for branch in form.availableBranches {
             let suffix = branch.kind == .remote ? " (remote)" : ""
             basePopup.addItem(withTitle: branch.name + suffix)
         }
         basePopup.target = self
         basePopup.action = #selector(formChanged)
-        stack.addArrangedSubview(fieldGroup(label: "ベースブランチ", control: basePopup))
+        stack.addArrangedSubview(fieldGroup(label: L("Base Branch"), control: basePopup))
 
         pathField.stringValue = form.defaultPathTemplate.raw
         pathField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -80,7 +80,7 @@ final class NewWorktreeSheet: NSViewController {
         pathPreviewLabel.textColor = .secondaryLabelColor
         pathPreviewLabel.lineBreakMode = .byTruncatingMiddle
         stack.addArrangedSubview(fieldGroup(
-            label: "作成先テンプレート(その場上書き可)",
+            label: L("Destination Template (can be overridden here)"),
             control: pathField,
             caption: pathPreviewLabel
         ))
@@ -93,16 +93,16 @@ final class NewWorktreeSheet: NSViewController {
         stack.addArrangedSubview(copyCheckbox)
 
         launchCheckbox.state = .on
-        launchCheckbox.title = "作成後にセッションを起動: \(launchPresetName)"
+        launchCheckbox.title = L("Launch a session after creation: \(launchPresetName)")
         launchCheckbox.target = self
         launchCheckbox.action = #selector(formChanged)
         stack.addArrangedSubview(launchCheckbox)
 
         // Stretch the button row to full width and right-align it.
-        let cancel = NSButton(title: "キャンセル", target: self, action: #selector(didCancel))
+        let cancel = NSButton(title: L("Cancel"), target: self, action: #selector(didCancel))
         cancel.keyEquivalent = "\u{1b}"
         cancel.bezelStyle = .rounded
-        createButton.title = "作成して起動"
+        createButton.title = L("Create and Launch")
         createButton.bezelStyle = .rounded
         createButton.keyEquivalent = "\r"
         createButton.target = self
@@ -175,9 +175,9 @@ final class NewWorktreeSheet: NSViewController {
         if form.branchName.isEmpty {
             error = nil
         } else if let branchError = form.branchNameError {
-            error = "ブランチ名: \(branchError)"
+            error = L("Branch name: \(branchError.description)")
         } else if form.hasPathCollision {
-            error = "作成先パスが既存の worktree と衝突しています"
+            error = L("The destination path collides with an existing worktree")
         } else {
             error = nil
         }

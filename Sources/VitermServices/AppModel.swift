@@ -123,7 +123,8 @@ public final class AppModel {
         do {
             loadedConfig = try configProvider.loadConfig(repositoryRoot: nil)
         } catch {
-            errors.append("設定の読み込みに失敗しました: \(error)")
+            let detail = "\(error)"
+            errors.append(L("Failed to load settings: \(detail)"))
             loadedConfig = config
         }
         config = loadedConfig

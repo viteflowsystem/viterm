@@ -29,7 +29,7 @@ public enum PaletteCommandProvider {
             PaletteCommand(
                 id: "worktree.create",
                 category: .worktree,
-                title: "新規作成…",
+                title: L("New Worktree…"),
                 keyboardHint: "⌘N",
                 action: .createWorktree
             ),
@@ -41,7 +41,7 @@ public enum PaletteCommandProvider {
                 commands.append(PaletteCommand(
                     id: "worktree.switch.\(worktree.id)",
                     category: .worktree,
-                    title: "\(worktree.branch) に切替",
+                    title: L("Switch to \(worktree.branch)"),
                     subtitle: aheadBehindLabel(worktree),
                     action: .switchToWorktree(worktreeID: worktree.id)
                 ))
@@ -52,20 +52,20 @@ public enum PaletteCommandProvider {
             commands.append(PaletteCommand(
                 id: "worktree.merge.\(currentWorktreeID)",
                 category: .worktree,
-                title: "\(mergeTargetBranch) にマージ…(merge / rebase)",
+                title: L("Merge into \(mergeTargetBranch)… (merge / rebase)"),
                 action: .mergeWorktree(worktreeID: currentWorktreeID)
             ))
             commands.append(PaletteCommand(
                 id: "worktree.remove.\(currentWorktreeID)",
                 category: .worktree,
-                title: "削除…",
+                title: L("Remove…"),
                 action: .removeWorktree(worktreeID: currentWorktreeID)
             ))
             for preset in presets {
                 commands.append(PaletteCommand(
                     id: "session.start.\(currentWorktreeID).\(preset.name)",
                     category: .session,
-                    title: "\(preset.name) を起動(この worktree)",
+                    title: L("Start \(preset.name) (this worktree)"),
                     keyboardHint: preset.name == defaultPresetName ? "⌘T" : nil,
                     action: .startSession(worktreeID: currentWorktreeID, presetName: preset.name)
                 ))
@@ -75,7 +75,7 @@ public enum PaletteCommandProvider {
         commands.append(PaletteCommand(
             id: "repo.add",
             category: .repository,
-            title: "リポジトリを追加…(ディレクトリ選択)",
+            title: L("Add Repository… (choose directory)"),
             action: .addRepository
         ))
 

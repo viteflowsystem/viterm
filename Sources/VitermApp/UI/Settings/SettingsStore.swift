@@ -52,7 +52,7 @@ final class SettingsStore {
             try data.write(to: url, options: .atomic)
             onChanged()
         } catch {
-            NSLog("viterm: 設定の保存に失敗: \(error)")
+            NSLog("viterm: failed to save settings: \(error)")
         }
     }
 

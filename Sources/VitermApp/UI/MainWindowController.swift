@@ -19,7 +19,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         let view = NSView()
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
-        let label = NSTextField(labelWithString: "⌘T でセッションを起動 / ⌘N で worktree を作成")
+        let label = NSTextField(labelWithString: L("Press ⌘T to start a session or ⌘N to create a worktree"))
         label.textColor = .secondaryLabelColor
         label.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(label)
@@ -115,7 +115,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             self.appModel.sessionStateChanged(sessionID: sessionID, newState: .waitingInput)
             self.render()
             self.postNotification(
-                title: title.isEmpty ? "通知: \(self.displayName(of: sessionID))" : title,
+                title: title.isEmpty ? L("Notification: \(self.displayName(of: sessionID))") : title,
                 body: body,
                 sessionID: sessionID
             )
@@ -157,7 +157,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     }
 
     private func displayName(of sessionID: AgentSession.ID) -> String {
-        appModel.sessions.first { $0.id == sessionID }?.displayName ?? "セッション"
+        appModel.sessions.first { $0.id == sessionID }?.displayName ?? L("Session")
     }
 
     private func postNotification(title: String, body: String, sessionID: AgentSession.ID) {
@@ -185,7 +185,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         NSApp.requestUserAttention(.informationalRequest)
         if notificationsAvailable {
             let content = UNMutableNotificationContent()
-            content.title = "入力待ち: \(session.displayName)"
+            content.title = L("Waiting for input: \(session.displayName)")
             let branch = appModel.worktrees.first { $0.path == session.worktreePath }?.branch
             content.body = branch.map { "worktree: \($0)" } ?? session.worktreePath
             let request = UNNotificationRequest(
@@ -544,7 +544,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.message = "git リポジトリのルートディレクトリを選択"
+        panel.message = L("Select the root directory of a git repository")
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
             Task { @MainActor in
@@ -643,11 +643,11 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             let target = (try? await GitService().defaultBranch(in: repoURL)) ?? "main"
 
             let alert = NSAlert()
-            alert.messageText = "\(worktree.branch) を \(target) にマージ"
-            alert.informativeText = "マージ成功後、worktree とローカルブランチを削除します。"
+            alert.messageText = L("Merge \(worktree.branch) into \(target)")
+            alert.informativeText = L("After a successful merge, the worktree and local branch will be deleted.")
             alert.addButton(withTitle: "Merge (--no-ff)")
             alert.addButton(withTitle: "Rebase → ff-only")
-            alert.addButton(withTitle: "キャンセル")
+            alert.addButton(withTitle: L("Cancel"))
             let response = await alert.beginSheetModal(for: window)
 
             let strategy: MergeStrategy
@@ -668,9 +668,10 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             render()
             if !result.isFullySuccessful {
                 let failed = result.steps.filter { !$0.isSuccess }
+                let failedList = failed.map(String.init(describing:)).joined(separator: ", ")
                 Self.presentError(
                     NSError(domain: "viterm", code: 1, userInfo: [
-                        NSLocalizedDescriptionKey: "一部のステップが失敗: \(failed.map(String.init(describing:)).joined(separator: ", "))"
+                        NSLocalizedDescriptionKey: L("Some steps failed: \(failedList)")
                     ]),
                     in: window
                 )
@@ -695,13 +696,13 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
         Task { @MainActor in
             let alert = NSAlert()
-            alert.messageText = "worktree を削除"
+            alert.messageText = L("Delete Worktree")
             alert.informativeText = worktree.isDirty
-                ? "\(worktree.branch) には未コミットの変更があります。強制削除しますか?"
-                : "\(worktree.branch)(\(worktree.path))を削除します。"
+                ? L("\(worktree.branch) has uncommitted changes. Force delete?")
+                : L("This will delete \(worktree.branch) (\(worktree.path)).")
             alert.alertStyle = .warning
-            alert.addButton(withTitle: worktree.isDirty ? "強制削除" : "削除")
-            alert.addButton(withTitle: "キャンセル")
+            alert.addButton(withTitle: worktree.isDirty ? L("Force Delete") : L("Delete"))
+            alert.addButton(withTitle: L("Cancel"))
             guard await alert.beginSheetModal(for: window) == .alertFirstButtonReturn else { return }
 
             do {
@@ -722,12 +723,12 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     private func renameSession(_ sessionID: AgentSession.ID, currentName: String) {
         guard let window else { return }
         let alert = NSAlert()
-        alert.messageText = "セッションをリネーム"
+        alert.messageText = L("Rename Session")
         let field = NSTextField(string: currentName)
         field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
         alert.accessoryView = field
-        alert.addButton(withTitle: "リネーム")
-        alert.addButton(withTitle: "キャンセル")
+        alert.addButton(withTitle: L("Rename"))
+        alert.addButton(withTitle: L("Cancel"))
         alert.window.initialFirstResponder = field
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
@@ -742,11 +743,11 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     private func terminateSession(_ sessionID: AgentSession.ID) {
         guard let window else { return }
         let alert = NSAlert()
-        alert.messageText = "セッションを終了"
-        alert.informativeText = "実行中のプロセスは終了され、スクロールバックも破棄されます。"
+        alert.messageText = L("Terminate Session")
+        alert.informativeText = L("The running process will be terminated and the scrollback will be discarded.")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "終了")
-        alert.addButton(withTitle: "キャンセル")
+        alert.addButton(withTitle: L("Terminate"))
+        alert.addButton(withTitle: L("Cancel"))
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
             self?.cleanUpSession(sessionID)
@@ -765,7 +766,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
     static func presentError(_ error: any Error, in window: NSWindow?) {
         let alert = NSAlert()
-        alert.messageText = "操作に失敗しました"
+        alert.messageText = L("Operation Failed")
         alert.informativeText = String(describing: error)
         alert.alertStyle = .warning
         if let window {

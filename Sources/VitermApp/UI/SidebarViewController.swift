@@ -73,10 +73,10 @@ final class SidebarViewController: NSViewController {
         emptyState.orientation = .vertical
         emptyState.alignment = .centerX
         emptyState.spacing = 8
-        let emptyLabel = NSTextField(labelWithString: "リポジトリが未登録です")
+        let emptyLabel = NSTextField(labelWithString: L("No repositories registered"))
         emptyLabel.textColor = .secondaryLabelColor
         emptyLabel.font = .systemFont(ofSize: 12)
-        let emptyButton = NSButton(title: "リポジトリを追加…", target: self, action: #selector(didTapAddRepository))
+        let emptyButton = NSButton(title: L("Add Repository…"), target: self, action: #selector(didTapAddRepository))
         emptyButton.bezelStyle = .rounded
         emptyState.addArrangedSubview(emptyLabel)
         emptyState.addArrangedSubview(emptyButton)
@@ -88,10 +88,10 @@ final class SidebarViewController: NSViewController {
         actionBar.alignment = .leading
         actionBar.spacing = 3
         actionBar.edgeInsets = NSEdgeInsets(top: 8, left: 14, bottom: 10, right: 8)
-        actionBar.addArrangedSubview(actionRow(hint: "⌘N", title: "新規 worktree", action: #selector(didTapNewWorktree)))
-        actionBar.addArrangedSubview(actionRow(hint: "⌘T", title: "新規セッション", action: #selector(didTapNewSession)))
-        actionBar.addArrangedSubview(actionRow(hint: "⌘K", title: "コマンドパレット", action: #selector(didTapShowPalette)))
-        actionBar.addArrangedSubview(actionRow(hint: "＋", title: "リポジトリを追加", action: #selector(didTapAddRepository)))
+        actionBar.addArrangedSubview(actionRow(hint: "⌘N", title: L("New Worktree"), action: #selector(didTapNewWorktree)))
+        actionBar.addArrangedSubview(actionRow(hint: "⌘T", title: L("New Session"), action: #selector(didTapNewSession)))
+        actionBar.addArrangedSubview(actionRow(hint: "⌘K", title: L("Command Palette"), action: #selector(didTapShowPalette)))
+        actionBar.addArrangedSubview(actionRow(hint: "＋", title: L("Add Repository"), action: #selector(didTapAddRepository)))
 
         let separator = NSBox()
         separator.boxType = .separator
@@ -311,8 +311,8 @@ extension SidebarViewController: NSOutlineViewDelegate {
             var git: [(String, NSColor, String?)] = []
             if wt.worktree.ahead > 0 { git.append(("↑\(wt.worktree.ahead)", .secondaryLabelColor, nil)) }
             if wt.worktree.behind > 0 { git.append(("↓\(wt.worktree.behind)", .secondaryLabelColor, nil)) }
-            if wt.worktree.hasStagedChanges { git.append(("●", .systemOrange, "ステージ済みの変更あり")) }
-            if wt.worktree.hasUnstagedChanges { git.append(("●", .systemRed, "未ステージの変更あり")) }
+            if wt.worktree.hasStagedChanges { git.append(("●", .systemOrange, L("Has staged changes"))) }
+            if wt.worktree.hasUnstagedChanges { git.append(("●", .systemRed, L("Has unstaged changes"))) }
             if git.isEmpty { git.append(("clean", .tertiaryLabelColor, nil)) }
             let gitStack = NSStackView()
             gitStack.orientation = .horizontal
@@ -328,7 +328,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
                 let path = wt.id
                 return makeCell(stack: stack, hoverTrash: { [weak self] in
                     self?.onRemoveWorktree?(path)
-                }, trashTooltip: "worktree を削除")
+                }, trashTooltip: L("Delete Worktree"))
             }
 
         case let .session(s):
@@ -348,7 +348,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
             })
 
         case .addSession:
-            stack.addArrangedSubview(label("＋ セッションを追加", size: 11, color: .secondaryLabelColor))
+            stack.addArrangedSubview(label("＋ " + L("Add Session"), size: 11, color: .secondaryLabelColor))
             stack.addArrangedSubview(spacer())
         }
 
@@ -359,7 +359,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
     private func makeCell(
         stack: NSStackView,
         hoverTrash: (() -> Void)?,
-        trashTooltip: String = "セッションを終了"
+        trashTooltip: String = L("Terminate Session")
     ) -> NSTableCellView {
         let cell: NSTableCellView
         if let hoverTrash {
@@ -433,11 +433,11 @@ extension SidebarViewController: NSOutlineViewDelegate {
     /// The repository row's "+" (new worktree) button.
     private func addWorktreeButton(repositoryPath: String) -> NSButton {
         let button = NSButton()
-        button.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "新規 worktree")
+        button.image = NSImage(systemSymbolName: "plus", accessibilityDescription: L("New Worktree"))
         button.isBordered = false
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = .secondaryLabelColor
-        button.toolTip = "このリポジトリに worktree を追加"
+        button.toolTip = L("Add a worktree to this repository")
         button.identifier = NSUserInterfaceItemIdentifier(repositoryPath)
         button.target = self
         button.action = #selector(didTapAddWorktree(_:))
@@ -538,11 +538,11 @@ private final class HoverTrashCellView: NSTableCellView {
 
     let trashButton: NSButton = {
         let button = NSButton()
-        button.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "セッションを終了")
+        button.image = NSImage(systemSymbolName: "trash", accessibilityDescription: L("Terminate Session"))
         button.isBordered = false
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = .secondaryLabelColor
-        button.toolTip = "セッションを終了"
+        button.toolTip = L("Terminate Session")
         button.isHidden = true
         button.setContentHuggingPriority(.required, for: .horizontal)
         return button
@@ -593,17 +593,17 @@ extension SidebarViewController: NSMenuDelegate {
         guard let node = clickedNode() else { return }
         switch node.kind {
         case .session:
-            menu.addItem(makeItem("リネーム…", #selector(menuRenameSession(_:))))
+            menu.addItem(makeItem(L("Rename…"), #selector(menuRenameSession(_:))))
             menu.addItem(.separator())
-            menu.addItem(makeItem("セッションを終了", #selector(menuTerminateSession(_:))))
+            menu.addItem(makeItem(L("Terminate Session"), #selector(menuTerminateSession(_:))))
         case .worktree:
-            menu.addItem(makeItem("セッションを追加", #selector(menuAddSession(_:))))
-            menu.addItem(makeItem("Finder で表示", #selector(menuRevealWorktree(_:))))
+            menu.addItem(makeItem(L("Add Session"), #selector(menuAddSession(_:))))
+            menu.addItem(makeItem(L("Show in Finder"), #selector(menuRevealWorktree(_:))))
             menu.addItem(.separator())
-            menu.addItem(makeItem("デフォルトブランチにマージ…", #selector(menuMergeWorktree(_:))))
-            menu.addItem(makeItem("worktree を削除…", #selector(menuRemoveWorktree(_:))))
+            menu.addItem(makeItem(L("Merge into Default Branch…"), #selector(menuMergeWorktree(_:))))
+            menu.addItem(makeItem(L("Delete Worktree…"), #selector(menuRemoveWorktree(_:))))
         case .repository:
-            menu.addItem(makeItem("新規 worktree…", #selector(menuNewWorktree(_:))))
+            menu.addItem(makeItem(L("New Worktree…"), #selector(menuNewWorktree(_:))))
         case .addSession:
             break
         }

@@ -12,10 +12,10 @@ final class SettingsWindowController: NSWindowController {
 
         // Pane list. To add a pane, add one line here.
         let panes: [(pane: SettingsPane, icon: String)] = [
-            (GeneralSettingsPane(title: "一般", store: store), "gearshape"),
+            (GeneralSettingsPane(title: L("General"), store: store), "gearshape"),
             (WorktreeSettingsPane(title: "Worktree", store: store), "arrow.triangle.branch"),
-            (RepositoriesSettingsPane(title: "リポジトリ", store: store), "folder"),
-            (HooksSettingsPane(title: "通知フック", store: store), "bolt"),
+            (RepositoriesSettingsPane(title: L("Repositories"), store: store), "folder"),
+            (HooksSettingsPane(title: L("Notification Hooks"), store: store), "bolt"),
         ]
         for (pane, icon) in panes {
             let item = NSTabViewItem(viewController: pane)
@@ -26,7 +26,7 @@ final class SettingsWindowController: NSWindowController {
 
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable]
-        window.title = "viterm 設定"
+        window.title = L("viterm Settings")
         window.isReleasedWhenClosed = false
         window.toolbarStyle = .preference
         // Match the selected pane's content size from the initial display

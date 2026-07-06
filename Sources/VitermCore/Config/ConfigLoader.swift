@@ -8,7 +8,7 @@ public enum ConfigLoaderError: Error, Equatable, CustomStringConvertible {
     public var description: String {
         switch self {
         case let .invalidJSON(path, underlying):
-            return "設定ファイルの読み込みに失敗しました: \(path) (\(underlying))"
+            return L("Failed to load config file: \(path) (\(underlying))")
         }
     }
 

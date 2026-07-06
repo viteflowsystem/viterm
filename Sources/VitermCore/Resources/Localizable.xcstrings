@@ -1,0 +1,106 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "A local branch with this name already exists" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "同名のローカルブランチが既に存在します" } }
+      }
+    },
+    "Add Repository… (choose directory)" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "リポジトリを追加…(ディレクトリ選択)" } }
+      }
+    },
+    "Branch name can't be just \"@\"" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名を \"@\" だけにすることはできません" } }
+      }
+    },
+    "Branch name contains an invalid character: %@" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名に使えない文字が含まれています: %@" } }
+      }
+    },
+    "Branch name is required" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名を入力してください" } }
+      }
+    },
+    "Branch names can't contain \"..\"" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名に \"..\" は使えません" } }
+      }
+    },
+    "Branch names can't contain \"@{\"" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名に \"@{\" は使えません" } }
+      }
+    },
+    "Branch names can't contain consecutive slashes" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名に連続した \"/\" は使えません" } }
+      }
+    },
+    "Branch names can't contain whitespace" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名に空白は使えません" } }
+      }
+    },
+    "Branch names can't end with \".\"" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名を \".\" で終えることはできません" } }
+      }
+    },
+    "Branch names can't end with \".lock\"" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名を \".lock\" で終えることはできません" } }
+      }
+    },
+    "Branch names can't end with \"/\"" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名を \"/\" で終えることはできません" } }
+      }
+    },
+    "Branch names can't start with \"-\"" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブランチ名を \"-\" で始めることはできません" } }
+      }
+    },
+    "Failed to load config file: %@ (%@)" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "設定ファイルの読み込みに失敗しました: %1$@ (%2$@)" } }
+      }
+    },
+    "Merge into %@… (merge / rebase)" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ にマージ…(merge / rebase)" } }
+      }
+    },
+    "New Worktree…" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "新規作成…" } }
+      }
+    },
+    "Path components separated by \"/\" can't be empty or start with \".\"" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "\"/\" 区切りの各階層を空や \".\" 始まりにすることはできません" } }
+      }
+    },
+    "Remove…" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "削除…" } }
+      }
+    },
+    "Start %@ (this worktree)" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ を起動(この worktree)" } }
+      }
+    },
+    "Switch to %@" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ に切替" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

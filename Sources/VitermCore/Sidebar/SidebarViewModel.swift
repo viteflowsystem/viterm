@@ -1,25 +1,27 @@
 import Foundation
 
-/// サイドバー(リポジトリ → worktree → セッションの3階層ツリー)の UI 非依存な状態。
+/// UI-independent state of the sidebar (a 3-level tree: repository → worktree → session).
 ///
-/// `Repository` / `Worktree` / `AgentSession` のフラットな配列から木構造を組み立て、
-/// ⌘1..9 のショートカット番号割当、リポジトリ折りたたみ時の waiting バッジ集約、
-/// 状態集計(busy/waiting/idle)、選択セッションの管理(次/前移動・⌘⇧U ジャンプ)を提供する。
+/// Builds the tree structure from flat arrays of `Repository` / `Worktree` / `AgentSession`,
+/// and provides ⌘1..9 shortcut number assignment, waiting-badge aggregation for collapsed
+/// repositories, state totals (busy/waiting/idle), and selected-session management
+/// (next/previous navigation and the ⌘⇧U jump).
 ///
-/// 純粋な値型であり、内部で監視や差分更新は行わない。呼び出し側は元データが変わるたびに
-/// `init` を呼び直して(直前の `selectedSessionID` を引き継いで)再構築する想定。
+/// A pure value type; it performs no observation or incremental updates internally. Callers are
+/// expected to re-call `init` (carrying over the previous `selectedSessionID`) whenever the
+/// source data changes.
 public struct SidebarViewModel: Sendable, Equatable {
     public private(set) var repositories: [RepositoryNode]
     public private(set) var selectedSessionID: AgentSession.ID?
 
     /// - Parameters:
-    ///   - repositories: サイドバーに表示するリポジトリ。この配列の順序がそのまま表示順になる。
-    ///   - worktrees: 全リポジトリ分の worktree。`repositoryPath` で対応するリポジトリに紐付けられる。
-    ///     どのリポジトリにも一致しない worktree はツリーに現れない。
-    ///   - sessions: 全 worktree 分のセッション。`worktreePath` で対応する worktree に紐付けられる。
-    ///     どの worktree にも一致しないセッションはツリーに現れない。
-    ///   - selectedSessionID: 初期選択セッション。ツリーに存在しない ID を渡しても構わない
-    ///     (`selectedSession` は `nil` を返す)。
+    ///   - repositories: Repositories to show in the sidebar. The order of this array is the display order.
+    ///   - worktrees: Worktrees for all repositories. Linked to their repository via `repositoryPath`.
+    ///     Worktrees that match no repository do not appear in the tree.
+    ///   - sessions: Sessions for all worktrees. Linked to their worktree via `worktreePath`.
+    ///     Sessions that match no worktree do not appear in the tree.
+    ///   - selectedSessionID: Initially selected session. Passing an ID not present in the tree
+    ///     is fine (`selectedSession` returns `nil`).
     public init(
         repositories: [Repository],
         worktrees: [Worktree],
@@ -35,8 +37,9 @@ public struct SidebarViewModel: Sendable, Equatable {
         worktrees: [Worktree],
         sessions: [AgentSession]
     ) -> [RepositoryNode] {
-        // `Dictionary(grouping:by:)` は元の配列の相対順序を保ったままグルーピングするため、
-        // 呼び出し側が渡した並び順(= サイドバー表示順)がそのままツリーに反映される。
+        // `Dictionary(grouping:by:)` preserves the relative order of the source array while
+        // grouping, so the order the caller passed (= sidebar display order) carries straight
+        // through to the tree.
         let worktreesByRepository = Dictionary(grouping: worktrees, by: \.repositoryPath)
         let sessionsByWorktree = Dictionary(grouping: sessions, by: \.worktreePath)
 
@@ -55,18 +58,18 @@ public struct SidebarViewModel: Sendable, Equatable {
         }
     }
 
-    /// 全リポジトリ・全 worktree を横断した、表示順でのセッション一覧。
+    /// Sessions across all repositories and worktrees, in display order.
     public var flattenedSessions: [SessionNode] {
         repositories.flatMap { $0.worktrees.flatMap(\.sessions) }
     }
 
-    /// 現在選択中のセッション行。`selectedSessionID` がツリーに存在しなければ `nil`。
+    /// The currently selected session row. `nil` if `selectedSessionID` is not in the tree.
     public var selectedSession: SessionNode? {
         guard let selectedSessionID else { return nil }
         return flattenedSessions.first { $0.id == selectedSessionID }
     }
 
-    /// busy/waitingInput/idle の件数集計(リポジトリ横断)。
+    /// Counts of busy/waitingInput/idle sessions (across repositories).
     public var stateSummary: SessionStateSummary {
         Self.summarize(sessions: flattenedSessions.map(\.session))
     }
@@ -83,15 +86,15 @@ public struct SidebarViewModel: Sendable, Equatable {
         return summary
     }
 
-    // MARK: - 選択管理
+    // MARK: - Selection management
 
-    /// セッションを直接選択する。`nil` を渡すと選択解除。
+    /// Selects a session directly. Passing `nil` clears the selection.
     public mutating func select(sessionID: AgentSession.ID?) {
         selectedSessionID = sessionID
     }
 
-    /// 表示順で次のセッションを選択する(末尾からは先頭へ循環)。
-    /// 現在の選択がツリーに無い場合は先頭のセッションを選ぶ。セッションが1件も無ければ何もしない。
+    /// Selects the next session in display order (wraps from the last to the first).
+    /// If the current selection is not in the tree, selects the first session. Does nothing if there are no sessions.
     public mutating func selectNext() {
         let flat = flattenedSessions
         guard !flat.isEmpty else { return }
@@ -102,7 +105,7 @@ public struct SidebarViewModel: Sendable, Equatable {
         selectedSessionID = flat[(index + 1) % flat.count].id
     }
 
-    /// 表示順で前のセッションを選択する(先頭からは末尾へ循環)。
+    /// Selects the previous session in display order (wraps from the first to the last).
     public mutating func selectPrevious() {
         let flat = flattenedSessions
         guard !flat.isEmpty else { return }
@@ -113,7 +116,7 @@ public struct SidebarViewModel: Sendable, Equatable {
         selectedSessionID = flat[(index - 1 + flat.count) % flat.count].id
     }
 
-    /// ⌘1..9 に対応するセッションを選択する。該当が無ければ何もせず `false` を返す。
+    /// Selects the session assigned to ⌘1..9. If there is no match, does nothing and returns `false`.
     @discardableResult
     public mutating func selectShortcut(_ number: Int) -> Bool {
         guard let node = flattenedSessions.first(where: { $0.shortcutNumber == number }) else {
@@ -123,10 +126,10 @@ public struct SidebarViewModel: Sendable, Equatable {
         return true
     }
 
-    /// ⌘⇧U 相当: 最新の waitingInput セッションへジャンプする。
-    /// 「最新」は `AgentSession.stateChangedAt` が最も新しいもの(リポジトリ横断)。
-    /// `stateChangedAt` が無いセッションは最も古いものとして扱う。同時刻の場合は表示順で後ろのものを優先する。
-    /// waitingInput のセッションが無ければ何もせず `false` を返す。
+    /// Equivalent of ⌘⇧U: jumps to the most recent waitingInput session.
+    /// "Most recent" means the newest `AgentSession.stateChangedAt` (across repositories).
+    /// Sessions without `stateChangedAt` are treated as the oldest. On ties, the one later in display order wins.
+    /// If there is no waitingInput session, does nothing and returns `false`.
     @discardableResult
     public mutating func jumpToLatestWaiting() -> Bool {
         let waiting = flattenedSessions.enumerated().filter { $0.element.session.state == .waitingInput }

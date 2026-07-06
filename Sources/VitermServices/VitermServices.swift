@@ -1,3 +1,3 @@
-// VitermServices: VitermCore(ドメイン・設定)と GitKit(git操作)を束ねるサービス層。
-// worktree のプロビジョニング、状態スキャンなど。UI 非依存。
+// VitermServices: the service layer that ties together VitermCore (domain / config) and GitKit (git operations).
+// Worktree provisioning, status scanning, etc. UI-independent.
 public enum VitermServices {}

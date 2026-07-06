@@ -1,9 +1,11 @@
 import Foundation
 
-/// Codex CLI 向けの detector。
-/// Claude ほど仕様が固まっていないため、同種のCLI(スピナー付き進捗表示・
-/// y/n 形式のコマンド実行確認)に共通しやすいシグナルで暫定実装している。
-/// 実際の画面出力での検証は T13b(統合)側で行い、必要に応じてここを調整する想定。
+/// Detector for the Codex CLI.
+/// The behavior is less pinned down than Claude's, so this is a provisional
+/// implementation using signals commonly shared by CLIs of this kind (spinner-based
+/// progress display, y/n-style command execution confirmations).
+/// Validation against real screen output happens in T13b (integration), with
+/// adjustments made here as needed.
 public struct CodexStateDetector: StateDetector {
     public let toolName = "codex"
 

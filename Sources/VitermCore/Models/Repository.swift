@@ -1,11 +1,11 @@
 import Foundation
 
-/// アプリに登録されたリポジトリ(サイドバー最上位階層)。
-/// ディスク上のリポジトリ自体には手を加えない、単なる参照情報。
+/// A repository registered with the app (top level of the sidebar hierarchy).
+/// Pure reference information; the on-disk repository itself is never modified.
 public struct Repository: Codable, Sendable, Hashable, Identifiable {
-    /// サイドバー表示名。`WorktreePathTemplate` の `{project}` プレースホルダにも使われる。
+    /// Sidebar display name. Also used for the `{project}` placeholder of `WorktreePathTemplate`.
     public var name: String
-    /// リポジトリルートの絶対パス。
+    /// Absolute path of the repository root.
     public var path: String
 
     public init(name: String, path: String) {

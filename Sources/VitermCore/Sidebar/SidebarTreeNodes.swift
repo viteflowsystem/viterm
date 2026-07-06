@@ -1,15 +1,15 @@
 import Foundation
 
-/// サイドバーのセッション行1つぶん。
+/// A single session row in the sidebar.
 public struct SessionNode: Sendable, Equatable, Identifiable {
     public var session: AgentSession
-    /// ⌘1..9 に割り当てられた番号。サイドバー表示順の先頭9セッションのみ持つ(10番目以降は `nil`)。
+    /// Number assigned to ⌘1..9. Only the first 9 sessions in sidebar display order have one (`nil` from the 10th on).
     public var shortcutNumber: Int?
 
     public var id: UUID { session.id }
 }
 
-/// サイドバーの worktree 行1つぶん(配下のセッションを含む)。
+/// A single worktree row in the sidebar (including its child sessions).
 public struct WorktreeNode: Sendable, Equatable, Identifiable {
     public var worktree: Worktree
     public var sessions: [SessionNode]
@@ -17,15 +17,15 @@ public struct WorktreeNode: Sendable, Equatable, Identifiable {
     public var id: String { worktree.id }
 }
 
-/// サイドバーのリポジトリ行1つぶん(配下の worktree を含む)。
+/// A single repository row in the sidebar (including its child worktrees).
 public struct RepositoryNode: Sendable, Equatable, Identifiable {
     public var repository: Repository
     public var worktrees: [WorktreeNode]
 
     public var id: String { repository.id }
 
-    /// 配下(全 worktree 横断)の waitingInput セッション数。
-    /// リポジトリ折りたたみ時のバッジ表示に使う。
+    /// Number of waitingInput sessions underneath (across all worktrees).
+    /// Used for the badge shown when the repository is collapsed.
     public var waitingSessionCount: Int {
         worktrees.reduce(0) { count, worktree in
             count + worktree.sessions.count { $0.session.state == .waitingInput }
@@ -33,7 +33,7 @@ public struct RepositoryNode: Sendable, Equatable, Identifiable {
     }
 }
 
-/// busy / waitingInput / idle の件数集計(ステータスバー表示用)。
+/// Counts of busy / waitingInput / idle sessions (for the status bar display).
 public struct SessionStateSummary: Sendable, Equatable {
     public var busy: Int
     public var waitingInput: Int

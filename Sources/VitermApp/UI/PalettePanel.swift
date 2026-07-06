@@ -1,27 +1,27 @@
 import AppKit
 import VitermCore
 
-/// コマンドパレット(⌘K)のオーバーレイ。
+/// Command palette (Cmd-K) overlay.
 ///
-/// `NSPanel` ベースの borderless / 半透明パネルとして、親ウィンドウの中央上部に表示する。
-/// 見た目は docs/ui-mock.html の Screen 02 に準拠する(ダークモードでは mock の固定色をそのまま
-/// 用いる)。ライトモードでは同じ役割の色を明色側で再構成し、`NSColor(name:dynamicProvider:)` に
-/// よる dynamic color で `effectiveAppearance` の変化に自動追従する。
+/// Shown as an `NSPanel`-based borderless / translucent panel at the top center of the parent
+/// window. Its look follows Screen 02 of docs/ui-mock.html (dark mode uses the mock's fixed colors
+/// as-is). Light mode reconstructs colors with the same roles on the light side, and dynamic colors
+/// via `NSColor(name:dynamicProvider:)` automatically track `effectiveAppearance` changes.
 ///
-/// `AppModel` には依存しない self-contained なコンポーネント。コマンド一覧(`PaletteCommand`)と
-/// 確定時のコールバックを外から渡すだけで動作する。MainWindowController からの ⌘K 配線・
-/// `PaletteCommandProvider` の呼び出しは呼び出し側の責務。
+/// A self-contained component with no dependency on `AppModel`. It works given only the command
+/// list (`PaletteCommand`) and a commit callback from outside. Wiring Cmd-K from
+/// MainWindowController and calling `PaletteCommandProvider` are the caller's responsibility.
 @MainActor
 public final class PalettePanel: NSObject {
-    /// 表示中のインスタンスを保持する。パネルを閉じるまで解放されないようにするための参照。
+    /// Holds the instance being shown. This reference keeps it from being deallocated until the panel closes.
     private static var current: PalettePanel?
 
-    /// コマンドパレットを `window` の中央上部にオーバーレイ表示する。
+    /// Show the command palette as an overlay at the top center of `window`.
     ///
     /// - Parameters:
-    ///   - window: パレットを重ねる親ウィンドウ。
-    ///   - commands: 列挙する全コマンド(表示順は `PaletteCommandProvider` が返した順を初期表示順とする)。
-    ///   - onCommit: ユーザーが Enter で確定したときに呼ばれる。呼び出し後、パネルは自動で閉じる。
+    ///   - window: Parent window to overlay the palette on.
+    ///   - commands: All commands to list (initial display order is the order returned by `PaletteCommandProvider`).
+    ///   - onCommit: Called when the user confirms with Enter. The panel closes automatically after the call.
     public static func show(
         over window: NSWindow,
         commands: [PaletteCommand],
@@ -33,7 +33,7 @@ public final class PalettePanel: NSObject {
         panel.present(over: window)
     }
 
-    // MARK: - レイアウト定数
+    // MARK: - Layout constants
 
     private static let panelWidth: CGFloat = 460
     private static let inputHeight: CGFloat = 42
@@ -41,11 +41,12 @@ public final class PalettePanel: NSObject {
     private static let maxVisibleRows = 8
     private static let topInset: CGFloat = 88
 
-    // MARK: - 配色(docs/ui-mock.html の CSS 変数をベースにした dynamic color)
+    // MARK: - Colors (dynamic colors based on the CSS variables in docs/ui-mock.html)
     //
-    // ダークモードの値は mock の固定色そのもの。ライトモードは同じ役割(パネル背景・境界線・
-    // 区切り線・本文/補助テキスト・アクセント・選択行)を明色側で再構成した値。
-    // `dynamicColor(dark:light:)` で作った色は `effectiveAppearance` の変化に自動追従する。
+    // Dark mode values are the mock's fixed colors verbatim. Light mode values reconstruct the same
+    // roles (panel background, border, separator line, body/auxiliary text, accent, selected row)
+    // on the light side. Colors made with `dynamicColor(dark:light:)` automatically track
+    // `effectiveAppearance` changes.
 
     private static func dynamicColor(dark: NSColor, light: NSColor) -> NSColor {
         NSColor(name: nil) { appearance in
@@ -65,7 +66,7 @@ public final class PalettePanel: NSObject {
         dark: NSColor(red: 0x26 / 255, green: 0x2b / 255, blue: 0x36 / 255, alpha: 1),
         light: NSColor(red: 0xe8 / 255, green: 0xea / 255, blue: 0xed / 255, alpha: 1)
     )
-    // 以下4色は同ファイル内の `PaletteRowView` / `PaletteRowCellView` からも参照するため fileprivate。
+    // The following 4 colors are fileprivate because `PaletteRowView` / `PaletteRowCellView` in this file also reference them.
     fileprivate static let colorText = dynamicColor(
         dark: NSColor(red: 0xe8 / 255, green: 0xea / 255, blue: 0xf0 / 255, alpha: 1),
         light: NSColor(red: 0x1c / 255, green: 0x1f / 255, blue: 0x26 / 255, alpha: 1)
@@ -88,7 +89,7 @@ public final class PalettePanel: NSObject {
     )
     private static let colorDim = NSColor(white: 0, alpha: 0.55)
 
-    // MARK: - 状態
+    // MARK: - State
 
     private let allCommands: [PaletteCommand]
     private var filteredCommands: [PaletteCommand]
@@ -113,7 +114,7 @@ public final class PalettePanel: NSObject {
         super.init()
     }
 
-    // MARK: - 表示
+    // MARK: - Presentation
 
     private func present(over window: NSWindow) {
         let dim = makeDimWindow(covering: window)
@@ -143,7 +144,7 @@ public final class PalettePanel: NSObject {
         reload()
     }
 
-    /// パネルを閉じる(ウィンドウの破棄・オブザーバの解除を行う)。確定・Esc・フォーカス外れのいずれからも呼ばれる。
+    /// Close the panel (tears down the windows and removes observers). Called from commit, Esc, and losing focus alike.
     private func close() {
         for observer in observers {
             NotificationCenter.default.removeObserver(observer)
@@ -166,7 +167,7 @@ public final class PalettePanel: NSObject {
         }
     }
 
-    // MARK: - ウィンドウ構築
+    // MARK: - Window construction
 
     private func makeDimWindow(covering window: NSWindow) -> NSWindow {
         let dim = PaletteDimWindow(
@@ -206,9 +207,9 @@ public final class PalettePanel: NSObject {
         return panel
     }
 
-    /// 検索欄・テーブル一式を一度だけ構築する。フィルタ結果に応じた再表示は `layoutContainer`
-    /// によるフレーム調整のみで行い、サブビューを作り直さない(作り直すと `searchField` が
-    /// 毎回別ウィンドウに付け替わり、入力中に first responder が失われてしまう)。
+    /// Build the search field and table set exactly once. Re-display for filter results is done
+    /// only by frame adjustment via `layoutContainer`, never by recreating subviews (recreating
+    /// would reattach `searchField` to a different window each time, losing first responder while typing).
     private func setUpContainerViewIfNeeded() {
         guard containerView.subviews.isEmpty else { return }
 
@@ -219,7 +220,7 @@ public final class PalettePanel: NSObject {
         containerView.backgroundDynamicColor = PalettePanel.colorPanelBackground
         containerView.borderDynamicColor = PalettePanel.colorBorder
 
-        // 入力欄
+        // Input field
         let bottomLine = NSBox()
         bottomLine.boxType = .custom
         bottomLine.fillColor = PalettePanel.colorLine
@@ -245,7 +246,7 @@ public final class PalettePanel: NSObject {
         inputRow.addSubview(searchField)
         containerView.addSubview(inputRow)
 
-        // 候補リスト
+        // Candidate list
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
@@ -277,10 +278,11 @@ public final class PalettePanel: NSObject {
         containerView.addSubview(emptyLabel)
     }
 
-    /// `height` に合わせてコンテナ内の各フレームだけを再配置する(ビューは作り直さない)。
-    /// コンテナは flipped(y=0 が上)なので「入力欄を上端に、リストをその下に」を素直に書ける。
-    /// 高さの増減はすべて下端で吸収されるため、絞り込みでパネルが縮む途中でも
-    /// 入力欄とリスト上端の位置は一切動かない(行が下端で切れて見える崩れの根治)。
+    /// Re-position only the frames inside the container to match `height` (views are not recreated).
+    /// The container is flipped (y=0 at the top), so "input field at the top, list below it" can be
+    /// written naturally. All height changes are absorbed at the bottom edge, so even mid-shrink
+    /// while filtering, the input field and the list's top edge never move (the definitive fix for
+    /// rows appearing clipped at the bottom edge).
     private func layoutContainer(height: CGFloat) {
         inputRow.frame = NSRect(
             x: 0, y: 0,
@@ -309,15 +311,15 @@ public final class PalettePanel: NSObject {
             x: window.frame.midX - PalettePanel.panelWidth / 2,
             y: window.frame.maxY - PalettePanel.topInset - height
         )
-        // `layoutContainer` を先に呼び、サブビューを新しい `height` に合わせておく。
-        // `setFrame(display: true)` は呼び出した瞬間に同期的に再描画するため、逆順だと
-        // 古い(絞り込み前の大きい)フレームのまま新しい(小さい)コンテナ境界で
-        // クリップされた状態が一瞬描画されてしまう(候補が1件のときの半端な切れ方の原因)。
+        // Call `layoutContainer` first so subviews match the new `height`.
+        // `setFrame(display: true)` redraws synchronously the moment it is called, so in the
+        // reverse order a frame that is still old (large, pre-filter) would briefly render clipped
+        // by the new (small) container bounds (the cause of the odd truncation with a single candidate).
         layoutContainer(height: height)
         panelWindow.setFrame(NSRect(origin: origin, size: NSSize(width: PalettePanel.panelWidth, height: height)), display: true)
     }
 
-    // MARK: - フィルタリング・選択
+    // MARK: - Filtering and selection
 
     private func reload() {
         tableView.reloadData()
@@ -352,7 +354,7 @@ public final class PalettePanel: NSObject {
     }
 }
 
-// MARK: - NSTextFieldDelegate(検索クエリの変化・矢印キー/Enter/Esc の横取り)
+// MARK: - NSTextFieldDelegate (search query changes; intercepting arrow keys/Enter/Esc)
 
 extension PalettePanel: NSTextFieldDelegate {
     public func controlTextDidChange(_ obj: Notification) {
@@ -362,9 +364,9 @@ extension PalettePanel: NSTextFieldDelegate {
         reload()
     }
 
-    // 検索フィールドはフィールドエディタ(共有 NSTextView)経由でキー入力を処理するため、
-    // 矢印キー・Enter・Esc は通常の `keyDown` では受け取れない。AppKit が field editor の
-    // コマンドをこのデリゲートメソッドにも転送してくるので、ここで横取りする。
+    // The search field processes key input via the field editor (a shared NSTextView), so arrow
+    // keys, Enter, and Esc cannot be received through a normal `keyDown`. AppKit also forwards the
+    // field editor's commands to this delegate method, so intercept them here.
     public func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         switch commandSelector {
         case #selector(NSResponder.moveUp(_:)):
@@ -414,13 +416,13 @@ extension PalettePanel: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     public func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
-        // 選択はキーボード操作(↑↓)側で管理する。マウスクリックのみここで反映する。
+        // Selection is managed by keyboard navigation (up/down arrows). Only mouse clicks are applied here.
         selectedIndex = row
         return true
     }
 
     public func tableViewSelectionDidChange(_ notification: Notification) {
-        // マウスクリックによる選択も見た目に反映するため、選択行のセルだけ再描画する。
+        // Redraw the selected row's cell so that mouse-click selection is also reflected visually.
         tableView.reloadData()
     }
 
@@ -438,16 +440,16 @@ extension PalettePanel: NSTableViewDataSource, NSTableViewDelegate {
     }
 }
 
-// MARK: - 補助クラス
+// MARK: - Helper classes
 
-/// borderless / nonactivating でもキーウィンドウになれる `NSPanel`。
-/// テキストフィールドにキー入力を届けるために必要。
+/// An `NSPanel` that can become key even while borderless / nonactivating.
+/// Required to deliver key input to the text field.
 private final class PaletteWindow: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }
 
-/// パレット背後を薄暗くするだけの borderless ウィンドウ。クリックでパレットを閉じる。
+/// Borderless window that only dims the area behind the palette. Clicking it closes the palette.
 private final class PaletteDimWindow: NSWindow {
     var onMouseDown: (() -> Void)?
 
@@ -458,7 +460,7 @@ private final class PaletteDimWindow: NSWindow {
     }
 }
 
-/// 選択行のハイライトを `PalettePanel.colorSelectionRow` に合わせてカスタム描画する行ビュー。
+/// Row view that custom-draws the selected-row highlight to match `PalettePanel.colorSelectionRow`.
 private final class PaletteRowView: NSTableRowView {
     override func drawSelection(in dirtyRect: NSRect) {
         guard isSelected else { return }
@@ -468,20 +470,20 @@ private final class PaletteRowView: NSTableRowView {
         path.fill()
     }
 
-    // `drawSelection` はカスタム描画(生の CGColor 経由ではなく都度 `setFill` で解決する dynamic
-    // color)なので本来は自動追従するが、システム外観の切り替え時に再描画がスケジュールされる
-    // 保証がないため明示的に invalidate する。
+    // `drawSelection` is custom drawing (a dynamic color resolved via `setFill` each time, not
+    // through a raw CGColor), so it would track automatically in principle — but there is no
+    // guarantee a redraw is scheduled when the system appearance switches, so invalidate explicitly.
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsDisplay = true
     }
 }
 
-/// パレットパネル本体のコンテナビュー。レイヤーの背景色・境界線色は `CGColor` の固定スナップ
-/// ショットになり `NSColor(name:dynamicProvider:)` の自動追従が効かないため、外観変化時に
-/// `performAsCurrentDrawingAppearance` で明示的に解決し直す。
+/// Container view of the palette panel itself. The layer's background and border colors become
+/// fixed `CGColor` snapshots, so `NSColor(name:dynamicProvider:)`'s automatic tracking does not
+/// apply; re-resolve them explicitly with `performAsCurrentDrawingAppearance` on appearance changes.
 private final class PaletteContainerView: NSView {
-    // 上から積むレイアウト(layoutContainer)のため flipped にする。
+    // Flipped for the top-down stacking layout (layoutContainer).
     override var isFlipped: Bool { true }
 
     var backgroundDynamicColor: NSColor? {
@@ -505,7 +507,7 @@ private final class PaletteContainerView: NSView {
     }
 }
 
-/// 1行分のセル(カテゴリ・タイトル・右端のキーヒント/補助情報)。
+/// Cell for one row (category, title, and key hint / auxiliary info at the right edge).
 private final class PaletteRowCellView: NSTableCellView {
     private let categoryLabel = NSTextField(labelWithString: "")
     private let titleLabel = NSTextField(labelWithString: "")

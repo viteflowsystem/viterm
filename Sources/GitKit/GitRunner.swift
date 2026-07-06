@@ -1,19 +1,19 @@
 import Foundation
 
-/// `git` サブプロセスの実行結果。
+/// Result of running a `git` subprocess.
 public struct GitOutput: Sendable, Equatable {
     public let stdout: String
     public let stderr: String
     public let exitCode: Int32
 }
 
-/// `git` サブプロセスの実行に関するエラー。
+/// Errors related to running a `git` subprocess.
 public enum GitError: Error, CustomStringConvertible, Sendable, Equatable {
-    /// git コマンドが非0で終了した。
+    /// The git command exited non-zero.
     case commandFailed(arguments: [String], exitCode: Int32, stdout: String, stderr: String)
-    /// 指定タイムアウト内にコマンドが完了しなかった(プロセスは terminate 済み)。
+    /// The command did not complete within the given timeout (the process has been terminated).
     case timedOut(arguments: [String], timeout: TimeInterval)
-    /// プロセス自体の起動に失敗した(実行ファイルが見つからない等)。
+    /// The process itself failed to launch (executable not found, etc.).
     case launchFailed(arguments: [String], reason: String)
 
     public var description: String {
@@ -28,7 +28,7 @@ public enum GitError: Error, CustomStringConvertible, Sendable, Equatable {
         }
     }
 
-    /// コマンド失敗時に添付された stderr(空なら stdout)。UI 表示用の短いメッセージ抽出に使う。
+    /// The stderr attached to a command failure (stdout if stderr is empty). Used to extract a short message for UI display.
     public var diagnosticMessage: String {
         switch self {
         case let .commandFailed(_, _, stdout, stderr):
@@ -45,15 +45,15 @@ public enum GitError: Error, CustomStringConvertible, Sendable, Equatable {
     }
 }
 
-/// `Foundation.Process` で `git` を実行する薄いラッパー。async/await ベースで、
-/// タイムアウト・stdout/stderr の取得・非0終了時のエラー化を担う。
+/// Thin wrapper that runs `git` via `Foundation.Process`. async/await based; handles
+/// timeouts, capturing stdout/stderr, and converting non-zero exits into errors.
 ///
-/// GitService はこの上に git 固有の操作(worktree / branch / merge 等)を構築する。
+/// GitService builds git-specific operations (worktree / branch / merge, etc.) on top of this.
 public struct GitRunner: Sendable {
-    /// 実行するプログラム。既定は `/usr/bin/env` で、その場合 `git` を第一引数として補う
-    /// (PATH 解決を OS に委ねるため)。テストではフェイクの実行ファイルを直接指すこともできる。
+    /// The program to run. Defaults to `/usr/bin/env`, in which case `git` is supplied as the
+    /// first argument (to delegate PATH resolution to the OS). Tests can point directly at a fake executable.
     public var executableURL: URL
-    /// `run` / `runRaw` に timeout を明示しなかった場合に使うタイムアウト秒数。
+    /// Timeout in seconds used when `run` / `runRaw` are called without an explicit timeout.
     public var defaultTimeout: TimeInterval
 
     public init(
@@ -64,13 +64,13 @@ public struct GitRunner: Sendable {
         self.defaultTimeout = defaultTimeout
     }
 
-    /// git を実行し、stdout の文字列を返す。非0終了時は `GitError.commandFailed` を投げる。
+    /// Runs git and returns the stdout string. Throws `GitError.commandFailed` on a non-zero exit.
     @discardableResult
     public func run(_ arguments: [String], in directory: URL, timeout: TimeInterval? = nil) async throws -> String {
         try await runRaw(arguments, in: directory, timeout: timeout).stdout
     }
 
-    /// git を実行し、stdout/stderr/終了コードをまとめて返す。
+    /// Runs git and returns stdout/stderr/exit code together.
     public func runRaw(_ arguments: [String], in directory: URL, timeout: TimeInterval? = nil) async throws -> GitOutput {
         let effectiveTimeout = timeout ?? defaultTimeout
 
@@ -93,10 +93,11 @@ public struct GitRunner: Sendable {
         async let stdoutData = Self.readAll(stdoutPipe.fileHandleForReading)
         async let stderrData = Self.readAll(stderrPipe.fileHandleForReading)
 
-        // `withTaskGroup` はクロージャが戻る前に全子タスクの完了を待つため、タイムアウト側が先に
-        // 発火した場合は「その場で」`process.terminate()` を呼ぶ必要がある。そうしないと、
-        // completion handler 待ちの waitForExit タスクが実プロセス終了まで完了せず、
-        // 結果的にタイムアウトが名ばかりになってしまう(=呼び出し元での terminate() は手遅れ)。
+        // `withTaskGroup` waits for all child tasks to complete before the closure returns, so if
+        // the timeout side fires first, `process.terminate()` must be called right there. Otherwise
+        // the waitForExit task, waiting on the completion handler, would not finish until the real
+        // process exits, effectively making the timeout meaningless (i.e. calling terminate() in the
+        // caller would be too late).
         let didTimeOut = await withTaskGroup(of: Bool.self) { group in
             group.addTask {
                 await Self.waitForExit(process)
@@ -140,8 +141,8 @@ public struct GitRunner: Sendable {
         return ["git"] + arguments
     }
 
-    /// パイプが EOF(書き込み側クローズ)になるまで読み切る。大きい出力でもパイプバッファ詰まりで
-    /// デッドロックしないよう、プロセス終了を待つのと並行して呼び出す。
+    /// Reads until the pipe reaches EOF (write side closed). Called concurrently with waiting for
+    /// process exit so that large output does not deadlock on a full pipe buffer.
     private static func readAll(_ handle: FileHandle) async -> Data {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {

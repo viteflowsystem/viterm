@@ -1,23 +1,24 @@
 import AppKit
 
-/// 複数ペイン(ターミナルサーフェス等)を `NSSplitView` の二分木でホストするコンポーネント(T12)。
+/// Component hosting multiple panes (terminal surfaces, etc.) as a binary tree of `NSSplitView`s (T12).
 ///
-/// `TerminalHostView` の単一表示に代わる分割対応版という位置づけの self-contained なビュー。
-/// リーフには任意の `NSView`(実運用では `GhosttySurfaceView`)を1枚だけ保持する。
-/// `TerminalHostView` 同様、ペインを閉じても中身の View 自体は破棄せず取り外すだけ
-/// (バックグラウンドセッションの生存方針を踏襲。`closeActivePane()` が返す View の扱いは
-/// 呼び出し側の責務)。
+/// A self-contained view positioned as the split-capable replacement for `TerminalHostView`'s
+/// single display. Each leaf holds exactly one arbitrary `NSView` (in practice a `GhosttySurfaceView`).
+/// Like `TerminalHostView`, closing a pane only detaches the content view, never destroys it
+/// (following the policy of keeping background sessions alive; what to do with the view returned by
+/// `closeActivePane()` is the caller's responsibility).
 ///
-/// 分割木は `PaneNode`(`.leaf` / `.split`)で表現し、各ノードは自身を含む `NSSplitView` の
-/// arrangedSubview もしくは `PaneContainerView` を直接保持する。フォーカス中ペインはクリックまたは
-/// `focusNextPane()` で切り替わり、`PaneContainerView` がアクセント色の枠で見た目に反映する。
+/// The split tree is expressed as `PaneNode` (`.leaf` / `.split`); each node directly holds either
+/// the arrangedSubview of its containing `NSSplitView` or a `PaneContainerView`. The focused pane
+/// switches via click or `focusNextPane()`, and `PaneContainerView` reflects it visually with an
+/// accent-colored border.
 final class SplitHostView: NSView {
-    /// フォーカス移動(クリック・`focusNextPane()`・分割・クローズ)のたびに呼ばれる。
-    /// 引数は新しいアクティブペインの中身(ペインが1つも無くなった場合は `nil`)。
+    /// Called on every focus change (click, `focusNextPane()`, split, close).
+    /// The argument is the new active pane's content (`nil` if no panes remain).
     var onActivePaneChanged: ((NSView?) -> Void)?
 
-    /// フォーカス中ペインの枠に使うアクセント色。ダーク時は docs/ui-mock.html のアクセント値、
-    /// ライト時は `PalettePanel` と同じ方針でコントラストを保つよう少し暗くした値を使う。
+    /// Accent color for the focused pane's border. In dark mode, the accent value from
+    /// docs/ui-mock.html; in light mode, a slightly darkened value to keep contrast, following the same policy as `PalettePanel`.
     static let accentColor = NSColor(name: nil) { appearance in
         let dark = NSColor(red: 0x56 / 255, green: 0xc2 / 255, blue: 0xb6 / 255, alpha: 1)
         let light = NSColor(red: 0x17 / 255, green: 0x8f / 255, blue: 0x83 / 255, alpha: 1)
@@ -26,10 +27,10 @@ final class SplitHostView: NSView {
 
     private var root: PaneNode?
     private var activeNode: PaneNode?
-    /// クリックでのペイン切り替え用に `PaneContainerView` → `PaneNode` を逆引きする。
+    /// Reverse lookup `PaneContainerView` -> `PaneNode` for click-based pane switching.
     private var nodesByContainer: [ObjectIdentifier: PaneNode] = [:]
-    // deinit(nonisolated)から解放するため unsafe 指定。書き込みは init/deinit のみ
-    // (GhosttySurfaceView.surface と同じ理由)。
+    // Marked unsafe so it can be released from deinit (nonisolated). Writes happen only in init/deinit
+    // (same reason as GhosttySurfaceView.surface).
     private nonisolated(unsafe) var mouseMonitor: Any?
 
     override init(frame frameRect: NSRect) {
@@ -48,10 +49,10 @@ final class SplitHostView: NSView {
         }
     }
 
-    // MARK: - 公開 API
+    // MARK: - Public API
 
-    /// 分割なしの単一表示にリセットする(`TerminalHostView.show` 相当)。既存のペインはすべて
-    /// 取り外す(中身の View は破棄しない)。`nil` を渡すとペインが1つも無い状態になる。
+    /// Reset to a single, unsplit display (equivalent to `TerminalHostView.show`). All existing
+    /// panes are detached (content views are not destroyed). Passing `nil` leaves no panes at all.
     func showRoot(_ view: NSView?) {
         detachAll()
         guard let view else {
@@ -64,9 +65,9 @@ final class SplitHostView: NSView {
         setActive(node, notify: true)
     }
 
-    /// フォーカス中のペインを分割し、新しいペインとして `newView` を配置する。
-    /// `vertically: true` は右側に(縦の仕切り線で左右分割)、`false` は下側に(横の仕切り線で
-    /// 上下分割)追加する。フォーカス中のペインが無い場合は `showRoot(newView)` と同じ挙動になる。
+    /// Split the focused pane and place `newView` as the new pane.
+    /// `vertically: true` adds it to the right (left/right split with a vertical divider), `false`
+    /// below (top/bottom split with a horizontal divider). With no focused pane, behaves like `showRoot(newView)`.
     func splitActive(_ newView: NSView, vertically: Bool) {
         guard let target = activeNode ?? firstLeaf(of: root) else {
             showRoot(newView)
@@ -107,9 +108,9 @@ final class SplitHostView: NSView {
         setActive(newLeaf, notify: true)
     }
 
-    /// フォーカス中のペインを閉じ、そこに入っていた View を取り外して返す(破棄はしない)。
-    /// 呼び出し側がセッション終了などと紐付けるかは任意。閉じた結果ペインが1つも残らなければ
-    /// `onActivePaneChanged` に `nil` が通知される。フォーカス中のペインが無ければ何もせず `nil`。
+    /// Close the focused pane and detach and return the view it contained (without destroying it).
+    /// Whether the caller ties this to session termination etc. is optional. If no panes remain
+    /// after closing, `onActivePaneChanged` is notified with `nil`. With no focused pane, does nothing and returns `nil`.
     @discardableResult
     func closeActivePane() -> NSView? {
         guard let target = activeNode, case .leaf(let container) = target.kind else { return nil }
@@ -118,7 +119,7 @@ final class SplitHostView: NSView {
         let targetView = containerView(for: target)
 
         guard let parent = target.parent, case .split(let parentSplitView, let childA, let childB) = parent.kind else {
-            // 唯一のペイン(root がそのまま leaf)だった。
+            // It was the only pane (root itself was a leaf).
             targetView.removeFromSuperview()
             root = nil
             setActive(nil, notify: true)
@@ -129,7 +130,7 @@ final class SplitHostView: NSView {
         let siblingView = containerView(for: sibling)
         let grandparent = parent.parent
 
-        // 祖父ノードでの挿入位置は、親(古い NSSplitView)を取り除く前に記録しておく必要がある。
+        // The insertion index in the grandparent must be recorded before removing the parent (the old NSSplitView).
         var grandparentSplitView: NSSplitView?
         var grandparentInsertIndex: Int?
         if let grandparent, case .split(let gSplitView, _, _) = grandparent.kind {
@@ -159,7 +160,7 @@ final class SplitHostView: NSView {
         return removedView
     }
 
-    /// 現在ホストしている中身の View 一覧(深さ優先順)。
+    /// List of currently hosted content views (depth-first order).
     var hostedViews: [NSView] {
         var leaves: [PaneNode] = []
         collectLeaves(root, into: &leaves)
@@ -169,7 +170,7 @@ final class SplitHostView: NSView {
         }
     }
 
-    /// `view` を中身に持つペインがあればフォーカスして true を返す。
+    /// If a pane whose content is `view` exists, focus it and return true.
     @discardableResult
     func focusPane(containing view: NSView) -> Bool {
         var leaves: [PaneNode] = []
@@ -185,8 +186,8 @@ final class SplitHostView: NSView {
         return false
     }
 
-    /// `view` を中身に持つペインを閉じ、View を取り外して返す(破棄はしない)。
-    /// 該当ペインが無ければ何もせず `nil`。プロセス終了したセッションの後始末用。
+    /// Close the pane whose content is `view`, detach the view and return it (without destroying it).
+    /// If no such pane exists, does nothing and returns `nil`. For cleaning up sessions whose process exited.
     @discardableResult
     func closePane(containing view: NSView) -> NSView? {
         var leaves: [PaneNode] = []
@@ -198,7 +199,7 @@ final class SplitHostView: NSView {
         let previousActive = activeNode
         activeNode = node
         let removed = closeActivePane()
-        // 閉じたのが非アクティブペインだった場合、可能なら元のアクティブを維持する。
+        // If the closed pane was not the active one, keep the original active pane if possible.
         if let previousActive, previousActive !== node {
             var remaining: [PaneNode] = []
             collectLeaves(root, into: &remaining)
@@ -209,8 +210,8 @@ final class SplitHostView: NSView {
         return removed
     }
 
-    /// フォーカス中ペインの中身を `newView` に差し替え、外した View を返す(破棄はしない)。
-    /// ペインが無い場合は `showRoot(newView)` 相当。
+    /// Replace the focused pane's content with `newView` and return the removed view (without destroying it).
+    /// With no panes, equivalent to `showRoot(newView)`.
     @discardableResult
     func replaceActive(with newView: NSView) -> NSView? {
         guard let target = activeNode, case .leaf(let container) = target.kind else {
@@ -224,8 +225,8 @@ final class SplitHostView: NSView {
         return removed
     }
 
-    /// ペイン間でフォーカスを次に移す(木を深さ優先で辿った順で巡回し、末尾からは先頭に戻る)。
-    /// ペインが1つ以下なら何もしない。
+    /// Move focus to the next pane (cycles in depth-first traversal order of the tree, wrapping from last to first).
+    /// Does nothing with one pane or fewer.
     func focusNextPane() {
         var leaves: [PaneNode] = []
         collectLeaves(root, into: &leaves)
@@ -235,7 +236,7 @@ final class SplitHostView: NSView {
         setActive(next, notify: true)
     }
 
-    // MARK: - 分割木の操作
+    // MARK: - Split tree operations
 
     private func makeLeafNode(content: NSView) -> PaneNode {
         let container = PaneContainerView()
@@ -270,7 +271,7 @@ final class SplitHostView: NSView {
         }
     }
 
-    /// 現在の木をすべて取り外す(各リーフの中身の View も `removeFromSuperview` する。破棄はしない)。
+    /// Detach the entire current tree (each leaf's content view is also `removeFromSuperview`ed, but not destroyed).
     private func detachAll() {
         if let root {
             releaseAllContent(root)
@@ -302,7 +303,7 @@ final class SplitHostView: NSView {
         ])
     }
 
-    // MARK: - フォーカス管理
+    // MARK: - Focus management
 
     private func setActive(_ node: PaneNode?, notify: Bool) {
         if let previous = activeNode, case .leaf(let previousContainer) = previous.kind {
@@ -310,8 +311,8 @@ final class SplitHostView: NSView {
         }
         activeNode = node
 
-        // フォーカス枠は「どのペインがアクティブか」の区別が必要な分割時のみ表示する
-        // (単一ペインで常時枠が出ると、ただの飾り枠に見えてしまう)。
+        // Show the focus border only when split, where distinguishing "which pane is active" matters
+        // (a permanent border on a single pane would just look like decoration).
         var leaves: [PaneNode] = []
         collectLeaves(root, into: &leaves)
         let showsFocusRing = leaves.count > 1
@@ -330,11 +331,11 @@ final class SplitHostView: NSView {
         }
     }
 
-    // MARK: - クリックによるペイン切り替え
+    // MARK: - Pane switching by click
 
-    /// クリックされたペインをアクティブにする。`GhosttySurfaceView` 等リーフの中身側に手を入れず
-    /// フォーカス追従させるため、ウィンドウの通常応答チェーンには頼らずローカルの mouse monitor で
-    /// クリック位置から該当ペインを特定する。イベント自体は消費せずそのまま返す。
+    /// Make the clicked pane active. To have focus follow clicks without touching the leaf content
+    /// (`GhosttySurfaceView` etc.), we don't rely on the window's normal responder chain but use a
+    /// local mouse monitor to identify the pane from the click location. The event itself is returned unconsumed.
     private func installMouseMonitor() {
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             self?.handleLeftMouseDown(event)
@@ -361,10 +362,10 @@ final class SplitHostView: NSView {
     }
 }
 
-// MARK: - 分割木
+// MARK: - Split tree
 
-/// `SplitHostView` の分割木のノード。`.leaf` は1枚の `PaneContainerView`、`.split` は
-/// `NSSplitView` とその2つの子ノードを持つ。`parent` はクローズ/分割時の木の組み替えに使う。
+/// Node of `SplitHostView`'s split tree. `.leaf` holds one `PaneContainerView`; `.split` holds an
+/// `NSSplitView` and its two child nodes. `parent` is used to restructure the tree on close/split.
 private final class PaneNode {
     enum Kind {
         case leaf(PaneContainerView)
@@ -379,12 +380,12 @@ private final class PaneNode {
     }
 }
 
-// MARK: - リーフのコンテナ
+// MARK: - Leaf container
 
-/// 分割木の葉として、中身の View を1枚保持するコンテナ。`isActive` に応じてアクセント色の枠を
-/// 最前面のオーバーレイ(`PaneBorderOverlayView`)で描画する。中身は bounds いっぱいに敷き詰める
-/// ため、枠は別 View で最前面から重ねないと中身に隠れてしまう(コンテナ自身の背景描画は
-/// 常に subview より下に合成されるため)。
+/// Container holding one content view as a leaf of the split tree. Depending on `isActive`, draws
+/// an accent-colored border via a frontmost overlay (`PaneBorderOverlayView`). Because the content
+/// fills the entire bounds, the border must be layered on top by a separate view or it gets hidden
+/// behind the content (the container's own background drawing is always composited below its subviews).
 private final class PaneContainerView: NSView {
     private(set) var content: NSView?
     private let borderOverlay = PaneBorderOverlayView()
@@ -411,8 +412,8 @@ private final class PaneContainerView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    /// 中身の View を bounds いっぱいに配置する。既存の中身があれば `removeFromSuperview` する
-    /// (破棄はしない)。
+    /// Lay out the content view to fill the bounds. Any existing content is `removeFromSuperview`ed
+    /// (not destroyed).
     func setContent(_ view: NSView) {
         content?.removeFromSuperview()
         content = view
@@ -426,7 +427,7 @@ private final class PaneContainerView: NSView {
         ])
     }
 
-    /// 中身の View を取り外して返す(破棄はしない)。以後このコンテナは空になる。
+    /// Detach and return the content view (without destroying it). The container is empty afterwards.
     @discardableResult
     func releaseContent() -> NSView? {
         let view = content
@@ -436,8 +437,8 @@ private final class PaneContainerView: NSView {
     }
 }
 
-/// `PaneContainerView` の最前面に重ね、アクティブ時のみアクセント枠を描画するクリックスルー View。
-/// `hitTest` を `nil` 固定にしてマウス/クリックイベントは常に下の中身に届くようにする。
+/// Click-through view layered on top of `PaneContainerView` that draws the accent border only when active.
+/// `hitTest` is pinned to `nil` so mouse/click events always reach the content below.
 private final class PaneBorderOverlayView: NSView {
     private static let borderWidth: CGFloat = 2
 
@@ -460,8 +461,8 @@ private final class PaneBorderOverlayView: NSView {
         path.stroke()
     }
 
-    // カスタム drawRect は AppKit 標準コントロールと違い外観変化時の再描画が保証されないため、
-    // 明示的に invalidate する(`PalettePanel` の `PaletteRowView` と同じ理由)。
+    // Unlike standard AppKit controls, a custom drawRect is not guaranteed to be redrawn on
+    // appearance changes, so invalidate explicitly (same reason as `PalettePanel`'s `PaletteRowView`).
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         if isActive { needsDisplay = true }

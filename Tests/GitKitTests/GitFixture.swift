@@ -1,8 +1,8 @@
 import Foundation
 @testable import GitKit
 
-/// テスト用の一時ディレクトリを作り、`body` 実行後に必ず削除する。
-/// 実 git を使う fixture リポジトリはすべてこの配下に作る。カレントの viterm リポジトリには一切触れない。
+/// Creates a temporary directory for tests and always deletes it after `body` runs.
+/// All fixture repositories that use real git are created under it. The current viterm repository is never touched.
 func withTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent("viterm-GitKitTests-\(UUID().uuidString)", isDirectory: true)
@@ -14,7 +14,7 @@ func withTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> 
 enum Fixture {
     static let runner = GitRunner()
 
-    /// 指定ブランチ(既定 `main`)に初期コミットが1つある単純なリポジトリを作る。
+    /// Creates a simple repository with one initial commit on the given branch (default `main`).
     @discardableResult
     static func makeRepository(at repoURL: URL, branch: String = "main", initialFile: String = "README.md") async throws -> String {
         try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)
@@ -43,9 +43,9 @@ enum Fixture {
         return sha.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// bare リモート("origin")を持つリポジトリ一式を作る。`repo` が origin/HEAD = main を持つ
-    /// clone になっており、`feature` ブランチも origin に push 済みで `repo` から fetch 済み。
-    /// - Returns: (repo: 作業用 clone, bare: bare リモートのパス)
+    /// Creates a full repository setup with a bare remote ("origin"). `repo` is a clone with
+    /// origin/HEAD = main; a `feature` branch is also pushed to origin and already fetched into `repo`.
+    /// - Returns: (repo: working clone, bare: path to the bare remote)
     static func makeRepositoryWithRemote(in directory: URL) async throws -> (repo: URL, bare: URL) {
         let bare = directory.appendingPathComponent("origin.git", isDirectory: true)
         let seed = directory.appendingPathComponent("seed", isDirectory: true)

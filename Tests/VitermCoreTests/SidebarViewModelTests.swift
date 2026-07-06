@@ -6,9 +6,9 @@ import Testing
 struct SidebarViewModelTests {
     let t0 = Date(timeIntervalSince1970: 1_700_000_000)
 
-    // viterm リポジトリ: main worktree(zsh) + feat/sidebar worktree(claude #1 busy, claude #2 waiting, codex #1 idle)
-    // webapp リポジトリ: fix/login worktree(claude #1 busy)
-    // docs/ui-mock.html の Screen 01 相当の構成。
+    // viterm repository: main worktree (zsh) + feat/sidebar worktree (claude #1 busy, claude #2 waiting, codex #1 idle)
+    // webapp repository: fix/login worktree (claude #1 busy)
+    // Layout equivalent to Screen 01 in docs/ui-mock.html.
     func makeFixture() -> (repos: [Repository], worktrees: [Worktree], sessions: [AgentSession]) {
         let viterm = Repository(name: "viterm", path: "/repo/viterm")
         let webapp = Repository(name: "webapp", path: "/repo/webapp")

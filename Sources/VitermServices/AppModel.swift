@@ -3,31 +3,33 @@ import GitKit
 import Observation
 import VitermCore
 
-/// `PaletteAction` をディスパッチした結果、UI 側が次に何をすべきか。
-/// 追加入力(ダイアログでの選択)が必要な操作は実行せず、UI が続く入力を集めてから
-/// `AppModel` の対応するメソッド(`createWorktree` 等)を直接呼ぶ想定。
+/// What the UI should do next after dispatching a `PaletteAction`.
+/// Operations that need additional input (a choice made in a dialog) are not executed;
+/// the UI is expected to collect the remaining input and then call the corresponding
+/// `AppModel` method (`createWorktree`, etc.) directly.
 public enum PaletteDispatchOutcome: Sendable, Equatable {
-    /// worktree 新規作成ダイアログを開く。
+    /// Open the new-worktree creation dialog.
     case openCreateWorktreeDialog
-    /// リポジトリ追加ダイアログ(ディレクトリ選択)を開く。
+    /// Open the add-repository dialog (directory picker).
     case openAddRepositoryDialog
-    /// マージ方式(merge/rebase)選択ダイアログを開く。
+    /// Open the merge-method (merge/rebase) selection dialog.
     case confirmMergeWorktree(worktreeID: String)
-    /// 削除確認ダイアログを開く。
+    /// Open the removal confirmation dialog.
     case confirmRemoveWorktree(worktreeID: String)
-    /// その場で実行され、完了した(switchToWorktree / startSession)。
+    /// Executed on the spot and completed (switchToWorktree / startSession).
     case completed
-    /// その場で実行しようとしたが失敗した。
+    /// Attempted to execute on the spot but failed.
     case failed(String)
 }
 
-/// `AppModel.startAutoRefresh` の1周期分の待機を抽象化する。既定は実時間で待つが、
-/// テストでは即座に返すフェイクを注入して間隔待ちなしで検証できるようにする。
+/// Abstracts the wait for one cycle of `AppModel.startAutoRefresh`. The default waits in
+/// real time, but tests can inject a fake that returns immediately so verification runs
+/// without interval waits.
 public protocol AutoRefreshClock: Sendable {
     func sleep(for duration: Duration) async
 }
 
-/// 実時間で待機する既定実装(`Task.sleep` に委譲)。
+/// Default implementation that waits in real time (delegates to `Task.sleep`).
 public struct SystemAutoRefreshClock: AutoRefreshClock {
     public init() {}
     public func sleep(for duration: Duration) async {
@@ -35,36 +37,38 @@ public struct SystemAutoRefreshClock: AutoRefreshClock {
     }
 }
 
-/// UI(VitermApp)が直接バインドするアプリ状態のオーケストレーション層。
+/// Orchestration layer for the app state that the UI (VitermApp) binds to directly.
 ///
-/// 設定ロード → 登録リポジトリ + 自動検出の統合 → worktree 状態スキャン → セッション一覧、から
-/// `SidebarViewModel` を構築して公開する。git 操作・ファイルI/O・セッション起動は一切自前で行わず、
-/// すべて注入された抽象(`AppModelDependencies.swift` 参照)経由で行うため、フェイクで
-/// 決定的にユニットテストできる。
+/// Builds and publishes a `SidebarViewModel` from: config load → merge of registered
+/// repositories + auto-discovery → worktree status scan → session list. It performs no
+/// git operations, file I/O, or session launches itself — everything goes through the
+/// injected abstractions (see `AppModelDependencies.swift`), so it can be unit tested
+/// deterministically with fakes.
 ///
-/// AppKit から直接バインドされる想定のため `@MainActor` で隔離する。`@Observable` を付与しているが、
-/// これは SwiftUI 専用ではなく `Observation` フレームワーク由来で、AppKit 側は
-/// `withObservationTracking` で手動購読するか、単に都度プロパティを読む形でも使える。
+/// Isolated to `@MainActor` because it is meant to be bound directly from AppKit.
+/// It carries `@Observable`, but that is not SwiftUI-specific — it comes from the
+/// `Observation` framework, so the AppKit side can subscribe manually via
+/// `withObservationTracking` or simply read properties on demand.
 @MainActor
 @Observable
 public final class AppModel {
-    // MARK: 公開状態
+    // MARK: Published state
 
     public private(set) var config: VitermConfig
     public private(set) var repositories: [Repository]
     public private(set) var worktrees: [VitermCore.Worktree]
     public private(set) var sessions: [AgentSession]
     public private(set) var sidebar: SidebarViewModel
-    /// 現在ターミナルペインに表示中の worktree(= `dispatch` の `startSession`/`switchToWorktree` の対象)。
+    /// The worktree currently shown in the terminal pane (= the target of `dispatch`'s `startSession`/`switchToWorktree`).
     public private(set) var currentWorktreeID: String?
-    /// 直近の `refresh()` で発生した(致命的でない)エラーメッセージ。UI のトースト表示等に使う。
+    /// Non-fatal error messages produced by the most recent `refresh()`. Used for UI toasts, etc.
     public private(set) var lastRefreshErrors: [String]
-    /// 自動リフレッシュ(`startAutoRefresh`)経由で `refresh()` が完了するたびに main actor で発火する。
-    /// `AppModel` は `@Observable` だが AppKit 側は明示呼び出し(`render()`)前提のため、
-    /// UI への再描画トリガーとしてこのコールバックを使う。
+    /// Fired on the main actor each time a `refresh()` completes via auto-refresh (`startAutoRefresh`).
+    /// `AppModel` is `@Observable`, but the AppKit side assumes explicit calls (`render()`),
+    /// so this callback is used as the redraw trigger for the UI.
     public var onRefreshCompleted: (() -> Void)?
 
-    // MARK: 注入された依存
+    // MARK: Injected dependencies
 
     private let configProvider: any ConfigProviding
     private let repositoryConfigPersister: any RepositoryConfigPersisting
@@ -106,11 +110,12 @@ public final class AppModel {
         lastRefreshErrors = []
     }
 
-    // MARK: - リフレッシュ
+    // MARK: - Refresh
 
-    /// 設定 → 登録リポジトリ+自動検出 → worktree スキャン、の順に再取得して状態を更新する。
-    /// 設定の読み込みに失敗した場合は直前の設定を維持したまま `lastRefreshErrors` に記録し、続行する
-    /// (worktree スキャン自体のリポジトリ単位の失敗隔離は `WorktreeStatusScanning` 実装側の責務)。
+    /// Re-fetches, in order: config → registered repositories + auto-discovery → worktree scan,
+    /// and updates the state. If loading the config fails, keeps the previous config, records the
+    /// error in `lastRefreshErrors`, and continues (per-repository failure isolation within the
+    /// worktree scan itself is the responsibility of the `WorktreeStatusScanning` implementation).
     public func refresh() async {
         var errors: [String] = []
 
@@ -144,15 +149,15 @@ public final class AppModel {
         lastRefreshErrors = errors
     }
 
-    // MARK: - 自動リフレッシュ
+    // MARK: - Auto refresh
 
     private var autoRefreshTask: Task<Void, Never>?
-    /// 直前の自動リフレッシュ経由の `refresh()` がまだ走っているか(多重実行防止用)。
+    /// Whether the previous auto-refresh-triggered `refresh()` is still running (guards against overlapping runs).
     private var isAutoRefreshing = false
 
-    /// worktree の ahead/behind・diffstat・dirty 等を `interval` ごとに `refresh()` して最新化する。
-    /// 既に自動リフレッシュ中であれば一旦停止してから登録し直す(重複起動防止)。
-    /// 前回の `refresh()` がまだ走っている間は、次に来た tick をスキップする(重ねて実行しない)。
+    /// Keeps worktree ahead/behind, diffstat, dirty state, etc. up to date by calling `refresh()` every `interval`.
+    /// If auto-refresh is already running, stops it first and re-registers (prevents duplicate starts).
+    /// While the previous `refresh()` is still running, the next tick is skipped (runs never overlap).
     public func startAutoRefresh(
         interval: Duration = .seconds(30),
         clock: any AutoRefreshClock = SystemAutoRefreshClock()
@@ -167,7 +172,7 @@ public final class AppModel {
         }
     }
 
-    /// 自動リフレッシュを停止する。進行中の `refresh()` 自体は最後まで完了させる。
+    /// Stops auto-refresh. A `refresh()` already in progress runs to completion.
     public func stopAutoRefresh() {
         autoRefreshTask?.cancel()
         autoRefreshTask = nil
@@ -181,12 +186,12 @@ public final class AppModel {
         onRefreshCompleted?()
     }
 
-    /// `discoveryRoots` の1エントリ(`~` を含みうる文字列)を実際のディレクトリ URL に展開する。
+    /// Expands one `discoveryRoots` entry (a string that may contain `~`) into an actual directory URL.
     static func expandDiscoveryRoot(_ path: String) -> URL {
         URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
     }
 
-    /// 登録済みリポジトリ(`path` で同定)を優先し、自動検出のみで見つかったものを末尾に追加する。
+    /// Prefers registered repositories (identified by `path`) and appends any found only via auto-discovery at the end.
     static func merging(registered: [Repository], discovered: [Repository]) -> [Repository] {
         var seenPaths = Set(registered.map(\.path))
         var merged = registered
@@ -207,11 +212,12 @@ public final class AppModel {
         )
     }
 
-    // MARK: - PaletteAction ディスパッチ
+    // MARK: - PaletteAction dispatch
 
-    /// `PaletteAction` を処理する。追加入力が要る操作(作成・追加・マージ・削除)はダイアログを
-    /// 開くべきことを示す outcome を返すだけで、実行は行わない。即座に実行できる操作
-    /// (切替・起動)はここで実行して結果を返す。
+    /// Handles a `PaletteAction`. For operations that need additional input (create, add,
+    /// merge, remove) it only returns an outcome indicating that a dialog should be opened,
+    /// without executing anything. Operations that can run immediately (switch, launch)
+    /// are executed here and their result returned.
     public func dispatch(_ action: PaletteAction) async -> PaletteDispatchOutcome {
         switch action {
         case .createWorktree:
@@ -235,12 +241,13 @@ public final class AppModel {
         }
     }
 
-    // MARK: - worktree 作成
+    // MARK: - Worktree creation
 
-    /// `NewWorktreeFormModel.buildRequest()` の結果を実際の作成に変換して実行する。
-    /// `VitermCore.NewWorktreeSource` → `GitKit.WorktreeSource` の1:1変換をここで行う
-    /// (VitermCore は GitKit に依存できないため、変換は依存できるこの層の責務)。
-    /// 成功後は `refresh()` で状態を最新化し、`launchSessionPresetName` があればセッションも起動する。
+    /// Converts the result of `NewWorktreeFormModel.buildRequest()` into an actual creation and executes it.
+    /// The 1:1 conversion from `VitermCore.NewWorktreeSource` to `GitKit.WorktreeSource` happens here
+    /// (VitermCore cannot depend on GitKit, so the conversion is the responsibility of this layer, which can).
+    /// After success, calls `refresh()` to bring the state up to date, and launches a session if
+    /// `launchSessionPresetName` is present.
     @discardableResult
     public func createWorktree(from formRequest: NewWorktreeRequest) async throws -> WorktreeCreationResult {
         let source: WorktreeSource = switch formRequest.source {
@@ -252,7 +259,7 @@ public final class AppModel {
             .remoteBranch(remote: remote, name: name, newLocalName: newLocalName)
         }
 
-        // フォームで hook が明示的に指定されていなければ、設定の既定 post-creation hook を使う。
+        // If no hook was explicitly specified in the form, use the default post-creation hook from the config.
         let postCreationHookCommand: String? = if let formHook = formRequest.runHookCommand, !formHook.isEmpty {
             formHook
         } else {
@@ -277,9 +284,9 @@ public final class AppModel {
         return result
     }
 
-    // MARK: - マージ・削除
+    // MARK: - Merge / removal
 
-    /// merge/rebase + worktree・ブランチ後始末を実行し、完了後に `refresh()` する。
+    /// Runs merge/rebase plus worktree and branch cleanup, then calls `refresh()` when done.
     @discardableResult
     public func mergeAndCleanUp(_ request: MergeCleanupRequest) async -> MergeCleanupResult {
         let result = await mergeCleanupCoordinator.mergeAndCleanUp(request)
@@ -287,7 +294,7 @@ public final class AppModel {
         return result
     }
 
-    /// マージを伴わない worktree 単独削除。完了後に `refresh()` する。
+    /// Standalone worktree removal without a merge. Calls `refresh()` when done.
     public func removeWorktree(at path: String, in repositoryPath: String, force: Bool = false) async throws {
         try await worktreeRemover.removeWorktree(
             at: URL(fileURLWithPath: path),
@@ -297,10 +304,10 @@ public final class AppModel {
         await refresh()
     }
 
-    // MARK: - リポジトリ登録
+    // MARK: - Repository registration
 
-    /// リポジトリを登録し、グローバル設定に永続化してから `refresh()` する。
-    /// 既に同じ `path` が登録済みなら名前を上書きするだけ(重複登録はしない)。
+    /// Registers a repository, persists it to the global config, then calls `refresh()`.
+    /// If the same `path` is already registered, only the name is overwritten (no duplicate registration).
     @discardableResult
     public func addRepository(name: String, path: String) async throws -> Repository {
         let repository = Repository(name: name, path: path)
@@ -315,9 +322,9 @@ public final class AppModel {
         return repository
     }
 
-    // MARK: - セッション(T6 の SessionManager 統合までの暫定窓口)
+    // MARK: - Sessions (interim entry point until the T6 SessionManager integration)
 
-    /// `SessionLaunching` 経由でセッションを起動し、一覧に追加する。
+    /// Launches a session via `SessionLaunching` and adds it to the list.
     @discardableResult
     public func startSession(worktreePath: String, presetName: String) async throws -> AgentSession {
         let session = try await sessionLauncher.startSession(worktreePath: worktreePath, presetName: presetName)
@@ -326,13 +333,13 @@ public final class AppModel {
         return session
     }
 
-    /// 表示中の worktree を切り替える。
+    /// Switches the currently displayed worktree.
     public func switchToWorktree(_ worktreePath: String) async {
         currentWorktreeID = worktreePath
         await sessionLauncher.switchToWorktree(worktreePath)
     }
 
-    /// セッションの表示名を変更する。
+    /// Renames a session's display name.
     public func renameSession(_ sessionID: AgentSession.ID, to newName: String) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
               !newName.isEmpty else { return }
@@ -340,7 +347,7 @@ public final class AppModel {
         rebuildSidebar()
     }
 
-    /// セッションを一覧から取り除く(PTY/サーフェスの破棄は呼び出し側 = SessionManager の責務)。
+    /// Removes a session from the list (disposing the PTY/surface is the caller's = SessionManager's responsibility).
     public func removeSession(_ sessionID: AgentSession.ID) {
         sessions.removeAll { $0.id == sessionID }
         if sidebar.selectedSessionID == sessionID {
@@ -349,8 +356,8 @@ public final class AppModel {
         rebuildSidebar()
     }
 
-    /// セッション状態変化の受け口。`SessionStateMachine` 等が確定させた新状態を渡す。
-    /// 状態が実際に変わっていれば `AgentSession` を更新し、`StatusChangeHookRunner` を発火する。
+    /// Entry point for session state changes. Receives the new state finalized by `SessionStateMachine` etc.
+    /// If the state actually changed, updates the `AgentSession` and fires the `StatusChangeHookRunner`.
     public func sessionStateChanged(sessionID: AgentSession.ID, newState: AgentSession.State, at date: Date = Date()) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         let oldState = sessions[index].state
@@ -369,7 +376,7 @@ public final class AppModel {
         rebuildSidebar()
     }
 
-    // MARK: - サイドバー選択(SidebarViewModel への薄い委譲)
+    // MARK: - Sidebar selection (thin delegation to SidebarViewModel)
 
     public func selectSession(_ sessionID: AgentSession.ID?) {
         sidebar.select(sessionID: sessionID)

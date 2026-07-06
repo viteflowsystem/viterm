@@ -1,8 +1,9 @@
 import Foundation
 import VitermCore
 
-/// セッション状態変化時に実行する hook コマンドの設定。遷移(from→to)単位ではなく、
-/// 到達した新状態単位で十分という要件のため `AgentSession.State` ごとに1つずつ持つ。
+/// Configuration of the hook commands run on session state changes. Per the requirements,
+/// keying by the new state reached (rather than by transition from→to) is sufficient, so
+/// there is one command per `AgentSession.State`.
 public struct StatusChangeHookConfig: Sendable, Equatable {
     public var onBusy: String?
     public var onWaitingInput: String?
@@ -23,13 +24,14 @@ public struct StatusChangeHookConfig: Sendable, Equatable {
     }
 }
 
-/// セッション状態変化 hook の実行。新状態に対応するコマンドが設定されていれば
-/// `VITERM_SESSION_NAME` / `VITERM_WORKTREE_PATH` / `VITERM_OLD_STATE` / `VITERM_NEW_STATE` を
-/// 環境変数に載せて `/bin/sh -c` で非同期・非ブロッキング実行する。
+/// Executes session state-change hooks. If a command is configured for the new state,
+/// runs it via `/bin/sh -c` asynchronously and non-blocking, with
+/// `VITERM_SESSION_NAME` / `VITERM_WORKTREE_PATH` / `VITERM_OLD_STATE` / `VITERM_NEW_STATE`
+/// set as environment variables.
 public struct StatusChangeHookRunner: Sendable {
     public var config: StatusChangeHookConfig
-    /// hook 実行本体。既定は `WorktreeProvisioner.defaultHookRunner` と同じプロセス起動実装を共有する。
-    /// テストでは実プロセスを起動しない差し替えが可能。
+    /// The actual hook executor. By default it shares the same process-launching implementation
+    /// as `WorktreeProvisioner.defaultHookRunner`. Tests can swap this out to avoid launching a real process.
     public var hookRunner: @Sendable (_ command: String, _ environment: [String: String]) async -> Void
 
     public init(
@@ -40,9 +42,9 @@ public struct StatusChangeHookRunner: Sendable {
         self.hookRunner = hookRunner
     }
 
-    /// 状態変化を通知する。新状態に hook が設定されていなければ何もせず `nil` を返す。
-    /// 呼び出し側(SessionManager 等)はこの Task を待つ必要はない(非ブロッキング)が、
-    /// テストでは `await task?.value` で完了を待てる。
+    /// Notifies of a state change. If no hook is configured for the new state, does nothing and returns `nil`.
+    /// Callers (SessionManager, etc.) do not need to await this Task (non-blocking), but tests
+    /// can wait for completion via `await task?.value`.
     @discardableResult
     public func notify(
         sessionName: String,
@@ -65,7 +67,7 @@ public struct StatusChangeHookRunner: Sendable {
         }
     }
 
-    /// 設定リロードごとに hook コマンド設定を最新化する(`StatusChangeNotifying.updateConfig`)。
+    /// Refreshes the hook command config on every config reload (`StatusChangeNotifying.updateConfig`).
     public mutating func updateConfig(_ config: StatusChangeHookConfig) {
         self.config = config
     }

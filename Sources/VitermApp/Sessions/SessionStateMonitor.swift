@@ -2,52 +2,54 @@ import AppKit
 import GhosttyKit
 import VitermCore
 
-/// 監視対象のセッション1件分の状態(サーフェスの弱参照 + 状態機械 + 直近の判定結果)。
+/// State for one monitored session (weak surface reference + state machine + last emitted result).
 private struct WatchEntry {
     weak var surfaceView: GhosttySurfaceView?
     var stateMachine: SessionStateMachine
     var lastEmittedState: AgentSession.State
     var lastFrameSize: CGSize
-    /// 次に `ghostty_surface_read_text` を呼んでよい時刻。表示中セッションは毎 tick、
-    /// 非表示セッションは `backgroundReadInterval` 間隔まで間引く。
+    /// Earliest time `ghostty_surface_read_text` may be called next. The visible session reads
+    /// every tick; hidden sessions are throttled to the `backgroundReadInterval` interval.
     var nextReadDue: Date
 }
 
-/// libghostty サーフェスの画面テキストを取得し、
-/// `VitermCore.StateDetectorRegistry` の detector + `SessionStateMachine` に通して
-/// セッション状態(busy/waitingInput/idle)を判定する(T13b)。
+/// Reads the screen text of libghostty surfaces and runs it through the
+/// `VitermCore.StateDetectorRegistry` detector + `SessionStateMachine` to determine
+/// session state (busy/waitingInput/idle) (T13b).
 ///
-/// `ghostty_surface_read_text` はビューポート全文取得のたびにコストがかかる
-/// (`docs/ghostty-integration.md` に "expensive, cache and throttle" と明記)ため、
-/// 表示中(選択中)のセッションのみ `pollInterval`(100ms)の高頻度で読み、
-/// 非表示セッションは `backgroundReadInterval`(既定600ms)まで間引く。
-/// 非表示セッション同士は登録時にランダムな初期オフセットを持たせ、
-/// 同一 tick に読み取りが集中しないよう分散させる。
+/// `ghostty_surface_read_text` is costly every time it fetches the full viewport text
+/// (`docs/ghostty-integration.md` explicitly says "expensive, cache and throttle"), so only
+/// the visible (selected) session is read at the high `pollInterval` frequency (100ms),
+/// while hidden sessions are throttled to `backgroundReadInterval` (default 600ms).
+/// Hidden sessions get a random initial offset at registration time so their reads are
+/// spread out instead of clustering on the same tick.
 ///
-/// テキスト取得 API の詳細(セマンティクス・メモリ解放・コスト注意)は
-/// `docs/ghostty-integration.md` の「サーフェスの画面テキスト取得(T13b 向け)」参照。
+/// For details of the text-read API (semantics, memory freeing, cost caveats), see the
+/// "surface screen text reading (for T13b)" section of `docs/ghostty-integration.md`.
 @MainActor
 final class SessionStateMonitor {
-    /// タイマー自体の tick 間隔。リサイズ検出の粒度を保つため 100ms を維持する
-    /// (read_text の呼び出し頻度はこれとは別に `readInterval(for:)` で制御する)。
+    /// Tick interval of the timer itself. Kept at 100ms to preserve resize-detection
+    /// granularity (the read_text call frequency is controlled separately by `readInterval(for:)`).
     static let pollInterval: TimeInterval = 0.1
-    /// 表示中セッションの read_text 間隔(= 毎 tick)。
+    /// read_text interval for the visible session (= every tick).
     static let visibleReadInterval: TimeInterval = pollInterval
-    /// 非表示セッションの read_text 間隔。busy→waitingInput 等の検出遅延と
-    /// 引き換えに呼び出し頻度を下げる(要件: 500ms〜1s)。
+    /// read_text interval for hidden sessions. Lowers call frequency at the cost of
+    /// detection latency for busy→waitingInput etc. (requirement: 500ms-1s).
     static let backgroundReadInterval: TimeInterval = 0.6
 
-    /// 状態が確定的に変化したときに main actor で発火するコールバック。
-    /// `AppModel.sessionStateChanged` への接続はこのクラスの利用側(リード)が行う。
+    /// Callback fired on the main actor when the state has definitively changed.
+    /// Wiring to `AppModel.sessionStateChanged` is done by this class's consumer (the lead).
     var onStateChange: ((UUID, AgentSession.State) -> Void)?
 
     private var entries: [UUID: WatchEntry] = [:]
     private var frameChangeObservers: [UUID: NSObjectProtocol] = [:]
     private var timer: Timer?
-    /// 現在フォアグラウンド表示中のセッション。`setVisibleSession` で外部(選択中タブ等)から伝える。
+    /// The session currently displayed in the foreground. Communicated from outside
+    /// (selected tab, etc.) via `setVisibleSession`.
     private var visibleSessionID: UUID?
 
-    /// 表示中セッションを外部から伝える。切り替え後は次 tick で即座に高頻度読み取りへ戻す。
+    /// Communicate the visible session from outside. After a switch, return to high-frequency
+    /// reads immediately on the next tick.
     func setVisibleSession(_ sessionID: UUID?) {
         guard visibleSessionID != sessionID else { return }
         visibleSessionID = sessionID
@@ -56,7 +58,7 @@ final class SessionStateMonitor {
         entries[sessionID] = entry
     }
 
-    /// セッションを監視対象に登録する。同じ `sessionID` で再度呼ぶと既存の監視を差し替える。
+    /// Register a session for monitoring. Calling again with the same `sessionID` replaces the existing watch.
     func watch(sessionID: UUID, surfaceView: GhosttySurfaceView, toolName: String) {
         unwatch(sessionID: sessionID)
 
@@ -67,22 +69,22 @@ final class SessionStateMonitor {
             stateMachine: SessionStateMachine(detector: detector),
             lastEmittedState: .idle,
             lastFrameSize: surfaceView.frame.size,
-            // 表示中なら即読み、非表示なら間隔内でランダムにずらして初回読み取りを分散させる。
+            // If visible, read immediately; if hidden, spread the first read randomly within the interval.
             nextReadDue: sessionID == visibleSessionID
                 ? now
                 : now.addingTimeInterval(.random(in: 0..<Self.backgroundReadInterval))
         )
 
-        // NSView は既定でフレーム変更通知を出さないため、明示的に有効化する
-        // (GhosttySurfaceView 自体は変更せず、外部からプロパティを立てるだけで済む)。
+        // NSView does not post frame-change notifications by default, so enable them explicitly
+        // (no change to GhosttySurfaceView itself; setting the property from outside suffices).
         surfaceView.postsFrameChangedNotifications = true
         frameChangeObservers[sessionID] = NotificationCenter.default.addObserver(
             forName: NSView.frameDidChangeNotification,
             object: surfaceView,
             queue: .main
         ) { [weak self] _ in
-            // NotificationCenter は queue: .main 指定でも closure を静的には
-            // main actor 分離と見なさないため、明示的に main actor へ戻す。
+            // Even with queue: .main, NotificationCenter does not statically treat the closure
+            // as main-actor-isolated, so hop back to the main actor explicitly.
             Task { @MainActor in
                 self?.recordResize(sessionID: sessionID)
             }
@@ -91,7 +93,7 @@ final class SessionStateMonitor {
         startTimerIfNeeded()
     }
 
-    /// セッションを監視対象から外す。監視対象が0件になったらタイマーも止める。
+    /// Remove a session from monitoring. Stops the timer when no sessions remain watched.
     func unwatch(sessionID: UUID) {
         entries.removeValue(forKey: sessionID)
         if let observer = frameChangeObservers.removeValue(forKey: sessionID) {
@@ -106,7 +108,7 @@ final class SessionStateMonitor {
         }
     }
 
-    /// `sessionID` について今読むべき read_text 間隔。表示中セッションのみ高頻度。
+    /// The read_text interval currently applicable to `sessionID`. High frequency only for the visible session.
     private func readInterval(for sessionID: UUID) -> TimeInterval {
         sessionID == visibleSessionID ? Self.visibleReadInterval : Self.backgroundReadInterval
     }
@@ -118,7 +120,7 @@ final class SessionStateMonitor {
                 self?.tick()
             }
         }
-        // .common モードでスクロール等のイベントトラッキング中も発火させる。
+        // .common mode keeps it firing during event tracking such as scrolling.
         RunLoop.main.add(newTimer, forMode: .common)
         timer = newTimer
     }
@@ -131,25 +133,25 @@ final class SessionStateMonitor {
 
     private func tick() {
         let now = Date()
-        // Dictionary を for-in で回しながら同じ辞書へ書き戻すのは未定義動作になり得るため、
-        // キー一覧を先にスナップショットしてから回す。
+        // Writing back into a Dictionary while iterating it with for-in can be undefined
+        // behavior, so snapshot the key list first and iterate over that.
         for sessionID in Array(entries.keys) {
             guard var entry = entries[sessionID] else { continue }
             guard let surfaceView = entry.surfaceView, let surface = surfaceView.surface else {
                 continue
             }
 
-            // NSViewFrameDidChangeNotification の見落とし・遅延に対する保険として
-            // 実サイズの変化もこのポーリングループで二重チェックする。
+            // As insurance against missed or delayed NSViewFrameDidChangeNotification,
+            // also double-check actual size changes in this polling loop.
             let frameSize = surfaceView.frame.size
             if frameSize != entry.lastFrameSize {
                 entry.lastFrameSize = frameSize
                 entry.stateMachine.recordResize(at: now)
             }
 
-            // read_text は間引く: 表示中セッションは毎 tick、非表示セッションは
-            // backgroundReadInterval 間隔でのみ呼ぶ(呼ばない tick でも状態機械の
-            // currentState 自体は評価し、idle デバウンスの経過判定は毎 tick 進める)。
+            // Throttle read_text: the visible session reads every tick; hidden sessions only
+            // at backgroundReadInterval intervals (on ticks without a read, the state machine's
+            // currentState is still evaluated, so the idle debounce elapse check advances every tick).
             if now >= entry.nextReadDue {
                 let lines = Self.readViewportLines(surface: surface)
                 entry.stateMachine.recordOutput(screenLines: lines, at: now)
@@ -169,8 +171,8 @@ final class SessionStateMonitor {
         }
     }
 
-    /// サーフェスの現在のビューポート(可視領域)テキストを可視行配列として取得する。
-    /// 取得できない場合は空配列を返す。
+    /// Read the surface's current viewport (visible area) text as an array of visible lines.
+    /// Returns an empty array if it cannot be read.
     private static func readViewportLines(surface: ghostty_surface_t) -> [String] {
         var text = ghostty_text_s()
         let selection = ghostty_selection_s(

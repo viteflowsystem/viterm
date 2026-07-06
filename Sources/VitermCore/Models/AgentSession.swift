@@ -1,8 +1,8 @@
 import Foundation
 
-/// 1 worktree に N 個ぶら下がる、実行中のエージェントセッション。
+/// A running agent session; N of these hang off one worktree.
 public struct AgentSession: Codable, Sendable, Hashable, Identifiable {
-    /// セッション状態(ccmanager 方式の3状態)。
+    /// Session state (the ccmanager-style three states).
     public enum State: String, Codable, Sendable {
         case busy
         case waitingInput
@@ -10,15 +10,16 @@ public struct AgentSession: Codable, Sendable, Hashable, Identifiable {
     }
 
     public var id: UUID
-    /// 紐付く `Worktree.id`(= worktree の絶対パス)への参照。
+    /// Reference to the associated `Worktree.id` (= absolute path of the worktree).
     public var worktreePath: String
-    /// 起動に使った `SessionPreset.name`。
+    /// The `SessionPreset.name` used to launch this session.
     public var presetName: String
-    /// サイドバー等での表示名(リネーム可能)。
+    /// Display name in the sidebar etc. (renamable).
     public var displayName: String
     public var state: State
-    /// `state` が最後に変化した時刻。⌘⇧U(最新の waitingInput へジャンプ)の順序判定に使う。
-    /// 不明な場合は `nil`(最も古いものとして扱われる)。
+    /// The time `state` last changed. Used for the ordering decision of
+    /// ⌘⇧U (jump to the most recent waitingInput).
+    /// `nil` when unknown (treated as the oldest).
     public var stateChangedAt: Date?
 
     public init(

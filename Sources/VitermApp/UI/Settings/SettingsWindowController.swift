@@ -1,15 +1,16 @@
 import AppKit
 
-/// 設定ウィンドウ(⌘,)。macOS 標準のツールバー切替式(NSTabViewController .toolbar)で、
-/// ペインは SettingsPane サブクラスとして追加する(拡張性重視。SettingsPanes.swift 参照)。
-/// 変更は即時に config.json へ保存され、アプリ側の設定リロードが走る。
+/// Settings window (Cmd+,). Uses the standard macOS toolbar-switching style
+/// (NSTabViewController .toolbar); panes are added as SettingsPane subclasses
+/// (extensibility-focused; see SettingsPanes.swift).
+/// Changes are saved to config.json immediately and trigger the app-side config reload.
 @MainActor
 final class SettingsWindowController: NSWindowController {
     convenience init(store: SettingsStore) {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
 
-        // ペイン一覧。追加するときはここに1行足す。
+        // Pane list. To add a pane, add one line here.
         let panes: [(pane: SettingsPane, icon: String)] = [
             (GeneralSettingsPane(title: "一般", store: store), "gearshape"),
             (WorktreeSettingsPane(title: "Worktree", store: store), "arrow.triangle.branch"),
@@ -28,8 +29,8 @@ final class SettingsWindowController: NSWindowController {
         window.title = "viterm 設定"
         window.isReleasedWhenClosed = false
         window.toolbarStyle = .preference
-        // 初期表示時から選択中ペインの内容サイズに合わせる
-        // (以降のタブ切替時のリサイズは NSTabViewController が preferredContentSize で行う)。
+        // Match the selected pane's content size from the initial display
+        // (subsequent resizes on tab switches are done by NSTabViewController via preferredContentSize).
         if let first = panes.first?.pane {
             first.loadViewIfNeeded()
             window.setContentSize(first.preferredContentSize)

@@ -99,8 +99,8 @@ struct BranchNameValidatorTests {
 
     @Test("リモートブランチ名(重複チェック対象外)との一致はduplicateにならない")
     func remoteNamesDoNotCountAsDuplicates() {
-        // existingLocalBranchNames はローカルのみを渡す前提なので、
-        // リモート名同等の文字列を渡しても重複扱いにはならない。
+        // existingLocalBranchNames is expected to contain local branches only,
+        // so passing a string that looks like a remote name is not treated as a duplicate.
         let error = BranchNameValidator.validate("origin/main", existingLocalBranchNames: ["main"])
         #expect(error == nil)
     }

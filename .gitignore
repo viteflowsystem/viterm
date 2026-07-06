@@ -1,7 +1,8 @@
 .build/
 .swiftpm/
 DerivedData/
-vendor/
+# No trailing slash: worktrees may use a symlink to the main checkout's vendor
+vendor
 *.xcframework
 .DS_Store
 xcuserdata/

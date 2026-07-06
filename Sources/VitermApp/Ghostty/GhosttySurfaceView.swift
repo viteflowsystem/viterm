@@ -17,6 +17,15 @@ final class GhosttySurfaceView: NSView {
     /// 蓄積し、まとめて sendKey に渡す(実装リファレンス: SurfaceView_AppKit.swift の同名の仕組み)。
     private var keyTextAccumulator: [String]?
 
+    /// The mouse cursor shape currently requested by libghostty
+    /// (via `GHOSTTY_ACTION_MOUSE_SHAPE`). Applied from both cursorUpdate
+    /// and setCursorShape.
+    private var currentCursor: NSCursor = .iBeam
+
+    /// Whether the mouse is inside the view (updated by mouseEntered/mouseExited).
+    /// Guards against changing the cursor shape while outside the view.
+    private var mouseInside = false
+
     // MARK: - OSC 通知(GhosttyRuntime.action_cb から呼ばれる)
     //
     // libghostty がターミナル出力中の OSC シーケンス(デスクトップ通知は OSC 9/777、pwd は OSC 7 等)
@@ -308,6 +317,57 @@ final class GhosttySurfaceView: NSView {
 
     // MARK: - Mouse
 
+    override func updateTrackingAreas() {
+        trackingAreas.forEach(removeTrackingArea)
+
+        // Forwarding mouseMoved is required for link detection while hovering
+        // (cmd+hover underline). Use activeAlways so mouse reports are sent
+        // even when unfocused (reference: SurfaceView_AppKit.swift
+        // updateTrackingAreas).
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .mouseMoved, .inVisibleRect, .activeAlways],
+            owner: self,
+            userInfo: nil))
+
+        // cursorUpdate cannot be combined with activeAlways, so it gets its
+        // own tracking area.
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.cursorUpdate, .inVisibleRect, .activeInKeyWindow],
+            owner: self,
+            userInfo: nil))
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        currentCursor.set()
+    }
+
+    /// Applies `GHOSTTY_ACTION_MOUSE_SHAPE` to NSCursor (called from GhosttyRuntime).
+    func setCursorShape(_ shape: ghostty_action_mouse_shape_e) {
+        let cursor: NSCursor
+        switch shape {
+        case GHOSTTY_MOUSE_SHAPE_DEFAULT: cursor = .arrow
+        case GHOSTTY_MOUSE_SHAPE_TEXT: cursor = .iBeam
+        case GHOSTTY_MOUSE_SHAPE_POINTER: cursor = .pointingHand
+        case GHOSTTY_MOUSE_SHAPE_GRAB: cursor = .openHand
+        case GHOSTTY_MOUSE_SHAPE_GRABBING: cursor = .closedHand
+        case GHOSTTY_MOUSE_SHAPE_CROSSHAIR: cursor = .crosshair
+        case GHOSTTY_MOUSE_SHAPE_VERTICAL_TEXT: cursor = .iBeamCursorForVerticalLayout
+        case GHOSTTY_MOUSE_SHAPE_CONTEXT_MENU: cursor = .contextualMenu
+        case GHOSTTY_MOUSE_SHAPE_NOT_ALLOWED: cursor = .operationNotAllowed
+        case GHOSTTY_MOUSE_SHAPE_W_RESIZE: cursor = .resizeLeft
+        case GHOSTTY_MOUSE_SHAPE_E_RESIZE: cursor = .resizeRight
+        case GHOSTTY_MOUSE_SHAPE_N_RESIZE: cursor = .resizeUp
+        case GHOSTTY_MOUSE_SHAPE_S_RESIZE: cursor = .resizeDown
+        case GHOSTTY_MOUSE_SHAPE_NS_RESIZE: cursor = .resizeUpDown
+        case GHOSTTY_MOUSE_SHAPE_EW_RESIZE: cursor = .resizeLeftRight
+        default: return // Ignore unsupported shapes (matching Ghostty.app)
+        }
+        currentCursor = cursor
+        if mouseInside { cursor.set() }
+    }
+
     override func mouseDown(with event: NSEvent) {
         guard let surface else { return }
         _ = ghostty_surface_mouse_button(
@@ -343,6 +403,24 @@ final class GhosttySurfaceView: NSView {
         guard let surface, event.buttonNumber == 2 else { return }
         _ = ghostty_surface_mouse_button(
             surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_MIDDLE, Self.ghosttyMods(event.modifierFlags))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        mouseInside = true
+        // Restore the position that mouseExited set to (-1,-1). This matters
+        // because mouse reporting and link detection behave differently
+        // depending on whether the position is inside the viewport
+        // (matching Ghostty.app).
+        reportMousePos(event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        mouseInside = false
+        guard let surface else { return }
+        // Skip while dragging: mouseDragged keeps arriving even outside the view.
+        if NSEvent.pressedMouseButtons != 0 { return }
+        // Negative values indicate the cursor has left the viewport.
+        ghostty_surface_mouse_pos(surface, -1, -1, Self.ghosttyMods(event.modifierFlags))
     }
 
     override func mouseMoved(with event: NSEvent) {

@@ -1,7 +1,7 @@
 .build/
 .swiftpm/
 DerivedData/
-# 末尾スラッシュ無し: worktree ではメインチェックアウトの vendor への symlink を置くため
+# No trailing slash: worktrees may use a symlink to the main checkout's vendor
 vendor
 *.xcframework
 .DS_Store

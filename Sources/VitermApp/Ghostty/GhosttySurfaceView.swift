@@ -17,12 +17,13 @@ final class GhosttySurfaceView: NSView {
     /// 蓄積し、まとめて sendKey に渡す(実装リファレンス: SurfaceView_AppKit.swift の同名の仕組み)。
     private var keyTextAccumulator: [String]?
 
-    /// libghostty が要求している現在のマウスカーソル形状(`GHOSTTY_ACTION_MOUSE_SHAPE` 由来)。
-    /// cursorUpdate と setCursorShape の両方から適用する。
+    /// The mouse cursor shape currently requested by libghostty
+    /// (via `GHOSTTY_ACTION_MOUSE_SHAPE`). Applied from both cursorUpdate
+    /// and setCursorShape.
     private var currentCursor: NSCursor = .iBeam
 
-    /// マウスがビュー内にあるか(mouseEntered/mouseExited で更新)。ビュー外で
-    /// カーソル形状を書き換えないためのガード。
+    /// Whether the mouse is inside the view (updated by mouseEntered/mouseExited).
+    /// Guards against changing the cursor shape while outside the view.
     private var mouseInside = false
 
     // MARK: - OSC 通知(GhosttyRuntime.action_cb から呼ばれる)
@@ -319,16 +320,18 @@ final class GhosttySurfaceView: NSView {
     override func updateTrackingAreas() {
         trackingAreas.forEach(removeTrackingArea)
 
-        // ホバー中のリンク検出(cmd+ホバーで下線表示)には mouseMoved の中継が必須。
-        // フォーカスが無くてもマウスレポートを送れるよう activeAlways にする
-        // (実装リファレンス: SurfaceView_AppKit.swift の updateTrackingAreas)。
+        // Forwarding mouseMoved is required for link detection while hovering
+        // (cmd+hover underline). Use activeAlways so mouse reports are sent
+        // even when unfocused (reference: SurfaceView_AppKit.swift
+        // updateTrackingAreas).
         addTrackingArea(NSTrackingArea(
             rect: bounds,
             options: [.mouseEnteredAndExited, .mouseMoved, .inVisibleRect, .activeAlways],
             owner: self,
             userInfo: nil))
 
-        // cursorUpdate は activeAlways と併用できないため別のトラッキングエリアにする。
+        // cursorUpdate cannot be combined with activeAlways, so it gets its
+        // own tracking area.
         addTrackingArea(NSTrackingArea(
             rect: bounds,
             options: [.cursorUpdate, .inVisibleRect, .activeInKeyWindow],
@@ -340,7 +343,7 @@ final class GhosttySurfaceView: NSView {
         currentCursor.set()
     }
 
-    /// `GHOSTTY_ACTION_MOUSE_SHAPE` を NSCursor に反映する(GhosttyRuntime から呼ばれる)。
+    /// Applies `GHOSTTY_ACTION_MOUSE_SHAPE` to NSCursor (called from GhosttyRuntime).
     func setCursorShape(_ shape: ghostty_action_mouse_shape_e) {
         let cursor: NSCursor
         switch shape {
@@ -359,7 +362,7 @@ final class GhosttySurfaceView: NSView {
         case GHOSTTY_MOUSE_SHAPE_S_RESIZE: cursor = .resizeDown
         case GHOSTTY_MOUSE_SHAPE_NS_RESIZE: cursor = .resizeUpDown
         case GHOSTTY_MOUSE_SHAPE_EW_RESIZE: cursor = .resizeLeftRight
-        default: return // 未対応の形状は無視する(本家準拠)
+        default: return // Ignore unsupported shapes (matching Ghostty.app)
         }
         currentCursor = cursor
         if mouseInside { cursor.set() }
@@ -404,17 +407,19 @@ final class GhosttySurfaceView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         mouseInside = true
-        // mouseExited で (-1,-1) にした位置を復帰させる。位置がビューポート内かどうかで
-        // マウスレポートやリンク検出の挙動が変わるため重要(本家準拠)。
+        // Restore the position that mouseExited set to (-1,-1). This matters
+        // because mouse reporting and link detection behave differently
+        // depending on whether the position is inside the viewport
+        // (matching Ghostty.app).
         reportMousePos(event)
     }
 
     override func mouseExited(with event: NSEvent) {
         mouseInside = false
         guard let surface else { return }
-        // ドラッグ中はビュー外でも mouseDragged が届き続けるため送らない。
+        // Skip while dragging: mouseDragged keeps arriving even outside the view.
         if NSEvent.pressedMouseButtons != 0 { return }
-        // 負値はカーソルがビューポート外に出たことを示す。
+        // Negative values indicate the cursor has left the viewport.
         ghostty_surface_mouse_pos(surface, -1, -1, Self.ghosttyMods(event.modifierFlags))
     }
 

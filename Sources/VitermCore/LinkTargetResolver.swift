@@ -1,14 +1,15 @@
 import Foundation
 
-/// ターミナル上で cmd+クリックされたリンク文字列(URL またはファイルパス)を、
-/// NSWorkspace 等で開ける URL に解決する。
+/// Resolves a link string that was cmd+clicked in the terminal (a URL or a
+/// file path) into a URL that NSWorkspace etc. can open.
 ///
-/// libghostty の `GHOSTTY_ACTION_OPEN_URL` が渡す文字列は、URL 正規表現にマッチした
-/// テキストか OSC 8 ハイパーリンクの href で、スキーム付き URL とは限らない
-/// (実装リファレンス: Ghostty.App.swift の openURL)。
+/// The string passed by libghostty's `GHOSTTY_ACTION_OPEN_URL` is either text
+/// matched by the URL regex or the href of an OSC 8 hyperlink, so it is not
+/// guaranteed to be a URL with a scheme (reference: Ghostty.App.swift openURL).
 public enum LinkTargetResolver {
-    /// - Returns: スキーム付きならその URL、それ以外はファイルパスとして解釈した
-    ///   file URL(`~` はホームへ展開)。空文字列は nil。
+    /// - Returns: The URL as-is when it has a scheme; otherwise the string is
+    ///   interpreted as a file path and returned as a file URL (`~` expands to
+    ///   home). Empty strings resolve to nil.
     public static func resolve(
         _ raw: String,
         homeDirectory: String = NSHomeDirectory()
@@ -16,8 +17,9 @@ public enum LinkTargetResolver {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        // スキームの無い文字列(例: プレーンなファイルパス)を URL(string:) に渡すと
-        // スキームレス URL ができてしまい正しく開けないため、ファイルパスとして扱う。
+        // Passing a scheme-less string (e.g. a plain file path) to URL(string:)
+        // would produce a scheme-less URL that cannot be opened properly, so
+        // treat it as a file path instead.
         if let candidate = URL(string: trimmed), candidate.scheme != nil {
             return candidate
         }

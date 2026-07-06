@@ -81,13 +81,14 @@ final class GhosttyRuntime {
             return true
 
         case GHOSTTY_ACTION_MOUSE_OVER_LINK:
-            // ホバー中リンクの下線は libghostty のレンダラーが描画する。URL プレビュー UI は
-            // 持たないため中継先は無いが、handled として扱う。
+            // The underline for the hovered link is drawn by libghostty's
+            // renderer. There is no URL preview UI to forward to, but treat
+            // the action as handled.
             return true
 
         case GHOSTTY_ACTION_OPEN_URL:
-            // cmd+クリックされたリンク(URL 正規表現マッチ or OSC 8)。url は NUL 終端が
-            // 保証されないため len でバイト列として読む。
+            // A cmd+clicked link (URL regex match or OSC 8). url is not
+            // guaranteed to be NUL-terminated, so read len bytes.
             let payload = action.action.open_url
             guard let urlPtr = payload.url, payload.len > 0 else { return false }
             let raw = String(

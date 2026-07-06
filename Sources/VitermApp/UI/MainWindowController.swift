@@ -346,6 +346,9 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     private var didRestoreSessions = false
 
     func persistSessions() {
+        // デバッグ起動(スモークテスト等)はユーザーの実セッション構成を上書きしない。
+        // 過去に、テスト起動が復元途中の縮んだ一覧を保存してしまい実データを失う事故があった。
+        guard ProcessInfo.processInfo.environment["VITERM_AUTOSTART_SESSION"] == nil else { return }
         restoreStore.save(
             sessions: appModel.sessions,
             selectedSessionID: appModel.sidebar.selectedSessionID

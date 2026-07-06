@@ -8,7 +8,18 @@ import VitermServices
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var windowController: MainWindowController?
 
+    /// SIGTERM(pkill / ログアウト等)でも保存経路(applicationWillTerminate)を通すため、
+    /// シグナルを DispatchSource で拾って通常の terminate に変換する
+    /// (既定の SIGTERM はプロセス即死で applicationWillTerminate が呼ばれない)。
+    private var sigtermSource: DispatchSourceSignal?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler { NSApp.terminate(nil) }
+        source.resume()
+        sigtermSource = source
+
         let sessionManager = SessionManager()
         let appModel = AppModel(sessionLauncher: sessionManager)
         let controller = MainWindowController(appModel: appModel, sessionManager: sessionManager)

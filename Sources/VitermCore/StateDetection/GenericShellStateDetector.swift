@@ -1,11 +1,11 @@
 import Foundation
 
-/// 素のシェル(zsh/bash等)向けの detector。
-/// エージェントCLIと違い、任意コマンドは自身の状態を画面テキストで宣言しないため、
-/// 「確認待ち(waitingInput)」を一般化して検出することはできない。
-/// 代わりに、画面最下行がシェルプロンプトらしい記号で終わっているかどうかだけを見る:
-/// プロンプトで終わっていれば `.none`(= コマンドは実行中でない = idle 候補)、
-/// そうでなければ実行中のコマンドが出力中とみなし `.busy` とする。
+/// Detector for a plain shell (zsh/bash, etc.).
+/// Unlike agent CLIs, arbitrary commands don't declare their state in screen text, so
+/// "waiting for confirmation" (waitingInput) can't be detected in a general way.
+/// Instead we only check whether the bottom line of the screen ends with a
+/// shell-prompt-like symbol: if it ends with a prompt, `.none` (= no command running =
+/// idle candidate); otherwise a running command is assumed to be producing output → `.busy`.
 public struct GenericShellStateDetector: StateDetector {
     public let toolName: String
 

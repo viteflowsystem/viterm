@@ -1,32 +1,33 @@
 import Foundation
 
-/// worktree 作成元の3パターン。`GitKit.WorktreeSource` と同じ形だが、
-/// `VitermCore` は GitKit に依存しないためここに独立して定義する
-/// (呼び出し側が `GitKit.WorktreeSource` へ1:1で変換する想定)。
+/// The three worktree source patterns. Same shape as `GitKit.WorktreeSource`, but defined
+/// independently here because `VitermCore` does not depend on GitKit (callers are
+/// expected to convert 1:1 into `GitKit.WorktreeSource`).
 public enum NewWorktreeSource: Sendable, Equatable {
-    /// 新規ブランチを作成して worktree を追加する。`startPoint` を省略すると現在の HEAD から分岐する。
+    /// Create a new branch and add a worktree. Omitting `startPoint` branches from the current HEAD.
     case newBranch(name: String, startPoint: String?)
-    /// 既存のローカルブランチをそのままチェックアウトする。
+    /// Check out an existing local branch as-is.
     case existingLocalBranch(name: String)
-    /// リモートブランチを追跡する新規ローカルブランチを作って worktree を追加する。
-    /// `newLocalName` を省略するとリモートと同名のローカルブランチになる。
+    /// Create a new local branch tracking a remote branch and add a worktree.
+    /// Omitting `newLocalName` gives the local branch the same name as the remote one.
     case remoteBranch(remote: String, name: String, newLocalName: String?)
 }
 
-/// `NewWorktreeFormModel.buildRequest()` がバリデーション通過時に返す、
-/// worktree 作成に必要な値一式。`VitermServices.WorktreeCreationRequest` へ変換して
-/// `WorktreeProvisioner` に渡すことを想定しているが、この型自体は VitermServices に依存しない。
+/// The full set of values needed to create a worktree, returned by
+/// `NewWorktreeFormModel.buildRequest()` once validation passes. Intended to be converted
+/// into `VitermServices.WorktreeCreationRequest` and handed to `WorktreeProvisioner`, but
+/// this type itself does not depend on VitermServices.
 public struct NewWorktreeRequest: Sendable, Equatable {
     public var repository: Repository
     public var source: NewWorktreeSource
-    /// テンプレート展開済みの実際の作成先パス。
+    /// The actual destination path, template already expanded.
     public var worktreePath: String
-    /// 展開に使ったパステンプレート(その場上書きがあればそれ、無ければ既定値)。
+    /// The path template used for expansion (the in-place override if any, else the default).
     public var pathTemplate: WorktreePathTemplate
     public var copySessionData: Bool
-    /// 作成後に起動するセッションプリセット名。`nil` なら作成後にセッションを起動しない。
+    /// Session preset name to launch after creation. `nil` launches no session afterwards.
     public var launchSessionPresetName: String?
-    /// post-creation hook として実行するシェルコマンド。`nil`/空文字なら実行しない。
+    /// Shell command run as the post-creation hook. Not run if `nil`/empty.
     public var runHookCommand: String?
 
     public init(

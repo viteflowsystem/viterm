@@ -1,15 +1,15 @@
 import Foundation
 
-/// worktree 作成フォームの「ベースブランチ」等の選択肢1件。
-/// ローカル/リモートのブランチ一覧は呼び出し側(GitKit 経由の問い合わせ)から注入する想定で、
-/// `VitermCore` 自体は git 操作を一切行わない。
+/// One option for the worktree creation form's "base branch" and similar dropdowns.
+/// The local/remote branch lists are expected to be injected by the caller (queried via
+/// GitKit); `VitermCore` itself performs no git operations.
 public struct AvailableBranch: Sendable, Equatable, Hashable, Identifiable {
     public enum Kind: String, Sendable, Equatable, Hashable {
         case local
         case remote
     }
 
-    /// local は短縮ブランチ名(例: `main`)、remote は `<remote>/<branch>` 形式(例: `origin/main`)。
+    /// For local: the short branch name (e.g. `main`); for remote: `<remote>/<branch>` form (e.g. `origin/main`).
     public var name: String
     public var kind: Kind
 

@@ -1,10 +1,11 @@
 import Foundation
 
-/// `PaletteCommand` 一覧をクエリで絞り込み・ランキングする。
+/// Filters and ranks the `PaletteCommand` list by a query.
 public enum PaletteSearch {
-    /// `query` でマッチしないコマンドを除外し、スコア降順で並び替えて返す。
-    /// 同点の場合は元の配列順(= プロバイダが返した表示順)を保つ安定ソート。
-    /// `query` が空文字列の場合は絞り込み・並び替えを行わず元の順序のまま返す。
+    /// Exclude commands that don't match `query` and return the rest sorted by score
+    /// descending. A stable sort: ties keep the original array order (= the display order
+    /// the provider returned). An empty `query` returns the original order with no
+    /// filtering or sorting.
     public static func search(_ commands: [PaletteCommand], query: String) -> [PaletteCommand] {
         guard !query.isEmpty else { return commands }
 

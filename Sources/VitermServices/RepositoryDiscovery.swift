@@ -1,20 +1,20 @@
 import Foundation
 import VitermCore
 
-/// 指定ルートディレクトリ配下の git リポジトリを自動検出する
-/// (ccmanager の `CCMANAGER_MULTI_PROJECT_ROOT` 相当)。
+/// Auto-discovers git repositories under a given root directory
+/// (equivalent to ccmanager's `CCMANAGER_MULTI_PROJECT_ROOT`).
 ///
-/// あるディレクトリが「リポジトリ本体」と判定されるのは `<dir>/.git` が **ディレクトリ** の場合のみ。
-/// worktree のチェックアウト先は `.git` が `gitdir: …` を指す **ファイル** になっているため、
-/// リポジトリとしては検出しない(サイドバーへの登録はリポジトリ本体のみで、その worktree 一覧は
-/// `WorktreeStatusScanner` が別途 `git worktree list` から得る)。
+/// A directory counts as a "main repository" only when `<dir>/.git` is a **directory**.
+/// A worktree checkout has `.git` as a **file** pointing at `gitdir: …`, so it is not
+/// detected as a repository (only main repositories are registered in the sidebar; their
+/// worktree lists come separately from `git worktree list` via `WorktreeStatusScanner`).
 ///
-/// 走査は同期処理(ファイルシステム I/O のみで git コマンドは呼ばない)。ルート配下が大きい場合は
-/// 呼び出し側で `Task.detached` 等に包んでメインスレッドをブロックしないようにすること。
+/// The scan is synchronous (filesystem I/O only, no git commands). For large roots, the
+/// caller should wrap it in `Task.detached` or similar to avoid blocking the main thread.
 public struct RepositoryDiscovery: Sendable {
-    /// ルートから何階層下まで走査するか(ルート自身は 0)。
+    /// How many levels below the root to scan (the root itself is 0).
     public var maxDepth: Int
-    /// この名前のディレクトリには降りない(大小文字区別)。
+    /// Directories with these names are not descended into (case-sensitive).
     public var excludedDirectoryNames: Set<String>
 
     public init(
@@ -30,9 +30,9 @@ public struct RepositoryDiscovery: Sendable {
         "dist", "build", "target", "__pycache__",
     ]
 
-    /// `rootDirectory` 配下を走査し、見つかったリポジトリを `VitermCore.Repository` の配列で返す。
-    /// リポジトリが見つかったディレクトリの内部はそれ以上降りない
-    /// (ネストした vendor 済みリポジトリ等を誤登録しないため)。
+    /// Scan under `rootDirectory` and return the repositories found as an array of
+    /// `VitermCore.Repository`. Once a repository is found, its directory is not descended
+    /// into further (to avoid mis-registering nested vendored repositories and the like).
     public func discover(rootDirectory: URL) -> [VitermCore.Repository] {
         var results: [VitermCore.Repository] = []
         scan(directory: rootDirectory, depth: 0, into: &results)
@@ -64,9 +64,9 @@ public struct RepositoryDiscovery: Sendable {
     }
 
     private enum GitKind {
-        /// `.git` がディレクトリ = リポジトリ本体。
+        /// `.git` is a directory = a main repository.
         case repository
-        /// `.git` がファイル(`gitdir: …`)= worktree のチェックアウト先。
+        /// `.git` is a file (`gitdir: …`) = a worktree checkout.
         case worktreeCheckout
         case none
     }

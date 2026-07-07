@@ -1,18 +1,18 @@
 #!/bin/sh
-# viterm.app バンドルを組み立てて、そのまま `open` で起動できる状態にする。
+# Assemble the viterm.app bundle so it can be launched directly with `open`.
 #
-# 使い方: scripts/make-app.sh [release|debug]  (既定: release)
+# Usage: scripts/make-app.sh [release|debug]  (default: release)
 #
-# 既定では開発フレーバー「viterm Dev」を組む(brew 版と見分けるため):
-#   - 生成物: .build/viterm-dev.app
-#   - Bundle ID: com.viteflowsystem.viterm.dev / 表示名: viterm Dev / DEV バッジ付きアイコン
-# 配布用の素の viterm.app が欲しいときは VARIANT=dist(release.sh が使う):
+# By default this builds the dev flavor "viterm Dev" (to distinguish it from the brew build):
+#   - Output: .build/viterm-dev.app
+#   - Bundle ID: com.viteflowsystem.viterm.dev / display name: viterm Dev / DEV-badged icon
+# For the plain distributable viterm.app, use VARIANT=dist (used by release.sh):
 #   VARIANT=dist scripts/make-app.sh release  → .build/viterm.app
-#   Contents/MacOS/VitermApp   … `swift build` の実行バイナリ
-#   Contents/Info.plist       … Resources/Info.plist のコピー
-#   Contents/Frameworks/      … TODO(T3待ち): GhosttyKit が xcframework/dylib を含む場合、
-#                                 ここに `vendor/ghostty` のビルド成果物をコピーする
-#                                 (現時点ではディレクトリを用意するだけで中身は空)
+#   Contents/MacOS/VitermApp   … the `swift build` executable
+#   Contents/Info.plist       … copy of Resources/Info.plist
+#   Contents/Frameworks/      … TODO (blocked on T3): if GhosttyKit ships an xcframework/dylib,
+#                                 copy the `vendor/ghostty` build artifacts here
+#                                 (for now the directory is created but left empty)
 set -eu
 
 CONFIGURATION="${1:-release}"
@@ -53,7 +53,7 @@ mkdir -p "$CONTENTS_DIR/Resources"
 if [ "$VARIANT" = "dist" ]; then
     cp "$REPO_ROOT/Resources/AppIcon.icns" "$CONTENTS_DIR/Resources/AppIcon.icns"
 else
-    # 開発フレーバー: 別 Bundle ID・別表示名・DEV バッジアイコン・git SHA 入りバージョン
+    # Dev flavor: separate bundle ID, display name, DEV-badged icon, and a git-SHA version
     GIT_SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
     PLIST="$CONTENTS_DIR/Info.plist"
     /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.viteflowsystem.viterm.dev" "$PLIST"

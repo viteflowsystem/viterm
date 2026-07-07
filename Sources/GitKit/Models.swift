@@ -1,9 +1,9 @@
 import Foundation
 
-/// `git worktree list --porcelain` の1エントリ。
+/// One entry of `git worktree list --porcelain`.
 public struct Worktree: Sendable, Equatable {
     public let path: URL
-    /// チェックアウト中のブランチ名(短縮形。例: `main`, `feature/x`)。detached HEAD の場合は `nil`。
+    /// Name of the checked-out branch (short form, e.g. `main`, `feature/x`). `nil` for a detached HEAD.
     public let branch: String?
     public let head: String
     public let isBare: Bool
@@ -30,14 +30,14 @@ public struct Worktree: Sendable, Equatable {
     }
 }
 
-/// `for-each-ref` から得たブランチ情報。
+/// Branch info obtained from `for-each-ref`.
 public struct Branch: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
         case local
         case remote
     }
 
-    /// local は短縮ブランチ名(例: `main`)、remote は `<remote>/<branch>` 形式(例: `origin/main`)。
+    /// For local: the short branch name (e.g. `main`); for remote: `<remote>/<branch>` form (e.g. `origin/main`).
     public let name: String
     public let kind: Kind
 
@@ -47,11 +47,11 @@ public struct Branch: Sendable, Equatable {
     }
 }
 
-/// `git rev-list --left-right --count <upstream>...<branch>` の結果。
+/// Result of `git rev-list --left-right --count <upstream>...<branch>`.
 public struct AheadBehind: Sendable, Equatable {
-    /// branch にあって upstream にないコミット数。
+    /// Number of commits on branch but not on upstream.
     public let ahead: Int
-    /// upstream にあって branch にないコミット数。
+    /// Number of commits on upstream but not on branch.
     public let behind: Int
 
     public init(ahead: Int, behind: Int) {
@@ -60,12 +60,12 @@ public struct AheadBehind: Sendable, Equatable {
     }
 }
 
-/// `git diff --shortstat` の結果 + 作業ツリーの dirty 判定。
+/// Result of `git diff --shortstat` plus the working tree's dirty flag.
 public struct DiffStat: Sendable, Equatable {
     public let filesChanged: Int
     public let insertions: Int
     public let deletions: Int
-    /// `git status --porcelain` が非空(未追跡ファイル含む)かどうか。
+    /// Whether `git status --porcelain` is non-empty (including untracked files).
     public let isDirty: Bool
 
     public init(filesChanged: Int, insertions: Int, deletions: Int, isDirty: Bool) {
@@ -76,7 +76,7 @@ public struct DiffStat: Sendable, Equatable {
     }
 }
 
-/// 作業ツリーの staged / unstaged 変更の有無(`git status --porcelain` の XY カラム要約)。
+/// Presence of staged / unstaged changes in the working tree (summary of the XY columns of `git status --porcelain`).
 public struct WorkingState: Sendable, Equatable {
     public let hasStagedChanges: Bool
     public let hasUnstagedChanges: Bool
@@ -87,33 +87,33 @@ public struct WorkingState: Sendable, Equatable {
     }
 }
 
-/// `addWorktree` の作成元パターン。
+/// Source patterns for `addWorktree`.
 public enum WorktreeSource: Sendable, Equatable {
-    /// 新規ブランチを作成して worktree を追加する(`git worktree add -b <name> <path> [<startPoint>]`)。
-    /// `startPoint` を省略すると現在の HEAD から分岐する。
+    /// Create a new branch and add a worktree (`git worktree add -b <name> <path> [<startPoint>]`).
+    /// Omitting `startPoint` branches from the current HEAD.
     case newBranch(name: String, startPoint: String? = nil)
-    /// 既存のローカルブランチをチェックアウトする(`git worktree add <path> <name>`)。
+    /// Check out an existing local branch (`git worktree add <path> <name>`).
     case existingLocalBranch(name: String)
-    /// リモートブランチを追跡する新規ローカルブランチを作って worktree を追加する
-    /// (`git worktree add --track -b <local> <path> <remote>/<name>`)。
-    /// `newLocalName` を省略するとリモートと同名のローカルブランチになる。
+    /// Create a new local branch tracking a remote branch and add a worktree
+    /// (`git worktree add --track -b <local> <path> <remote>/<name>`).
+    /// Omitting `newLocalName` gives the local branch the same name as the remote one.
     case remoteBranch(remote: String, name: String, newLocalName: String? = nil)
 }
 
-/// worktree 間のマージ方式。
+/// Merge strategy between worktrees.
 public enum MergeStrategy: Sendable, Equatable {
-    /// `git merge <arguments> <source>` を target の worktree で実行する。既定は `--no-ff`。
+    /// Run `git merge <arguments> <source>` in the target worktree. Defaults to `--no-ff`.
     case merge(arguments: [String] = ["--no-ff"])
-    /// source の worktree で `git rebase <target>` した後、target の worktree で
-    /// `git merge --ff-only <source>` を実行する。
+    /// Run `git rebase <target>` in the source worktree, then
+    /// `git merge --ff-only <source>` in the target worktree.
     case rebase
 }
 
-/// GitService の操作固有(git コマンドの単純失敗ではない)エラー。
+/// GitService operation-specific errors (not plain git command failures).
 public enum GitServiceError: Error, CustomStringConvertible, Sendable, Equatable {
-    /// `removeWorktree(force: false)` で worktree に未コミットの変更があった場合。
+    /// `removeWorktree(force: false)` found uncommitted changes in the worktree.
     case worktreeDirty(path: URL)
-    /// git の出力が期待した形式でパースできなかった場合。
+    /// git output could not be parsed in the expected format.
     case unexpectedOutput(command: String, output: String)
 
     public var description: String {

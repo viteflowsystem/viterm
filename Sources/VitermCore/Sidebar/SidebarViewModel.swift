@@ -1,38 +1,40 @@
 import Foundation
 
-/// サイドバー(リポジトリ → worktree → セッションの3階層ツリー)の UI 非依存な状態。
+/// UI-independent state of the sidebar (a three-level tree: repository → worktree → session).
 ///
-/// `Repository` / `Worktree` / `AgentSession` のフラットな配列から木構造を組み立て、
-/// リポジトリ折りたたみ時の waiting バッジ集約、状態集計(busy/waiting/idle)、
-/// 選択セッションの管理(次/前移動・⌘⇧U ジャンプ)を提供する。⌘1..9 のショートカット番号は
-/// タブ局所(`TabBarViewModel`)の役割のため、ここでは割り当てない。
+/// Builds the tree from flat arrays of `Repository` / `Worktree` / `AgentSession`, and
+/// provides waiting-badge aggregation for collapsed repositories, state tallies
+/// (busy/waiting/idle), and selected-session management (next/previous movement, the
+/// ⌘⇧U jump). The ⌘1..9 shortcut numbers are tab-local (`TabBarViewModel`'s role), so
+/// they are not assigned here.
 ///
-/// 選択の主語は worktree(`selectedWorktreePath`)。worktree を離れて戻ったときに同じタブへ
-/// 復帰できるよう、worktree ごとの最終アクティブセッションを `activeSessionByWorktree` に記憶する。
-/// `selectedSessionID` はその worktree 内で実際にアクティブなセッションを指す(後方互換のため
-/// 引き続き第一級の値として保持・公開する)。
+/// Selection is keyed on the worktree (`selectedWorktreePath`). So that leaving a
+/// worktree and coming back restores the same tab, the last active session per worktree
+/// is remembered in `activeSessionByWorktree`. `selectedSessionID` points at the session
+/// actually active within that worktree (still kept and exposed as a first-class value
+/// for backward compatibility).
 ///
-/// 純粋な値型であり、内部で監視や差分更新は行わない。呼び出し側は元データが変わるたびに
-/// `init` を呼び直して(直前の `selectedSessionID` / `selectedWorktreePath` /
-/// `activeSessionByWorktree` を引き継いで)再構築する想定。
+/// A pure value type; it does no observation or incremental updates internally. Callers
+/// are expected to re-call `init` each time the source data changes (carrying over the
+/// previous `selectedSessionID` / `selectedWorktreePath` / `activeSessionByWorktree`).
 public struct SidebarViewModel: Sendable, Equatable {
     public private(set) var repositories: [RepositoryNode]
     public private(set) var selectedSessionID: AgentSession.ID?
     public private(set) var selectedWorktreePath: String?
-    /// worktree ごとの最終アクティブセッション。worktree を離れて戻ったとき同じタブに復帰するための記憶。
+    /// Last active session per worktree. Remembered so returning to a worktree restores the same tab.
     public private(set) var activeSessionByWorktree: [String: AgentSession.ID]
 
     /// - Parameters:
-    ///   - repositories: サイドバーに表示するリポジトリ。この配列の順序がそのまま表示順になる。
-    ///   - worktrees: 全リポジトリ分の worktree。`repositoryPath` で対応するリポジトリに紐付けられる。
-    ///     どのリポジトリにも一致しない worktree はツリーに現れない。
-    ///   - sessions: 全 worktree 分のセッション。`worktreePath` で対応する worktree に紐付けられる。
-    ///     どの worktree にも一致しないセッションはツリーに現れない。
-    ///   - selectedSessionID: 初期選択セッション。ツリーに存在しない ID を渡しても構わない
-    ///     (`selectedSession` は `nil` を返す)。
-    ///   - selectedWorktreePath: 初期選択 worktree。ツリーに存在しないパスを渡しても構わない
-    ///     (`selectedWorktree` は `nil` を返す)。
-    ///   - activeSessionByWorktree: 再構築前の worktree ごとの最終アクティブセッション記憶。
+    ///   - repositories: Repositories shown in the sidebar. The order of this array is the display order.
+    ///   - worktrees: Worktrees for all repositories, tied to their repository via `repositoryPath`.
+    ///     A worktree matching no repository does not appear in the tree.
+    ///   - sessions: Sessions for all worktrees, tied to their worktree via `worktreePath`.
+    ///     A session matching no worktree does not appear in the tree.
+    ///   - selectedSessionID: Initially selected session. Passing an ID not in the tree is
+    ///     fine (`selectedSession` returns `nil`).
+    ///   - selectedWorktreePath: Initially selected worktree. Passing a path not in the tree
+    ///     is fine (`selectedWorktree` returns `nil`).
+    ///   - activeSessionByWorktree: The per-worktree last-active-session memory from before the rebuild.
     public init(
         repositories: [Repository],
         worktrees: [Worktree],
@@ -52,15 +54,15 @@ public struct SidebarViewModel: Sendable, Equatable {
         worktrees: [Worktree],
         sessions: [AgentSession]
     ) -> [RepositoryNode] {
-        // `Dictionary(grouping:by:)` は元の配列の相対順序を保ったままグルーピングするため、
-        // 呼び出し側が渡した並び順(= サイドバー表示順)がそのままツリーに反映される。
+        // `Dictionary(grouping:by:)` preserves the relative order of the source array, so
+        // the order the caller passed in (= sidebar display order) carries into the tree as-is.
         let worktreesByRepository = Dictionary(grouping: worktrees, by: \.repositoryPath)
         let sessionsByWorktree = Dictionary(grouping: sessions, by: \.worktreePath)
 
         return repositories.map { repository in
             let childWorktrees = (worktreesByRepository[repository.path] ?? []).map { worktree -> WorktreeNode in
-                // サイドバーにセッション行は無く ⌘1..9 はタブ局所(TabBarViewModel)の役割なので、
-                // ここでは番号を振らない。
+                // The sidebar has no session rows and ⌘1..9 is tab-local (TabBarViewModel's
+                // role), so no numbers are assigned here.
                 let childSessions = (sessionsByWorktree[worktree.path] ?? []).map { session in
                     SessionNode(session: session, shortcutNumber: nil)
                 }
@@ -70,44 +72,45 @@ public struct SidebarViewModel: Sendable, Equatable {
         }
     }
 
-    /// 全リポジトリ・全 worktree を横断した、表示順でのセッション一覧。
+    /// Sessions across all repositories and worktrees, in display order.
     public var flattenedSessions: [SessionNode] {
         repositories.flatMap { $0.worktrees.flatMap(\.sessions) }
     }
 
-    /// 現在選択中のセッション行。`selectedSessionID` がツリーに存在しなければ `nil`。
+    /// The currently selected session row. `nil` if `selectedSessionID` is not in the tree.
     public var selectedSession: SessionNode? {
         guard let selectedSessionID else { return nil }
         return flattenedSessions.first { $0.id == selectedSessionID }
     }
 
-    /// 全リポジトリを横断した、表示順での worktree 一覧。
+    /// Worktrees across all repositories, in display order.
     public var flattenedWorktrees: [WorktreeNode] {
         repositories.flatMap(\.worktrees)
     }
 
-    /// 現在選択中の worktree 行。`selectedWorktreePath` がツリーに存在しなければ `nil`。
+    /// The currently selected worktree row. `nil` if `selectedWorktreePath` is not in the tree.
     public var selectedWorktree: WorktreeNode? {
         guard let selectedWorktreePath else { return nil }
         return flattenedWorktrees.first { $0.id == selectedWorktreePath }
     }
 
-    /// busy/waitingInput/idle の件数集計(リポジトリ横断)。
+    /// Tally of busy/waitingInput/idle counts (across repositories).
     public var stateSummary: SessionStateSummary {
         Self.summarize(sessions: flattenedSessions.map(\.session))
     }
 
-    /// 集計ロジックの本体は `SessionStateSummary.init(sessions:)` に委譲する。
+    /// The actual tallying logic is delegated to `SessionStateSummary.init(sessions:)`.
     public static func summarize(sessions: [AgentSession]) -> SessionStateSummary {
         SessionStateSummary(sessions: sessions)
     }
 
-    // MARK: - 選択管理
+    // MARK: - Selection management
 
-    /// セッションを直接選択する。`nil` を渡すと選択解除。
+    /// Select a session directly. Passing `nil` clears the selection.
     ///
-    /// セッションがツリーに存在すれば、その worktree を `selectedWorktreePath` としても記憶し、
-    /// `activeSessionByWorktree` にも反映する(worktree を切り替えて戻ったときの復帰用)。
+    /// If the session exists in the tree, its worktree is also remembered as
+    /// `selectedWorktreePath` and recorded in `activeSessionByWorktree` (for restoring
+    /// when switching away from and back to the worktree).
     public mutating func select(sessionID: AgentSession.ID?) {
         selectedSessionID = sessionID
         guard let sessionID, let node = flattenedSessions.first(where: { $0.id == sessionID }) else {
@@ -117,8 +120,9 @@ public struct SidebarViewModel: Sendable, Equatable {
         activeSessionByWorktree[node.session.worktreePath] = sessionID
     }
 
-    /// 表示順で次のセッションを選択する(末尾からは先頭へ循環)。
-    /// 現在の選択がツリーに無い場合は先頭のセッションを選ぶ。セッションが1件も無ければ何もしない。
+    /// Select the next session in display order (wrapping from last to first).
+    /// If the current selection is not in the tree, selects the first session. Does
+    /// nothing if there are no sessions.
     public mutating func selectNext() {
         let flat = flattenedSessions
         guard !flat.isEmpty else { return }
@@ -129,7 +133,7 @@ public struct SidebarViewModel: Sendable, Equatable {
         select(sessionID: flat[(index + 1) % flat.count].id)
     }
 
-    /// 表示順で前のセッションを選択する(先頭からは末尾へ循環)。
+    /// Select the previous session in display order (wrapping from first to last).
     public mutating func selectPrevious() {
         let flat = flattenedSessions
         guard !flat.isEmpty else { return }
@@ -140,12 +144,12 @@ public struct SidebarViewModel: Sendable, Equatable {
         select(sessionID: flat[(index - 1 + flat.count) % flat.count].id)
     }
 
-    /// ⌘⇧U 相当: 最新の waitingInput セッションへジャンプする。
-    /// 「最新」は `AgentSession.stateChangedAt` が最も新しいもの(リポジトリ横断)。
-    /// `stateChangedAt` が無いセッションは最も古いものとして扱う。同時刻の場合は表示順で後ろのものを優先する。
-    /// 該当セッションの worktree も `selectedWorktreePath` として選択される(worktree 選択と
-    /// セッション選択の両方が連動して切り替わる)。waitingInput のセッションが無ければ何もせず
-    /// `false` を返す。
+    /// Equivalent to ⌘⇧U: jump to the most recent waitingInput session.
+    /// "Most recent" means the newest `AgentSession.stateChangedAt` (across repositories).
+    /// Sessions without `stateChangedAt` are treated as the oldest. On a tie, the one later
+    /// in display order wins. The session's worktree is also selected as
+    /// `selectedWorktreePath` (worktree selection and session selection switch together).
+    /// If no session is waitingInput, does nothing and returns `false`.
     @discardableResult
     public mutating func jumpToLatestWaiting() -> Bool {
         let waiting = flattenedSessions.enumerated().filter { $0.element.session.state == .waitingInput }
@@ -161,12 +165,12 @@ public struct SidebarViewModel: Sendable, Equatable {
         return true
     }
 
-    /// worktree を選択する(選択の主語の切り替え)。
+    /// Select a worktree (switches what the selection refers to).
     ///
-    /// 対象 worktree について `activeSessionByWorktree` に記憶があればそのセッションを復元し、
-    /// 無ければ先頭セッションを選ぶ(セッションが1件も無い worktree、または存在しない worktree
-    /// パスを渡した場合はセッション選択を解除する)。`nil` を渡すと worktree・セッションの選択を
-    /// 両方解除する。
+    /// If `activeSessionByWorktree` has a memory for the target worktree, that session is
+    /// restored; otherwise the first session is selected (for a worktree with no sessions,
+    /// or a nonexistent worktree path, the session selection is cleared). Passing `nil`
+    /// clears both the worktree and session selections.
     public mutating func selectWorktree(_ path: String?) {
         selectedWorktreePath = path
         guard let path, let node = flattenedWorktrees.first(where: { $0.id == path }) else {
@@ -183,8 +187,9 @@ public struct SidebarViewModel: Sendable, Equatable {
         }
     }
 
-    /// 表示順で次の worktree を選択する(リポジトリ横断・循環)。
-    /// 現在の選択がツリーに無い場合は先頭の worktree を選ぶ。worktree が1件も無ければ何もしない。
+    /// Select the next worktree in display order (across repositories, wrapping).
+    /// If the current selection is not in the tree, selects the first worktree. Does
+    /// nothing if there are no worktrees.
     public mutating func selectNextWorktree() {
         let flat = flattenedWorktrees
         guard !flat.isEmpty else { return }
@@ -195,8 +200,9 @@ public struct SidebarViewModel: Sendable, Equatable {
         selectWorktree(flat[(index + 1) % flat.count].id)
     }
 
-    /// 表示順で前の worktree を選択する(リポジトリ横断・循環)。
-    /// 現在の選択がツリーに無い場合は末尾の worktree を選ぶ。worktree が1件も無ければ何もしない。
+    /// Select the previous worktree in display order (across repositories, wrapping).
+    /// If the current selection is not in the tree, selects the last worktree. Does
+    /// nothing if there are no worktrees.
     public mutating func selectPreviousWorktree() {
         let flat = flattenedWorktrees
         guard !flat.isEmpty else { return }

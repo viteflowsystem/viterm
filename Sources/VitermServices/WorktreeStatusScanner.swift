@@ -2,10 +2,11 @@ import Foundation
 import GitKit
 import VitermCore
 
-/// 登録リポジトリ群の worktree 一覧・ahead/behind・diffstat・dirty を収集し、
-/// サイドバー表示用の `VitermCore.Worktree` に変換する。
+/// Collects worktree lists, ahead/behind, diffstat, and dirty flags for the registered
+/// repositories and converts them into `VitermCore.Worktree` for sidebar display.
 ///
-/// `GitKit.Worktree` と `VitermCore.Worktree` は同名のため、このファイル内では常にモジュール修飾で区別する。
+/// `GitKit.Worktree` and `VitermCore.Worktree` share a name, so within this file they are
+/// always distinguished with module qualification.
 public struct WorktreeStatusScanner: Sendable {
     public var gitService: GitService
 
@@ -13,8 +14,9 @@ public struct WorktreeStatusScanner: Sendable {
         self.gitService = gitService
     }
 
-    /// 登録済みリポジトリ群すべてをスキャンする。個々のリポジトリでの失敗
-    /// (パスが存在しない・git リポジトリでない等)は無視して結果から除外し、他のリポジトリには影響しない。
+    /// Scan all registered repositories. Failures in an individual repository (path
+    /// missing, not a git repository, etc.) are ignored and excluded from the result,
+    /// without affecting other repositories.
     public func scan(repositories: [VitermCore.Repository]) async -> [VitermCore.Worktree] {
         var result: [VitermCore.Worktree] = []
         for repository in repositories {
@@ -25,7 +27,7 @@ public struct WorktreeStatusScanner: Sendable {
         return result
     }
 
-    /// 単一リポジトリの worktree 一覧をスキャンする。
+    /// Scan the worktree list of a single repository.
     public func scan(repository: VitermCore.Repository) async throws -> [VitermCore.Worktree] {
         let repositoryURL = URL(fileURLWithPath: repository.path)
         let gitWorktrees = try await gitService.worktrees(in: repositoryURL)
@@ -33,7 +35,7 @@ public struct WorktreeStatusScanner: Sendable {
 
         var results: [VitermCore.Worktree] = []
         for gitWorktree: GitKit.Worktree in gitWorktrees {
-            // detached HEAD の worktree はブランチを持たずサイドバー表示の対象外とする。
+            // A detached-HEAD worktree has no branch and is excluded from sidebar display.
             guard let branch = gitWorktree.branch else { continue }
             results.append(
                 await status(for: gitWorktree, branch: branch, repository: repository, defaultBranch: defaultBranch)

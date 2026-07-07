@@ -1,17 +1,17 @@
 import Foundation
 
-/// コマンドパレットのファジー検索アルゴリズム。
-/// クエリの各文字が対象文字列に(連続していなくてもよい)部分列として現れればマッチとみなし、
-/// 以下の観点でスコアリングする(値が大きいほど上位表示):
-/// - 先頭一致: クエリの最初の文字が対象文字列の先頭にマッチした
-/// - 単語境界: マッチ位置の直前が区切り文字(空白・記号など)または文字列先頭
-/// - 連続一致: 直前のマッチ位置のすぐ次にマッチした(連続する部分文字列としてマッチした)
+/// Fuzzy search algorithm for the command palette.
+/// A match means every query character appears in the target string as a (not
+/// necessarily contiguous) subsequence, scored on these criteria (higher ranks first):
+/// - Prefix match: the first query character matched at the start of the target
+/// - Word boundary: the position right before a match is a separator (space, symbol, etc.) or the string start
+/// - Consecutive match: matched immediately after the previous match position (matched as a contiguous substring)
 ///
-/// 大文字小文字は区別しない。日本語などの非ASCII文字は通常の文字として扱われ、
-/// 特別な処理をせずそのまま部分一致の対象になる。
+/// Case-insensitive. Non-ASCII characters such as Japanese are treated as ordinary
+/// characters and participate in matching without any special handling.
 public enum FuzzyMatcher {
-    /// `query` が `target` にファジーマッチするかを判定し、マッチしていればスコアを返す。
-    /// マッチしなければ `nil`。空文字列のクエリは(スコア0で)常にマッチする。
+    /// Determine whether `query` fuzzy-matches `target`, returning the score if it does.
+    /// `nil` if it doesn't. An empty query always matches (with score 0).
     public static func score(query: String, target: String) -> Int? {
         guard !query.isEmpty else { return 0 }
 
@@ -56,7 +56,7 @@ public enum FuzzyMatcher {
         return nil
     }
 
-    /// 単語境界とみなす区切り文字。ASCII の空白・記号に加え、日本語の読点・句点なども含む。
+    /// Separators treated as word boundaries. ASCII whitespace/symbols plus Japanese commas, periods, etc.
     private static let boundarySeparators: Set<Character> = [
         " ", "\t", "-", "_", "/", "(", ")", "…", ":", "・", "、", "。", "「", "」",
     ]

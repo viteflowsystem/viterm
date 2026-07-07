@@ -326,15 +326,6 @@ final class GhosttySurfaceView: NSView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        // ⌘=(US 配列で shift なしの ⌘+)も文字拡大として扱う。メニューの
-        // keyEquivalent "+" では拾えないため、ここで先に処理する。
-        if event.modifierFlags.contains(.command),
-           !event.modifierFlags.contains(.shift),
-           event.charactersIgnoringModifiers == "=" {
-            increaseFontSize(nil)
-            return true
-        }
-
         // ⌘V ペースト: NSPasteboard から直接サーフェスにテキストを送る。
         if event.modifierFlags.contains(.command),
            event.charactersIgnoringModifiers == "v",

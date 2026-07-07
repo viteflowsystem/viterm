@@ -125,8 +125,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenu.addItem(toggle)
 
         // フォントサイズ調整。target なし(first responder 経由)でフォーカス中の
-        // GhosttySurfaceView に届く。⌘=(shift なしの ⌘+)は GhosttySurfaceView の
-        // performKeyEquivalent 側で拾う。
+        // GhosttySurfaceView に届く。⌘=(shift なしの ⌘+)はメニューでは拾えないが、
+        // keyDown 経由で libghostty core のデフォルトキーバインド(super+equal)が処理する
+        // (本家 Ghostty.app と同じ構図)。
         viewMenu.addItem(.separator())
         viewMenu.addItem(NSMenuItem(
             title: "文字を大きく",

@@ -4,7 +4,7 @@ import Testing
 import VitermCore
 @testable import VitermServices
 
-/// hookRunner / fileCopier のような @Sendable クロージャからの呼び出しを記録するためのアクター。
+/// Actor recording calls from @Sendable closures like hookRunner / fileCopier.
 actor CallRecorder {
     private(set) var hookInvocations: [(command: String, environment: [String: String])] = []
     private(set) var copyInvocations: [(source: URL, destination: URL)] = []
@@ -143,7 +143,7 @@ struct StubError: Error, CustomStringConvertible {
             copySessionData: true
         )
 
-        // コピーに失敗しても worktree 作成自体は成功として扱われる(throw しない)。
+        // Even if the copy fails, the worktree creation itself counts as success (no throw).
         let result = try await provisioner.createWorktree(request)
 
         #expect(result.warnings.count == 1)
@@ -360,10 +360,10 @@ struct StubError: Error, CustomStringConvertible {
         #expect(result.steps.map(\.step) == [.merge])
         #expect(result.result(for: .merge)?.error != nil)
 
-        // 後始末は行われず、feature worktree はまだ残っている(コンフリクト解消は人手に委ねる)。
+        // No cleanup happens and the feature worktree still remains (conflict resolution is left to a human).
         #expect(FileManager.default.fileExists(atPath: featurePath.path) == true)
 
-        // conflict 状態のままだと後続テストに影響しうるため abort しておく。
+        // Abort here, since a lingering conflict state could affect later tests.
         _ = try? await service.runner.run(["merge", "--abort"], in: repo)
     }
 }
@@ -378,7 +378,7 @@ struct StubError: Error, CustomStringConvertible {
         try await service.addWorktree(in: repo, path: featurePath, source: .newBranch(name: "feature"))
         try await Fixture.commitFile(named: "feature.txt", content: "feature\n", message: "add feature", in: featurePath)
 
-        // マージ後に source worktree を dirty にしておく(force 未指定なので削除は失敗するはず)。
+        // Make the source worktree dirty after the merge (removal should fail without force).
         try "dirty\n".write(to: featurePath.appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
 
         let coordinator = MergeCleanupCoordinator(gitService: service)
@@ -396,7 +396,7 @@ struct StubError: Error, CustomStringConvertible {
         #expect(result.result(for: .merge)?.isSuccess == true)
         #expect(result.result(for: .removeWorktree)?.isSuccess == false)
 
-        // worktree もブランチもまだ残っている。
+        // Both the worktree and the branch still remain.
         #expect(FileManager.default.fileExists(atPath: featurePath.path) == true)
         let branches = try await service.branches(in: repo)
         #expect(branches.contains { $0.name == "feature" })
@@ -434,7 +434,7 @@ struct StubError: Error, CustomStringConvertible {
 
 // MARK: - RepositoryDiscovery
 
-/// `<directory>/.git` をディレクトリとして作る(= 本物のリポジトリを模す)。実 git は不要。
+/// Create `<directory>/.git` as a directory (= mimics a real repository). No real git needed.
 private func makeFakeRepositoryMarker(at directory: URL) throws {
     try FileManager.default.createDirectory(
         at: directory.appendingPathComponent(".git"),
@@ -442,7 +442,7 @@ private func makeFakeRepositoryMarker(at directory: URL) throws {
     )
 }
 
-/// `<directory>/.git` をファイルとして作る(= worktree チェックアウト先を模す)。
+/// Create `<directory>/.git` as a file (= mimics a worktree checkout).
 private func makeFakeWorktreeCheckoutMarker(at directory: URL) throws {
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     try "gitdir: /somewhere/.git/worktrees/x\n".write(
@@ -501,7 +501,7 @@ private func makeFakeWorktreeCheckoutMarker(at directory: URL) throws {
 @Test func discover_respectsMaxDepth() async throws {
     try await withTemporaryDirectory { dir in
         let root = dir.appendingPathComponent("root")
-        // root/a/b/c/d/e/deep-project は root から見て depth 6。
+        // root/a/b/c/d/e/deep-project is at depth 6 from root.
         try makeFakeRepositoryMarker(at: root.appendingPathComponent("a/b/c/d/e/deep-project"))
 
         let shallow = RepositoryDiscovery(maxDepth: 4)
@@ -516,7 +516,7 @@ private func makeFakeWorktreeCheckoutMarker(at directory: URL) throws {
     try await withTemporaryDirectory { dir in
         let root = dir.appendingPathComponent("root")
         try makeFakeRepositoryMarker(at: root.appendingPathComponent("project-a"))
-        // project-a の内部にネストしたリポジトリ(vendor 済み等)があっても二重登録しない。
+        // A repository nested inside project-a (vendored, etc.) is not double-registered.
         try makeFakeRepositoryMarker(at: root.appendingPathComponent("project-a/vendor/nested-repo"))
 
         let discovery = RepositoryDiscovery()
@@ -590,7 +590,7 @@ private func makeFakeWorktreeCheckoutMarker(at directory: URL) throws {
         }
     )
 
-    // onWaitingInput / onIdle は未設定なので busy 以外では何も起きない。
+    // onWaitingInput / onIdle are unset, so nothing happens for states other than busy.
     let task = runner.notify(sessionName: "s", worktreePath: "/p", oldState: .busy, newState: .idle)
     #expect(task == nil)
 

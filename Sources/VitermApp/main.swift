@@ -1,16 +1,17 @@
 import AppKit
 import VitermServices
 
-// viterm エントリポイント。
-// AppModel(状態管理)+ SessionManager(サーフェス実体)+ MainWindowController(UI)を配線する。
+// viterm entry point.
+// Wires up AppModel (state management) + SessionManager (surface instances) + MainWindowController (UI).
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var windowController: MainWindowController?
 
-    /// SIGTERM(pkill / ログアウト等)でも保存経路(applicationWillTerminate)を通すため、
-    /// シグナルを DispatchSource で拾って通常の terminate に変換する
-    /// (既定の SIGTERM はプロセス即死で applicationWillTerminate が呼ばれない)。
+    /// So SIGTERM (pkill / logout, etc.) also goes through the save path
+    /// (applicationWillTerminate), catch the signal with a DispatchSource and convert it
+    /// to a normal terminate (the default SIGTERM kills the process instantly and
+    /// applicationWillTerminate is never called).
     private var sigtermSource: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -124,10 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggle.target = controller
         viewMenu.addItem(toggle)
 
-        // フォントサイズ調整。target なし(first responder 経由)でフォーカス中の
-        // GhosttySurfaceView に届く。⌘=(shift なしの ⌘+)はメニューでは拾えないが、
-        // keyDown 経由で libghostty core のデフォルトキーバインド(super+equal)が処理する
-        // (本家 Ghostty.app と同じ構図)。
+        // Font size adjustment. With no target (via the first responder), it reaches the
+        // focused GhosttySurfaceView. ⌘= (⌘+ without shift) can't be caught by the menu,
+        // but libghostty core's default keybinding (super+equal) handles it via keyDown
+        // (same arrangement as upstream Ghostty.app).
         viewMenu.addItem(.separator())
         viewMenu.addItem(NSMenuItem(
             title: "文字を大きく",
@@ -144,7 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenuItem.submenu = viewMenu
         main.addItem(viewMenuItem)
 
-        // Edit メニュー(⌘C/⌘V をシステム標準経路で有効にする)
+        // Edit menu (enables ⌘C/⌘V through the standard system path)
         let editMenuItem = NSMenuItem()
         let editMenu = NSMenu(title: "Edit")
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")

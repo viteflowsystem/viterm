@@ -1,11 +1,11 @@
 import Foundation
 import VitermCore
 
-/// セッション構成の永続化(再起動時の復元用)。
+/// Persistence of the session layout (for restoring across relaunches).
 ///
-/// 保存するのは「どの worktree にどのプリセットのセッションが何本あったか」と選択中セッション。
-/// PTY の中身(スクロールバック・実行中プロセス)は復元しない。
-/// 保存先: ~/Library/Application Support/viterm/sessions.json
+/// What is saved: "how many sessions of which preset existed in which worktree" and the
+/// selected session. PTY contents (scrollback, running processes) are not restored.
+/// Location: ~/Library/Application Support/viterm/sessions.json
 struct SessionRestoreStore {
     struct PersistedSession: Codable {
         var worktreePath: String
@@ -14,13 +14,13 @@ struct SessionRestoreStore {
 
     struct State: Codable {
         var sessions: [PersistedSession]
-        /// 選択していたセッションの(復元順での)インデックス。
+        /// Index (in restore order) of the session that was selected.
         var selectedIndex: Int?
-        /// 選択していた worktree のパス。フェーズ2で追加。無い(旧フォーマットの)JSON は
-        /// `nil` にデコードされ、`selectedIndex` 側から後方互換的に復元される。
+        /// Path of the worktree that was selected. Added in phase 2. JSON without it (the
+        /// old format) decodes to `nil` and is restored backward-compatibly from `selectedIndex`.
         var selectedWorktreePath: String?
-        /// worktree ごとの最終アクティブセッションを、`sessions` 配列上の(復元順での)
-        /// インデックスとして記憶する(セッションIDは起動のたびに新規発行されるため)。
+        /// Remembers each worktree's last active session as an index (in restore order)
+        /// into the `sessions` array (session IDs are freshly issued on every launch).
         var activeSessionIndexByWorktree: [String: Int]?
     }
 
@@ -50,7 +50,7 @@ struct SessionRestoreStore {
             let data = try JSONEncoder().encode(state)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            // 永続化失敗は致命的ではないので無視(次回保存で上書きされる)。
+            // Persistence failure isn't fatal, so ignore it (overwritten by the next save).
         }
     }
 

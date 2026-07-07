@@ -1,46 +1,47 @@
 import Foundation
 
-/// worktree 新規作成ダイアログ(docs/ui-mock.html Screen 03)の UI 非依存なフォーム状態。
-/// ブランチ名バリデーション、パステンプレート展開のリアルタイムプレビュー、
-/// 既存 worktree パスとの衝突検出、送信可能時の `NewWorktreeRequest` 組み立てを担う。
-/// git 操作・ファイルI/O は一切行わない純粋な値型。
+/// UI-independent form state of the new-worktree dialog (docs/ui-mock.html Screen 03).
+/// Handles branch name validation, real-time preview of path template expansion,
+/// collision detection against existing worktree paths, and building the
+/// `NewWorktreeRequest` when submittable. A pure value type doing no git operations or
+/// file I/O.
 public struct NewWorktreeFormModel: Sendable, Equatable {
-    /// worktree 作成元の選択モード。docs/requirements.md 3.1 の3パターンに対応。
+    /// Selection mode for the worktree source. Corresponds to the three patterns in docs/requirements.md 3.1.
     public enum SourceMode: Sendable, Equatable {
-        /// 新規ブランチを作成する(docs/ui-mock.html Screen 03 の既定フロー)。
+        /// Create a new branch (the default flow of docs/ui-mock.html Screen 03).
         case newBranch
-        /// 既存のローカルブランチをそのままチェックアウトする。
+        /// Check out an existing local branch as-is.
         case existingLocalBranch
-        /// リモートブランチを追跡する新規ローカルブランチを作る。
+        /// Create a new local branch tracking a remote branch.
         case remoteBranch
     }
 
-    // MARK: 外部から注入される文脈(フォームのライフサイクル中は不変)
+    // MARK: Context injected from outside (immutable for the form's lifecycle)
 
     public var repository: Repository
-    /// 設定(`VitermConfig.worktreePathTemplate`)由来の既定テンプレート。
+    /// Default template from the config (`VitermConfig.worktreePathTemplate`).
     public var defaultPathTemplate: WorktreePathTemplate
-    /// 「ベースブランチ」「既存ブランチ」ドロップダウンの選択肢。ローカル/リモート混在。
+    /// Options for the "base branch" / "existing branch" dropdowns. Local and remote mixed.
     public var availableBranches: [AvailableBranch]
-    /// 衝突検出に使う、既存 worktree の絶対パス一覧。
+    /// Absolute paths of existing worktrees, used for collision detection.
     public var existingWorktreePaths: [String]
-    /// `~` 展開に使うホームディレクトリ(テスト用に注入可能)。
+    /// Home directory used for `~` expansion (injectable for tests).
     public var homeDirectory: String
 
-    // MARK: ユーザー入力
+    // MARK: User input
 
     public var branchName: String
     public var sourceMode: SourceMode
-    /// `newBranch` モードでのベースブランチ(起点)。`nil` なら現在の HEAD から分岐する。
+    /// Base branch (start point) in `newBranch` mode. `nil` branches from the current HEAD.
     public var baseBranchName: String?
-    /// `remoteBranch` モードで追跡するリモート名(例: `"origin"`)。
+    /// Remote name to track in `remoteBranch` mode (e.g. `"origin"`).
     public var remoteName: String?
-    /// パステンプレートのその場上書き。`nil` なら `defaultPathTemplate` を使う。
+    /// In-place override of the path template. `nil` uses `defaultPathTemplate`.
     public var pathTemplateOverride: String?
     public var copySessionData: Bool
-    /// 作成後に起動するセッションプリセット名。`nil` なら起動しない。
+    /// Session preset name to launch after creation. `nil` launches nothing.
     public var launchSessionPresetName: String?
-    /// post-creation hook として実行するシェルコマンド。`nil`/空文字なら実行しない。
+    /// Shell command run as the post-creation hook. Not run if `nil`/empty.
     public var runHookCommand: String?
 
     public init(
@@ -73,18 +74,18 @@ public struct NewWorktreeFormModel: Sendable, Equatable {
         self.runHookCommand = runHookCommand
     }
 
-    /// 既存のローカルブランチ名一覧(`availableBranches` から抽出)。
+    /// Names of existing local branches (extracted from `availableBranches`).
     public var existingLocalBranchNames: [String] {
         availableBranches.filter { $0.kind == .local }.map(\.name)
     }
 
-    /// `newBranch` / `remoteBranch` は新しいローカル ref を作るため重複チェック対象になるが、
-    /// `existingLocalBranch` は既存 ref をそのまま使うため対象外。
+    /// `newBranch` / `remoteBranch` create a new local ref and therefore get the duplicate
+    /// check; `existingLocalBranch` uses an existing ref as-is and is exempt.
     private var shouldCheckDuplicateBranchName: Bool {
         sourceMode != .existingLocalBranch
     }
 
-    /// ブランチ名のバリデーションエラー。問題無ければ `nil`。
+    /// Branch name validation error. `nil` if there is no problem.
     public var branchNameError: BranchNameValidationError? {
         BranchNameValidator.validate(
             branchName,
@@ -93,12 +94,12 @@ public struct NewWorktreeFormModel: Sendable, Equatable {
         )
     }
 
-    /// 実際に使われるパステンプレート(その場上書きがあればそれを優先)。
+    /// The path template actually used (the in-place override wins if present).
     public var effectivePathTemplate: WorktreePathTemplate {
         pathTemplateOverride.map(WorktreePathTemplate.init) ?? defaultPathTemplate
     }
 
-    /// 現在の入力値をテンプレートに展開したプレビューパス。ブランチ名が空なら `nil`。
+    /// Preview path from expanding the template with the current input. `nil` if the branch name is empty.
     public var pathPreview: String? {
         guard !branchName.isEmpty else { return nil }
         let context = WorktreePathTemplate.Context(
@@ -109,18 +110,18 @@ public struct NewWorktreeFormModel: Sendable, Equatable {
         return effectivePathTemplate.expand(context: context, homeDirectory: homeDirectory)
     }
 
-    /// プレビューパスが既存の worktree と衝突しているか。
+    /// Whether the preview path collides with an existing worktree.
     public var hasPathCollision: Bool {
         guard let pathPreview else { return false }
         return existingWorktreePaths.contains(pathPreview)
     }
 
-    /// 送信可能な状態かどうか(ブランチ名エラー無し・パス衝突無し)。
+    /// Whether the form is submittable (no branch name error, no path collision).
     public var isValid: Bool {
         branchNameError == nil && !hasPathCollision
     }
 
-    /// バリデーションを通過していれば作成リクエストを組み立てて返す。通過していなければ `nil`。
+    /// Build and return the creation request if validation passes; `nil` otherwise.
     public func buildRequest() -> NewWorktreeRequest? {
         guard isValid, let pathPreview else { return nil }
 

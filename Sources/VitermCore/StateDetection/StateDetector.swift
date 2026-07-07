@@ -1,21 +1,22 @@
 import Foundation
 
-/// `StateDetector` が画面テキストから即時に読み取れるシグナル。
-/// デバウンスや経過時間の判断は含まない、純粋なテキストマッチの結果。
-/// `.none` は「busy/waitingInput の明確な根拠が無い」ことを示すだけで、
-/// idle が確定したことを意味しない(確定は `SessionStateMachine` のデバウンス層が行う)。
+/// A signal `StateDetector` can read immediately from screen text.
+/// A pure text-match result with no debouncing or elapsed-time judgment.
+/// `.none` only means "no clear evidence of busy/waitingInput" — it does not mean idle
+/// has been confirmed (confirmation is done by `SessionStateMachine`'s debounce layer).
 public enum DetectionSignal: Sendable, Equatable {
     case busy
     case waitingInput
     case none
 }
 
-/// エージェントセッションの画面テキストから状態シグナルを検出するツール別ストラテジ。
-/// PTY / libghostty 等の実行環境には一切依存せず、文字列(仮想画面の行配列)のみを入力とする。
+/// Per-tool strategy for detecting state signals from an agent session's screen text.
+/// Depends on no runtime environment (PTY / libghostty / etc.); its only input is strings
+/// (an array of virtual-screen lines).
 public protocol StateDetector: Sendable {
-    /// この detector が対応するツール名(`SessionPreset.name` 等と対応させる想定)。
+    /// The tool name this detector handles (intended to correspond to `SessionPreset.name`, etc.).
     var toolName: String { get }
 
-    /// 現在の画面内容(スクロールバックを含まない、可視行のみ)からシグナルを判定する。
+    /// Determine the signal from the current screen content (visible lines only, no scrollback).
     func detect(screenLines: [String]) -> DetectionSignal
 }

@@ -2,48 +2,49 @@ import Foundation
 import GitKit
 import VitermCore
 
-// MARK: - AppModel が使う外部作用の抽象。
+// MARK: - Abstractions over the external effects AppModel uses.
 //
-// `AppModel` 自体はこれらのプロトコル越しにしか副作用(git 実行・ファイルI/O・設定読み書き)を
-// 起こさない。各プロトコルは既存の具象型(WorktreeStatusScanner 等)のメソッドと1:1で対応しており、
-// 具象型は下部の extension で無変更のまま準拠する。テストでは同じプロトコルに準拠したフェイクを注入する。
+// `AppModel` itself only causes side effects (running git, file I/O, config reads/writes)
+// through these protocols. Each protocol corresponds 1:1 to methods on an existing concrete
+// type (WorktreeStatusScanner, etc.), and the concrete types conform unchanged via the
+// extensions below. Tests inject fakes conforming to the same protocols.
 
-/// 設定読み込みの抽象(`ConfigLoader.load` のラッパー)。
+/// Abstraction over config loading (wrapper around `ConfigLoader.load`).
 public protocol ConfigProviding: Sendable {
     func loadConfig(repositoryRoot: URL?) throws -> VitermConfig
 }
 
-/// グローバル設定への登録リポジトリ一覧の永続化の抽象。
+/// Abstraction over persisting the registered-repository list to the global config.
 public protocol RepositoryConfigPersisting: Sendable {
     func persist(repositories: [Repository]) throws
 }
 
-/// 指定ルート配下の git リポジトリ自動検出の抽象(`RepositoryDiscovery` のラッパー)。
+/// Abstraction over auto-discovering git repositories under a root (wrapper around `RepositoryDiscovery`).
 public protocol RepositoryDiscovering: Sendable {
     func discover(rootDirectory: URL) -> [Repository]
 }
 
-/// 登録リポジトリ群の worktree 状態収集の抽象(`WorktreeStatusScanner` のラッパー)。
+/// Abstraction over collecting worktree status for registered repositories (wrapper around `WorktreeStatusScanner`).
 public protocol WorktreeStatusScanning: Sendable {
     func scan(repositories: [Repository]) async -> [VitermCore.Worktree]
 }
 
-/// worktree 作成の抽象(`WorktreeProvisioner` のラッパー)。
+/// Abstraction over worktree creation (wrapper around `WorktreeProvisioner`).
 public protocol WorktreeProvisioning: Sendable {
     func createWorktree(_ request: WorktreeCreationRequest) async throws -> WorktreeCreationResult
 }
 
-/// worktree 単独削除の抽象(マージを伴わない `git worktree remove`。`GitService` のラッパー)。
+/// Abstraction over standalone worktree removal (`git worktree remove` without merging; wrapper around `GitService`).
 public protocol WorktreeRemoving: Sendable {
     func removeWorktree(at path: URL, in repository: URL, force: Bool) async throws
 }
 
-/// merge/rebase + 後始末の抽象(`MergeCleanupCoordinator` のラッパー)。
+/// Abstraction over merge/rebase + cleanup (wrapper around `MergeCleanupCoordinator`).
 public protocol MergeCleaningUp: Sendable {
     func mergeAndCleanUp(_ request: MergeCleanupRequest) async -> MergeCleanupResult
 }
 
-/// セッション状態変化 hook 発火の抽象(`StatusChangeHookRunner` のラッパー)。
+/// Abstraction over firing session-state-change hooks (wrapper around `StatusChangeHookRunner`).
 public protocol StatusChangeNotifying: Sendable {
     @discardableResult
     func notify(
@@ -53,20 +54,20 @@ public protocol StatusChangeNotifying: Sendable {
         newState: AgentSession.State
     ) -> Task<Void, Never>?
 
-    /// 設定リロード(`AppModel.refresh()`)ごとに hook コマンド設定を最新化する。
+    /// Refresh the hook command config on every config reload (`AppModel.refresh()`).
     mutating func updateConfig(_ config: StatusChangeHookConfig)
 }
 
-/// セッションの起動・切替の抽象。T6 で実装される `SessionManager` がこれに準拠する想定
-/// (今回はプロトコル定義とテスト用フェイクのみ)。
+/// Abstraction over launching/switching sessions. The `SessionManager` implemented in T6
+/// is expected to conform (for now, only the protocol definition and a test fake exist).
 public protocol SessionLaunching: Sendable {
-    /// 指定 worktree でプリセットを起動し、生成された `AgentSession` を返す。
+    /// Launch the preset in the given worktree and return the created `AgentSession`.
     func startSession(worktreePath: String, presetName: String) async throws -> AgentSession
-    /// 表示中の worktree を切り替える(実際のサーフェス切替は UI 側の責務、ここでは通知のみ)。
+    /// Switch the displayed worktree (the actual surface switch is the UI's responsibility; this only notifies).
     func switchToWorktree(_ worktreePath: String) async
 }
 
-// MARK: - 既存の具象型をそのままプロトコルに準拠させる(シグネチャは完全一致)。
+// MARK: - Conform the existing concrete types as-is (signatures match exactly).
 
 extension RepositoryDiscovery: RepositoryDiscovering {}
 extension WorktreeStatusScanner: WorktreeStatusScanning {}
@@ -75,9 +76,9 @@ extension MergeCleanupCoordinator: MergeCleaningUp {}
 extension StatusChangeHookRunner: StatusChangeNotifying {}
 extension GitService: WorktreeRemoving {}
 
-// MARK: - Live 実装
+// MARK: - Live implementations
 
-/// `ConfigLoader.load` をそのまま呼ぶ既定実装。
+/// Default implementation that simply calls `ConfigLoader.load`.
 public struct LiveConfigProvider: ConfigProviding {
     public var globalURL: URL?
 
@@ -90,8 +91,9 @@ public struct LiveConfigProvider: ConfigProviding {
     }
 }
 
-/// グローバル設定ファイル(`~/.config/viterm/config.json`)の `repositories` フィールドだけを
-/// 読み込み直して上書きする既定実装。他のフィールド(テンプレート・プリセット等)は保持する。
+/// Default implementation that re-reads the global config file
+/// (`~/.config/viterm/config.json`) and overwrites only its `repositories` field.
+/// Other fields (templates, presets, etc.) are preserved.
 public struct LiveRepositoryConfigPersister: RepositoryConfigPersisting {
     public var globalConfigURL: URL
 

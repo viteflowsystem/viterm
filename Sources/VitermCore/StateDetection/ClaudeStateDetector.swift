@@ -1,31 +1,34 @@
 import Foundation
 
-/// Claude Code 向けの detector。
-/// 判定シグナルは ccmanager(kbwo/ccmanager)の `src/services/stateDetector/claude.ts`
-/// (2026-07 時点の main ブランチ)を出発点に移植している。ccmanager は同種の判定が
-/// Claude Code の UI 変更で一度全壊した前科(Issue #227)があり、その修正後の実装が
-/// 現時点で最も実戦検証されたパターン集合になっている。
+/// Detector for Claude Code.
+/// The detection signals are ported from ccmanager's (kbwo/ccmanager)
+/// `src/services/stateDetector/claude.ts` (main branch as of 2026-07) as the starting
+/// point. ccmanager has prior form here: this kind of detection was once completely
+/// broken by a Claude Code UI change (Issue #227), and the post-fix implementation is
+/// currently the most battle-tested pattern set available.
 ///
-/// - waitingInput(busy より優先して判定):
-///   - `Do you want` / `Would you like` の後に改行を挟んで選択肢(`yes` / `❯`)が続く確認プロンプト。
-///     文言だけで即断すると通常の応答文中の言い回しを誤検知しうるため、選択肢の存在まで要求する。
+/// - waitingInput (checked before busy):
+///   - A confirmation prompt where `Do you want` / `Would you like` is followed, after a
+///     newline, by options (`yes` / `❯`). Judging by the wording alone could false-match
+///     phrasing inside a normal response, so the presence of options is also required.
 ///   - `esc to cancel`
 /// - busy:
 ///   - `esc to interrupt` / `ctrl+c to interrupt` / `ctrl-c to interrupt`
-///   - スピナー文字+単語(`…ing` を含む)+三点リーダー(`…`)で終わる行
-///     (例: `✽ Tempering…`、`✳ Simplifying recompute_tangents… (2m 18s · ↓ 4.8k tokens)`)。
-///     スピナー文字で始まっていても `…ing` で終わらない行(例: `✽ Some random text`)は対象外。
-///   - 括弧内に数字と `tokens` を含む統計行(例: `(2m 14s · ↓ 4.2k tokens)`、`(50s · ↓ 794 tokens)`)
-/// - `⌕ Search…`(検索プロンプト)は他のどのシグナルよりも優先して `.none`(idle デバウンス側)を返す。
-/// - `ctrl+r to toggle`(トランスクリプト表示切替のヒント)は `.none` を返す。ccmanager 本家は
-///   このケースで直前状態を維持するが、`StateDetector` はステートレスな設計のためここでは
-///   `.none` で近似する。`SessionStateMachine` の idle デバウンス(既定1.5秒)により、
-///   次の tick で busy/waitingInput のシグナルが再検出されれば実害は無い。
+///   - A line of spinner char + a word (containing `…ing`) ending with an ellipsis (`…`)
+///     (e.g. `✽ Tempering…`, `✳ Simplifying recompute_tangents… (2m 18s · ↓ 4.8k tokens)`).
+///     Lines starting with a spinner char but not ending in `…ing` (e.g. `✽ Some random text`) don't count.
+///   - A stats line with digits and `tokens` inside parentheses (e.g. `(2m 14s · ↓ 4.2k tokens)`, `(50s · ↓ 794 tokens)`)
+/// - `⌕ Search…` (the search prompt) returns `.none` (the idle-debounce side) with priority over every other signal.
+/// - `ctrl+r to toggle` (the transcript-toggle hint) returns `.none`. Upstream ccmanager
+///   keeps the previous state in this case, but `StateDetector` is stateless by design,
+///   so we approximate with `.none` here. Thanks to `SessionStateMachine`'s idle debounce
+///   (default 1.5s), there is no real harm if a busy/waitingInput signal is re-detected
+///   on the next tick.
 ///
-/// ccmanager 側にある「プロンプトボックス(`─` 罫線)より上のみを busy 判定対象にする」処理は、
-/// xterm バッファに前ターンの再描画断片が残留する問題への対処であり、libghostty の
-/// `ghostty_surface_read_text`(現在のビューポートをそのまま返す。詳細は
-/// `docs/ghostty-integration.md` 参照)には同種の問題が無いため移植していない。
+/// ccmanager's "only consider text above the prompt box (`─` rule) for busy detection"
+/// logic addresses stale redraw fragments from the previous turn lingering in the xterm
+/// buffer; libghostty's `ghostty_surface_read_text` (returns the current viewport as-is;
+/// see `docs/ghostty-integration.md`) has no such problem, so it was not ported.
 public struct ClaudeStateDetector: StateDetector {
     public let toolName = "claude"
 
@@ -34,7 +37,7 @@ public struct ClaudeStateDetector: StateDetector {
     public func detect(screenLines: [String]) -> DetectionSignal {
         let content = screenLines.joined(separator: "\n")
 
-        // 検索プロンプトは他のどのシグナルよりも優先して idle 側(none)を返す。
+        // The search prompt returns the idle side (none) with priority over every other signal.
         if content.contains("⌕ Search…") {
             return .none
         }
@@ -74,7 +77,7 @@ public struct ClaudeStateDetector: StateDetector {
         return TextSignals.matchesRegex(lowerContent, pattern: #"\([^)]*\d[^)]*tokens\s*\)"#)
     }
 
-    /// 行頭のスピナー文字 + 半角スペース + 「…ing」で終わる単語 + 三点リーダー(`…`)。
+    /// Line-leading spinner char + a space + a word ending in `…ing` + an ellipsis (`…`).
     private static let spinnerActivityPattern =
         "(?m)^[" + String(TextSignals.spinnerCharacters) + "] \\S+ing.*…"
 }

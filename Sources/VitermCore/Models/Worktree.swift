@@ -1,20 +1,20 @@
 import Foundation
 
-/// git worktree 1つ分の状態スナップショット。
+/// Status snapshot of one git worktree.
 public struct Worktree: Codable, Sendable, Hashable, Identifiable {
-    /// worktree の絶対パス。
+    /// Absolute path of the worktree.
     public var path: String
-    /// 紐付く `Repository.id`(= リポジトリルートの絶対パス)への参照。
+    /// Reference to the associated `Repository.id` (= the repository root's absolute path).
     public var repositoryPath: String
-    /// チェックアウト中のブランチ名。
+    /// Name of the checked-out branch.
     public var branch: String
-    /// 親ブランチに対する ahead コミット数。
+    /// Commits ahead of the parent branch.
     public var ahead: Int
-    /// 親ブランチに対する behind コミット数。
+    /// Commits behind the parent branch.
     public var behind: Int
-    /// ステージ済みの変更があるか(`git status --porcelain` の X カラム)。
+    /// Whether there are staged changes (the X column of `git status --porcelain`).
     public var hasStagedChanges: Bool
-    /// 未ステージの変更(untracked 含む)があるか(同 Y カラム / `??`)。
+    /// Whether there are unstaged changes, including untracked (its Y column / `??`).
     public var hasUnstagedChanges: Bool
 
     public init(
@@ -37,6 +37,6 @@ public struct Worktree: Codable, Sendable, Hashable, Identifiable {
 
     public var id: String { path }
 
-    /// 未コミットの変更(staged / unstaged いずれか)があるかどうか。
+    /// Whether there are uncommitted changes (staged or unstaged).
     public var isDirty: Bool { hasStagedChanges || hasUnstagedChanges }
 }

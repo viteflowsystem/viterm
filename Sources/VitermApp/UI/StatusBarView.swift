@@ -1,8 +1,8 @@
 import AppKit
 import VitermCore
 
-/// ウィンドウ下部のステータスバー(T9)。
-/// 左に現在の repo · branch · session、右にリポジトリ横断の状態集計。
+/// Status bar at the bottom of the window (T9).
+/// Current repo · branch · session on the left; cross-repository state tallies on the right.
 final class StatusBarView: NSView {
     private let currentLabel = NSTextField(labelWithString: "")
     private let summaryLabel = NSTextField(labelWithString: "")

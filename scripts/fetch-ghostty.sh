@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vendor/ghostty を scripts/ghostty-commit に記録された固定コミットで取得・更新する。
+# Fetch/update vendor/ghostty at the pinned commit recorded in scripts/ghostty-commit.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,9 +32,9 @@ if [ "$resolved" != "$COMMIT" ]; then
   exit 1
 fi
 
-# viterm 用のローカルパッチを適用する(冪等: 適用済みならスキップ)。
-# 例: 0001-xcframework-native-only.patch — native 指定時に iOS/universal
-#     バリアントのビルドをスキップする(CommandLineTools には iOS SDK が無いため)。
+# Apply viterm-local patches (idempotent: skipped if already applied).
+# Example: 0001-xcframework-native-only.patch — skips building the iOS/universal
+#     variants when native is requested (CommandLineTools has no iOS SDK).
 for patch in "$ROOT_DIR"/scripts/patches/*.patch; do
   [ -e "$patch" ] || continue
   if git -C "$VENDOR_DIR" apply --check "$patch" 2>/dev/null; then

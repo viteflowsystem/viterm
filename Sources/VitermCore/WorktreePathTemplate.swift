@@ -1,15 +1,15 @@
 import Foundation
 
-/// worktree 作成先パスのテンプレート展開。
+/// Template expansion for the worktree destination path.
 ///
-/// 例: `~/worktrees/{project}/{branch}_suffix`
-/// プレースホルダ:
-/// - `{project}`: リポジトリ名
-/// - `{branch}`: ブランチ名(`/` は `-` に正規化。例: `feat/x` → `feat-x`)
-/// - `{branch_raw}`: ブランチ名そのまま(`feat/x` はサブディレクトリになる)
+/// Example: `~/worktrees/{project}/{branch}_suffix`
+/// Placeholders:
+/// - `{project}`: repository name
+/// - `{branch}`: branch name (`/` normalized to `-`, e.g. `feat/x` → `feat-x`)
+/// - `{branch_raw}`: branch name as-is (`feat/x` becomes a subdirectory)
 ///
-/// `~` 始まりはホームディレクトリ基準、`/` 始まりは絶対パスとしてそのまま、
-/// それ以外は `repositoryRoot` 基準の相対パスとして解決する。
+/// A leading `~` resolves relative to the home directory, a leading `/` is taken as an
+/// absolute path as-is, and anything else resolves as a path relative to `repositoryRoot`.
 public struct WorktreePathTemplate: Sendable, Equatable {
     public var raw: String
 
@@ -17,13 +17,13 @@ public struct WorktreePathTemplate: Sendable, Equatable {
         self.raw = raw
     }
 
-    /// 展開に必要な文脈情報。
+    /// Context needed for expansion.
     public struct Context: Sendable, Equatable {
-        /// `{project}` に埋め込むリポジトリ名。
+        /// Repository name substituted into `{project}`.
         public var projectName: String
-        /// `{branch}` / `{branch_raw}` に埋め込むブランチ名(生の形、`/` を含みうる)。
+        /// Branch name substituted into `{branch}` / `{branch_raw}` (raw form, may contain `/`).
         public var branch: String
-        /// 相対パステンプレートを解決する基準となるリポジトリルートの絶対パス。
+        /// Absolute path of the repository root that relative path templates resolve against.
         public var repositoryRoot: String
 
         public init(projectName: String, branch: String, repositoryRoot: String) {
@@ -33,10 +33,10 @@ public struct WorktreePathTemplate: Sendable, Equatable {
         }
     }
 
-    /// テンプレートを実際のパス文字列に展開する。
+    /// Expand the template into an actual path string.
     /// - Parameters:
-    ///   - context: プレースホルダ・相対パス解決に使う情報。
-    ///   - homeDirectory: `~` 展開に使うホームディレクトリ(テスト用に注入可能。既定は実際のホーム)。
+    ///   - context: Info used for placeholder and relative-path resolution.
+    ///   - homeDirectory: Home directory used for `~` expansion (injectable for tests; defaults to the real home).
     public func expand(
         context: Context,
         homeDirectory: String = FileManager.default.homeDirectoryForCurrentUser.path
@@ -56,7 +56,7 @@ public struct WorktreePathTemplate: Sendable, Equatable {
         if substituted.hasPrefix("/") {
             return substituted
         }
-        // 相対パス: リポジトリルート基準で解決する。
+        // Relative path: resolve against the repository root.
         let trimmedRoot = context.repositoryRoot.hasSuffix("/")
             ? String(context.repositoryRoot.dropLast())
             : context.repositoryRoot

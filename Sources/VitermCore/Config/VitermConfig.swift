@@ -1,8 +1,8 @@
 import Foundation
 
-/// セッション状態変化 hook のコマンド設定。到達した新状態(busy/waitingInput/idle)ごとに
-/// 1つずつコマンドを持つ(`VitermServices.StatusChangeHookConfig` と同じ形だが、
-/// VitermCore は VitermServices に依存しないためここに独立して定義する)。
+/// Command config for session-state-change hooks. One command per new state reached
+/// (busy/waitingInput/idle) — same shape as `VitermServices.StatusChangeHookConfig`, but
+/// defined independently here because VitermCore does not depend on VitermServices.
 public struct StatusHooksFile: Codable, Sendable, Equatable {
     public var onBusy: String?
     public var onWaitingInput: String?
@@ -15,20 +15,22 @@ public struct StatusHooksFile: Codable, Sendable, Equatable {
     }
 }
 
-/// 設定ファイル(グローバル `~/.config/viterm/config.json` / プロジェクト別 `.viterm.json`)の
-/// 生のデコード結果。全フィールドは省略可能で、省略時は上位設定にフォールバックする。
+/// Raw decode result of a config file (global `~/.config/viterm/config.json` /
+/// per-project `.viterm.json`). Every field is optional and falls back to the config
+/// above it when omitted.
 public struct VitermConfigFile: Codable, Sendable, Equatable {
     public var worktreePathTemplate: String?
     public var presets: [SessionPreset]?
     public var defaultPreset: String?
     public var repositories: [Repository]?
     public var copySessionDataByDefault: Bool?
-    /// worktree 作成後に実行する post-creation hook のシェルコマンド。
+    /// Shell command for the post-creation hook run after worktree creation.
     public var postCreationHook: String?
-    /// セッション状態変化 hook。
+    /// Session-state-change hooks.
     public var statusHooks: StatusHooksFile?
-    /// リポジトリ自動検出(`RepositoryDiscovery`)の走査ルートディレクトリ一覧。
-    /// マージ時はグローバル設定の値のみを使う(`.viterm.json` に書いても現状は反映されない。§merge 参照)。
+    /// Root directories scanned by repository auto-discovery (`RepositoryDiscovery`).
+    /// Merging only uses the global config's value (writing it in `.viterm.json` currently
+    /// has no effect; see §merge).
     public var discoveryRoots: [String]?
 
     public init(
@@ -52,8 +54,8 @@ public struct VitermConfigFile: Codable, Sendable, Equatable {
     }
 }
 
-/// グローバル設定とプロジェクト設定をマージした、実際に使用する設定値。
-/// ファイルが存在しない場合でも `VitermConfig.default` が示す既定値で動作する。
+/// The effective config: the merge of global and project configs.
+/// Works with the defaults in `VitermConfig.default` even when no file exists.
 public struct VitermConfig: Sendable, Equatable {
     public var worktreePathTemplate: String
     public var presets: [SessionPreset]
@@ -84,7 +86,7 @@ public struct VitermConfig: Sendable, Equatable {
         self.discoveryRoots = discoveryRoots
     }
 
-    /// 現在の worktree パステンプレート設定を表す `WorktreePathTemplate`。
+    /// The `WorktreePathTemplate` representing the current worktree path template setting.
     public var pathTemplate: WorktreePathTemplate {
         WorktreePathTemplate(worktreePathTemplate)
     }
@@ -98,8 +100,8 @@ public struct VitermConfig: Sendable, Equatable {
     public static let `default` = VitermConfig(
         worktreePathTemplate: "~/worktrees/{project}/{branch}",
         presets: defaultPresets,
-        // 既定はシェル。エージェント(claude 等)はシェル内でユーザーが起動する想定。
-        // 常に claude を開きたい場合は設定(⌘,)で defaultPreset を変更する。
+        // The default is a shell; agents (claude, etc.) are expected to be launched by the
+        // user inside the shell. To always open claude, change defaultPreset in Settings (⌘,).
         defaultPreset: "shell",
         repositories: [],
         copySessionDataByDefault: false,
@@ -108,13 +110,15 @@ public struct VitermConfig: Sendable, Equatable {
         discoveryRoots: []
     )
 
-    /// グローバル設定・プロジェクト設定(両方 optional)を、既定値をベースにマージする。
-    /// スカラー値はプロジェクト側が優先(nil ならグローバル、それも nil なら既定値)。
-    /// リスト値(`presets` / `repositories`)は名前をキーに merge し、
-    /// 同名エントリはプロジェクト側の内容で上書きする。組み込み既定プリセットは常にベースとして
-    /// 適用されるため、`presets` を1件でも指定すると既定プリセットが丸ごと消える、ということはない。
-    /// `discoveryRoots` はグローバル設定の値のみを使う(`.viterm.json` 側は無視する。複数リポジトリ
-    /// 横断でスキャンするルートという性質上、プロジェクト単位で持つ意味が薄いため)。
+    /// Merge global and project configs (both optional) on top of the defaults.
+    /// Scalars: project wins (falling back to global if nil, then to the default).
+    /// Lists (`presets` / `repositories`) are merged keyed by name, with same-named
+    /// entries overwritten by the project side. The built-in default presets are always
+    /// applied as the base, so specifying even one `presets` entry never wipes out the
+    /// defaults wholesale.
+    /// `discoveryRoots` uses only the global config's value (`.viterm.json` is ignored:
+    /// as roots scanned across multiple repositories, keeping them per-project makes
+    /// little sense).
     public static func merge(global: VitermConfigFile?, project: VitermConfigFile?) -> VitermConfig {
         let base = VitermConfig.default
 
@@ -166,11 +170,11 @@ public struct VitermConfig: Sendable, Equatable {
         )
     }
 
-    /// 既定値 → グローバル → プロジェクトの順に、キーごとに後勝ちで重ね合わせる。
-    /// 既定値は常にベースとして適用されるため、グローバル/プロジェクトが1件でも指定したからといって
-    /// 既定値が丸ごと消えることはない(同じキーのエントリだけが上書きされる)。
-    /// 既存キーは値を丸ごと上書き(フィールド単位のマージではない)、新規キーは末尾に追加する形で
-    /// 順序を保つ。
+    /// Layer defaults → global → project, last-wins per key.
+    /// The defaults are always applied as the base, so a single entry in global/project
+    /// never wipes them out wholesale (only the entry with the same key is overwritten).
+    /// An existing key has its value replaced entirely (not a per-field merge); new keys
+    /// are appended at the end, preserving order.
     private static func mergeKeyed<T, Key: Hashable>(
         base: [T],
         global: [T]?,

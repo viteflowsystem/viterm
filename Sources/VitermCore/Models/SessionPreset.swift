@@ -1,14 +1,14 @@
 import Foundation
 
-/// エージェントセッション起動時に使うコマンドプリセット(claude / codex / zsh 等)。
+/// Command preset used to launch an agent session (claude / codex / zsh, etc.).
 public struct SessionPreset: Codable, Sendable, Hashable, Identifiable {
-    /// プリセット名。設定内で一意。`VitermConfig.defaultPreset` などから参照される。
+    /// Preset name. Unique within the config. Referenced by `VitermConfig.defaultPreset` and others.
     public var name: String
-    /// 実行するコマンド(絶対パス、または `PATH` から解決される名前)。
+    /// The command to run (an absolute path, or a name resolved from `PATH`).
     public var command: String
-    /// コマンド引数。
+    /// Command arguments.
     public var arguments: [String]
-    /// 追加で設定する環境変数。
+    /// Additional environment variables to set.
     public var environment: [String: String]
 
     public init(name: String, command: String, arguments: [String] = [], environment: [String: String] = [:]) {
@@ -24,9 +24,10 @@ public struct SessionPreset: Codable, Sendable, Hashable, Identifiable {
         case name, command, arguments, environment
     }
 
-    /// `arguments` / `environment` を JSON 側で省略できるようにするためのカスタム実装。
-    /// 素の `Codable` 自動合成は非 Optional プロパティに `decodeIfPresent` を使わないため、
-    /// 初期化子の既定値([]/[:])はデコード時には効かない(キーが無いと `keyNotFound` になる)。
+    /// Custom implementation so `arguments` / `environment` can be omitted in the JSON.
+    /// Plain `Codable` synthesis doesn't use `decodeIfPresent` for non-Optional
+    /// properties, so the initializer defaults ([]/[:]) don't apply during decoding
+    /// (a missing key would be `keyNotFound`).
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)

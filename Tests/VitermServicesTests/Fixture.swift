@@ -2,8 +2,9 @@ import Foundation
 import GitKit
 @testable import VitermServices
 
-/// テスト用の一時ディレクトリを作り、`body` 実行後に必ず削除する。
-/// 実 git を使う fixture リポジトリはすべてこの配下に作る。カレントの viterm リポジトリには一切触れない。
+/// Create a temporary directory for the test and always delete it after `body` runs.
+/// All fixture repositories using real git are created underneath it. The current viterm
+/// repository is never touched.
 func withTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent("viterm-VitermServicesTests-\(UUID().uuidString)", isDirectory: true)
@@ -15,7 +16,7 @@ func withTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> 
 enum Fixture {
     static let runner = GitRunner()
 
-    /// 指定ブランチ(既定 `main`)に初期コミットが1つある単純なリポジトリを作る。
+    /// Create a simple repository with one initial commit on the given branch (default `main`).
     @discardableResult
     static func makeRepository(at repoURL: URL, branch: String = "main", initialFile: String = "README.md") async throws -> String {
         try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)

@@ -1,9 +1,9 @@
 import Testing
 @testable import VitermCore
 
-/// フィクスチャは ccmanager(kbwo/ccmanager)の `src/services/stateDetector/claude.test.ts`
-/// (2026-07 時点の main ブランチ)の画面例を、viterm の `StateDetector`(ステートレス・直前状態なし)
-/// 向けに再構成したもの。
+/// Fixtures are the screen examples from ccmanager's (kbwo/ccmanager)
+/// `src/services/stateDetector/claude.test.ts` (main branch as of 2026-07), restructured
+/// for viterm's `StateDetector` (stateless, no previous state).
 @Suite("ClaudeStateDetector")
 struct ClaudeStateDetectorTests {
     let detector = ClaudeStateDetector()
@@ -32,7 +32,7 @@ struct ClaudeStateDetectorTests {
         #expect(signal == .busy)
     }
 
-    // MARK: - busy: スピナー活動ラベル(`…ing…`)
+    // MARK: - busy: spinner activity label (`…ing…`)
 
     @Test("スピナー+ing+三点リーダーでbusy(✽ Tempering…)")
     func spinnerActivityLabelIsBusy() {
@@ -74,7 +74,7 @@ struct ClaudeStateDetectorTests {
         #expect(signal == .none)
     }
 
-    // MARK: - busy: トークン統計行
+    // MARK: - busy: token stats line
 
     @Test("トークン統計行(分+秒)でbusy")
     func tokenStatsLineWithMinutesIsBusy() {
@@ -84,12 +84,12 @@ struct ClaudeStateDetectorTests {
 
     @Test("トークン統計行(秒のみ)でもbusy")
     func tokenStatsLineWithSecondsOnlyIsBusy() {
-        // ccmanager fixture: "(50s · ↓ 794 tokens)" — 時間表記の形式に依存しないことの検証。
+        // ccmanager fixture: "(50s · ↓ 794 tokens)" — verifies no dependence on the time notation format.
         let signal = detector.detect(screenLines: ["(50s · ↓ 794 tokens)"])
         #expect(signal == .busy)
     }
 
-    // MARK: - waitingInput: 確認プロンプト(選択肢を伴う)
+    // MARK: - waitingInput: confirmation prompt (with options)
 
     @Test("Do you want + 番号付き選択肢でwaitingInput")
     func doYouWantWithNumberedOptionsIsWaitingInput() {
@@ -157,12 +157,12 @@ struct ClaudeStateDetectorTests {
 
     @Test("Do you want / Would you like だけで選択肢が無ければwaitingInputにならない")
     func doYouWantWithoutOptionsIsNotWaitingInput() {
-        // ccmanager Issue #227 の教訓: 文言だけで即断すると通常の応答文中の言い回しを誤検知しうる。
+        // Lesson from ccmanager Issue #227: judging by wording alone can false-match phrasing inside a normal response.
         let signal = detector.detect(screenLines: ["Would you like to continue?"])
         #expect(signal == .none)
     }
 
-    // MARK: - 検索プロンプト(⌕ Search…)は最優先で idle 側(none)
+    // MARK: - The search prompt (⌕ Search…) takes top priority and returns the idle side (none)
 
     @Test("検索プロンプトはスピナー活動ラベルより優先してnone")
     func searchPromptTakesPriorityOverSpinnerActivity() {
@@ -182,7 +182,7 @@ struct ClaudeStateDetectorTests {
         #expect(signal == .none)
     }
 
-    // MARK: - ctrl+r to toggle(状態を変化させない → none で近似)
+    // MARK: - ctrl+r to toggle (doesn't change state → approximated as none)
 
     @Test("ctrl+r to toggle はnone(状態を変化させない近似)")
     func ctrlRToToggleIsNone() {

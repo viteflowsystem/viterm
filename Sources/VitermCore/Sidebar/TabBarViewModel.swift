@@ -1,21 +1,22 @@
 import Foundation
 
-/// 選択中 worktree のタブバー(= 配下セッションの並び)を表す UI 非依存な状態。
+/// UI-independent state of the selected worktree's tab bar (= the ordering of its sessions).
 ///
-/// タブ = セッション 1:1。`SidebarViewModel` が worktree 横断の選択を扱うのに対し、
-/// `TabBarViewModel` は単一 worktree 内のタブ局所な ⌘1..9 採番・アクティブタブの選択/循環を担う。
+/// Tab = session, 1:1. Where `SidebarViewModel` handles cross-worktree selection,
+/// `TabBarViewModel` handles the tab-local concerns within a single worktree: ⌘1..9
+/// numbering and active-tab selection/cycling.
 ///
-/// 純粋な値型であり、内部で監視や差分更新は行わない。呼び出し側は worktree の切り替えや
-/// セッション構成の変化のたびに `init` を呼び直して(直前の `activeTabID` を引き継いで)
-/// 再構築する想定。
+/// A pure value type; it does no observation or incremental updates internally. Callers
+/// are expected to re-call `init` (carrying over the previous `activeTabID`) whenever the
+/// worktree switches or the session composition changes.
 public struct TabBarViewModel: Sendable, Equatable {
     public private(set) var tabs: [SessionNode]
     public private(set) var activeTabID: AgentSession.ID?
 
     /// - Parameters:
-    ///   - sessions: 選択中 worktree に属するセッション。この配列の順序がそのままタブの並び順になる。
-    ///   - activeTabID: 初期のアクティブタブ。`sessions` に存在しない ID を渡しても構わない
-    ///     (`activeTab` は `nil` を返す)。
+    ///   - sessions: Sessions belonging to the selected worktree. The order of this array is the tab order.
+    ///   - activeTabID: The initial active tab. Passing an ID not in `sessions` is fine
+    ///     (`activeTab` returns `nil`).
     public init(sessions: [AgentSession], activeTabID: AgentSession.ID? = nil) {
         self.tabs = Self.assignShortcuts(sessions: sessions)
         self.activeTabID = activeTabID
@@ -27,20 +28,20 @@ public struct TabBarViewModel: Sendable, Equatable {
         }
     }
 
-    /// 現在アクティブなタブ。`activeTabID` がタブ列に存在しなければ `nil`。
+    /// The currently active tab. `nil` if `activeTabID` is not in the tab list.
     public var activeTab: SessionNode? {
         guard let activeTabID else { return nil }
         return tabs.first { $0.id == activeTabID }
     }
 
-    // MARK: - 選択管理
+    // MARK: - Selection management
 
-    /// タブを直接選択する。`nil` を渡すと選択解除。
+    /// Select a tab directly. Passing `nil` clears the selection.
     public mutating func selectTab(_ id: AgentSession.ID?) {
         activeTabID = id
     }
 
-    /// ⌘1..9 に対応するタブ(worktree 内 index+1)を選択する。該当が無ければ何もせず `false` を返す。
+    /// Select the tab corresponding to ⌘1..9 (index+1 within the worktree). If there is none, does nothing and returns `false`.
     @discardableResult
     public mutating func selectShortcut(_ number: Int) -> Bool {
         guard let tab = tabs.first(where: { $0.shortcutNumber == number }) else {
@@ -50,8 +51,8 @@ public struct TabBarViewModel: Sendable, Equatable {
         return true
     }
 
-    /// 次のタブを選択する(末尾からは先頭へ循環)。
-    /// 現在の選択がタブ列に無い場合は先頭のタブを選ぶ。タブが1件も無ければ何もしない。
+    /// Select the next tab (wrapping from last to first).
+    /// If the current selection is not in the tab list, selects the first tab. Does nothing if there are no tabs.
     public mutating func selectNext() {
         guard !tabs.isEmpty else { return }
         guard let currentID = activeTabID, let index = tabs.firstIndex(where: { $0.id == currentID }) else {
@@ -61,8 +62,8 @@ public struct TabBarViewModel: Sendable, Equatable {
         activeTabID = tabs[(index + 1) % tabs.count].id
     }
 
-    /// 前のタブを選択する(先頭からは末尾へ循環)。
-    /// 現在の選択がタブ列に無い場合は末尾のタブを選ぶ。タブが1件も無ければ何もしない。
+    /// Select the previous tab (wrapping from first to last).
+    /// If the current selection is not in the tab list, selects the last tab. Does nothing if there are no tabs.
     public mutating func selectPrevious() {
         guard !tabs.isEmpty else { return }
         guard let currentID = activeTabID, let index = tabs.firstIndex(where: { $0.id == currentID }) else {

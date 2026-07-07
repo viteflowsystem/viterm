@@ -2,17 +2,17 @@ import Foundation
 import GitKit
 import VitermCore
 
-/// 新規 worktree 作成のリクエスト。
+/// Request to create a new worktree.
 public struct WorktreeCreationRequest: Sendable {
     public var repository: VitermCore.Repository
-    /// 新規ブランチ / 既存ローカルブランチ / リモートブランチの3パターン(GitKit.WorktreeSource)。
+    /// One of three patterns: new branch / existing local branch / remote branch (GitKit.WorktreeSource).
     public var source: WorktreeSource
     public var pathTemplate: WorktreePathTemplate
-    /// Claude セッションデータ(`~/.claude/projects/…`)をコピーするかどうか。
+    /// Whether to copy Claude session data (`~/.claude/projects/…`).
     public var copySessionData: Bool
-    /// コピー元のプロジェクトパス。省略時は `repository.path`(リポジトリルート)を使う。
+    /// Source project path for the copy. Defaults to `repository.path` (the repository root).
     public var copySessionDataFrom: String?
-    /// 作成後に実行する post-creation hook のシェルコマンド。nil/空文字なら実行しない。
+    /// Shell command for the post-creation hook to run after creation. Not run if nil/empty.
     public var postCreationHookCommand: String?
 
     public init(
@@ -32,14 +32,15 @@ public struct WorktreeCreationRequest: Sendable {
     }
 }
 
-/// `createWorktree` の結果。
+/// Result of `createWorktree`.
 public struct WorktreeCreationResult: Sendable {
     public var worktreePath: String
     public var branch: String
-    /// worktree 作成自体は成功したが非致命的に失敗した処理(セッションデータコピー等)の警告。
+    /// Warnings for operations that failed non-fatally (session data copy, etc.) even though the worktree creation itself succeeded.
     public var warnings: [String]
-    /// post-creation hook を起動した場合の Task。呼び出し側は待つ必要はない(非同期・非ブロッキング実行)が、
-    /// テストでは `await hookTask?.value` で完了を待てる。
+    /// The Task for the post-creation hook, if one was launched. Callers don't need to
+    /// await it (async, non-blocking execution), but tests can wait for completion via
+    /// `await hookTask?.value`.
     public var hookTask: Task<Void, Never>?
 
     public init(worktreePath: String, branch: String, warnings: [String] = [], hookTask: Task<Void, Never>? = nil) {
@@ -51,8 +52,8 @@ public struct WorktreeCreationResult: Sendable {
 }
 
 extension WorktreeSource {
-    /// 作成される worktree でチェックアウトされることになるローカルブランチ名(生の形、`/` を含みうる)。
-    /// パステンプレートの `{branch}` / `{branch_raw}` 展開に使う。
+    /// The local branch name that will be checked out in the created worktree (raw form,
+    /// may contain `/`). Used for the path template's `{branch}` / `{branch_raw}` expansion.
     public var localBranchName: String {
         switch self {
         case let .newBranch(name, _):
@@ -65,17 +66,17 @@ extension WorktreeSource {
     }
 }
 
-/// worktree 作成のオーケストレーション: パステンプレート展開 → `GitService.addWorktree` →
-/// Claude セッションデータコピー(オプション・非致命的) → post-creation hook 実行(オプション・非同期)。
+/// Orchestrates worktree creation: path template expansion → `GitService.addWorktree` →
+/// Claude session data copy (optional, non-fatal) → post-creation hook run (optional, async).
 public struct WorktreeProvisioner: Sendable {
     public var gitService: GitService
-    /// `~` 展開に使うホームディレクトリ。テスト用に注入可能。
+    /// Home directory used for `~` expansion. Injectable for tests.
     public var homeDirectory: String
-    /// Claude セッションデータのルート(既定 `<home>/.claude/projects`)。テスト用に注入可能。
+    /// Root of Claude session data (default `<home>/.claude/projects`). Injectable for tests.
     public var claudeProjectsDirectory: String
     public var fileExists: @Sendable (URL) -> Bool
     public var fileCopier: @Sendable (_ source: URL, _ destination: URL) throws -> Void
-    /// post-creation hook の実行本体。テストでは実プロセスを起動しない差し替えが可能。
+    /// The actual post-creation hook runner. Tests can swap in one that launches no real process.
     public var hookRunner: @Sendable (_ command: String, _ environment: [String: String]) async -> Void
 
     public init(
@@ -134,9 +135,9 @@ public struct WorktreeProvisioner: Sendable {
         return WorktreeCreationResult(worktreePath: expandedPath, branch: branch, warnings: warnings, hookTask: hookTask)
     }
 
-    /// `~/.claude/projects/<エンコード済みパス>` を新しい worktree 用にコピーする。
-    /// コピー元が存在しない(その projectパスでの Claude Code 利用履歴がまだ無い)場合は何もしない
-    /// (これは失敗ではなく普通にありうるケースのため、警告にはしない)。
+    /// Copy `~/.claude/projects/<encoded path>` for the new worktree.
+    /// Does nothing if the source doesn't exist (no Claude Code usage history for that
+    /// project path yet) — that's a perfectly normal case, not a failure, so no warning.
     private func copyClaudeSessionData(from sourcePath: String, to destinationPath: String) throws {
         let root = URL(fileURLWithPath: claudeProjectsDirectory)
         let source = root.appendingPathComponent(Self.encodeProjectPath(sourcePath))
@@ -145,8 +146,8 @@ public struct WorktreeProvisioner: Sendable {
         try fileCopier(source, destination)
     }
 
-    /// Claude Code のプロジェクトディレクトリ命名規則: 絶対パスの `/` を `-` に置き換える。
-    /// 例: `/Users/foo/repo` → `-Users-foo-repo`
+    /// Claude Code's project directory naming rule: replace `/` in the absolute path with `-`.
+    /// Example: `/Users/foo/repo` → `-Users-foo-repo`
     static func encodeProjectPath(_ path: String) -> String {
         path.replacingOccurrences(of: "/", with: "-")
     }
@@ -163,8 +164,9 @@ public struct WorktreeProvisioner: Sendable {
         try FileManager.default.copyItem(at: source, to: destination)
     }
 
-    /// `/bin/sh -c <command>` で hook を起動し、指定 env を追加する。ゾンビプロセス化を避けるため
-    /// 終了は監視するが、呼び出し側(`createWorktree`)はこの Task 自体を待たないため実行は非ブロッキング。
+    /// Launch the hook via `/bin/sh -c <command>` with the given env added. Exit is
+    /// monitored to avoid zombie processes, but the caller (`createWorktree`) never awaits
+    /// this Task, so execution is non-blocking.
     public static let defaultHookRunner: @Sendable (String, [String: String]) async -> Void = { command, environment in
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")

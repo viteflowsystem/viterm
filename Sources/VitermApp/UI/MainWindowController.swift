@@ -5,8 +5,9 @@ import UserNotifications
 import VitermCore
 import VitermServices
 
-/// メインウィンドウ: サイドバー + ターミナルホスト + ステータスバーの統合(T7b/T8/T9)。
-/// AppModel(状態)と SessionManager(サーフェス実体)を束ね、キーボードショートカットを配線する。
+/// Main window: integration of sidebar + terminal host + status bar (T7b/T8/T9).
+/// Ties AppModel (state) and SessionManager (surface instances) together and wires up
+/// the keyboard shortcuts.
 @MainActor
 final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     let appModel: AppModel
@@ -15,7 +16,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     private let sidebar = SidebarViewController()
     private let tabBar = TabBarView()
     private let splitHost = SplitHostView()
-    /// ペインが1つも無いときに表示するプレースホルダ。
+    /// Placeholder shown when there are no panes.
     private let placeholderView: NSView = {
         let view = NSView()
         view.wantsLayer = true
@@ -33,7 +34,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     private let statusBar = StatusBarView()
     private let splitView = NSSplitView()
     private let stateMonitor = SessionStateMonitor()
-    /// .app バンドル外(swift run)では UNUserNotificationCenter が使えないため起動時に判定。
+    /// UNUserNotificationCenter is unavailable outside an .app bundle (swift run), so detect at launch.
     private let notificationsAvailable = Bundle.main.bundleIdentifier != nil
 
     init(appModel: AppModel, sessionManager: SessionManager) {
@@ -47,7 +48,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             defer: false
         )
         window.title = "viterm"
-        // UIモック準拠: タイトルバーはコンテンツと一体の暗色(独立した明るい帯にしない)。
+        // Per the UI mock: the title bar is dark and merges with the content (not a separate light strip).
         window.titlebarAppearsTransparent = true
         window.backgroundColor = .textBackgroundColor
         window.center()
@@ -76,7 +77,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         stateMonitor.onStateChange = { [weak self] sessionID, newState in
             self?.handleStateChange(sessionID: sessionID, newState: newState)
         }
-        // サイドバーの git 情報(ahead/behind・diffstat・dirty)を30秒周期で自動更新。
+        // Auto-refresh the sidebar's git info (ahead/behind, diffstat, dirty) every 30 seconds.
         appModel.onRefreshCompleted = { [weak self] in
             guard let self else { return }
             self.sessionManager.worktreeBranches = Dictionary(
@@ -90,16 +91,17 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    // MARK: - 状態検出・通知(T13b/T14)
+    // MARK: - State detection / notifications (T13b/T14)
 
-    /// 起動済みセッションを状態監視に登録する。
+    /// Register a launched session with the state monitor.
     private func watchSession(_ session: AgentSession) {
         guard let surfaceView = sessionManager.surface(for: session.id) else { return }
         stateMonitor.watch(sessionID: session.id, surfaceView: surfaceView, toolName: session.presetName)
 
-        // OSC 9/777 のデスクトップ通知と BEL を一次シグナルとして扱う(cmux 方式)。
-        // エージェント自身が「注意が必要」と宣言したタイミングなので、テキストパターン検出を
-        // 待たず即座に waitingInput へ遷移させ、通知はエージェントのメッセージをそのまま使う。
+        // Treat OSC 9/777 desktop notifications and BEL as primary signals (cmux style).
+        // This is the moment the agent itself declared "attention needed", so transition to
+        // waitingInput immediately without waiting for text pattern detection, and use the
+        // agent's message verbatim for the notification.
         let sessionID = session.id
         surfaceView.onDesktopNotification = { [weak self] title, body in
             guard let self else { return }
@@ -117,25 +119,25 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             self.render()
             NSApp.requestUserAttention(.informationalRequest)
         }
-        // shell integration 有効時のみ発火(OSC 133)。コマンド終了=プロンプトに戻った=idle。
+        // Only fires with shell integration enabled (OSC 133). Command finished = back at the prompt = idle.
         surfaceView.onCommandFinished = { [weak self] _, _ in
             guard let self else { return }
             self.appModel.sessionStateChanged(sessionID: sessionID, newState: .idle)
             self.render()
         }
-        // OSC 9;4 の進捗報告。進捗中は busy、REMOVE(完了)はテキスト検出に委ねる。
+        // OSC 9;4 progress reports. In progress = busy; REMOVE (done) is left to text detection.
         surfaceView.onProgressReport = { [weak self] state, _ in
             guard let self, state != GHOSTTY_PROGRESS_STATE_REMOVE else { return }
             self.appModel.sessionStateChanged(sessionID: sessionID, newState: .busy)
             self.render()
         }
-        // 子プロセスが exit したらセッションも消す(確認なし。ユーザーが exit したのだから)。
+        // When the child process exits, remove the session too (no confirmation — the user exited).
         surfaceView.onSurfaceClose = { [weak self] in
             self?.cleanUpSession(sessionID)
         }
     }
 
-    /// セッションの後始末: 監視解除 → ペインから外す → サーフェス破棄 → 一覧から削除。
+    /// Session cleanup: unwatch → detach from the pane → destroy the surface → remove from the list.
     private func cleanUpSession(_ sessionID: AgentSession.ID) {
         stateMonitor.unwatch(sessionID: sessionID)
         if let surface = sessionManager.surface(for: sessionID) {
@@ -169,7 +171,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         appModel.sessionStateChanged(sessionID: sessionID, newState: newState)
         render()
 
-        // 入力待ちに遷移した非選択セッションのみ通知(cmux 方式)。
+        // Notify only for non-selected sessions that transitioned to waiting-input (cmux style).
         guard newState == .waitingInput,
               appModel.sidebar.selectedSessionID != sessionID,
               let session = appModel.sessions.first(where: { $0.id == sessionID }) else { return }
@@ -197,7 +199,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
         let sidebarView = sidebar.view
 
-        // term 側: タブバー(上)+ splitHost(下)を縦に並べる。
+        // Terminal side: stack the tab bar (top) and splitHost (bottom) vertically.
         let termContainer = NSView()
         tabBar.translatesAutoresizingMaskIntoConstraints = false
         splitHost.translatesAutoresizingMaskIntoConstraints = false
@@ -215,9 +217,10 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
         splitView.addArrangedSubview(sidebarView)
         splitView.addArrangedSubview(termContainer)
-        // サイドバー側の幅を優先的に保持しつつ、ディバイダのドラッグで調整可能にする。
-        // 最小/最大幅は delegate(constrainMin/MaxCoordinate)で管理する
-        // (arranged subview への外部幅制約は required 扱いになりドラッグを固めてしまう)。
+        // Preferentially preserve the sidebar's width while keeping the divider draggable.
+        // Min/max widths are managed by the delegate (constrainMin/MaxCoordinate)
+        // (an external width constraint on an arranged subview is treated as required and
+        // freezes dragging).
         splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
         splitView.delegate = self
         splitView.autosaveName = "viterm.sidebar"
@@ -229,7 +232,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
         tabBar.onAddTab = { [weak self] in self?.newSession(nil) }
 
-        // ペインのフォーカス移動をサイドバー選択に同期する(将来のペイン分割解禁に備えて維持)。
+        // Sync pane focus movement to the sidebar selection (kept for when pane splitting is re-enabled).
         splitHost.onActivePaneChanged = { [weak self] contentView in
             guard let self, let contentView,
                   let sessionID = self.sessionManager.sessionID(for: contentView),
@@ -258,11 +261,12 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    // MARK: - 状態同期
+    // MARK: - State sync
 
-    /// AppModel の現在状態を UI に反映する。状態変化のたびに呼ぶ。
-    /// worktree 選択 → タブバー更新 → 選択セッションのサーフェスを showRoot、の順で反映する
-    /// (ペイン分割は当面封印しているため、常に単一ペイン表示として扱ってよい)。
+    /// Reflect AppModel's current state into the UI. Called on every state change.
+    /// Applies in order: worktree selection → tab bar update → showRoot on the selected
+    /// session's surface (pane splitting is sealed off for now, so treating everything as
+    /// a single-pane display is fine).
     func render() {
         sidebar.set(viewModel: appModel.sidebar)
         statusBar.update(sidebar: appModel.sidebar)
@@ -279,10 +283,10 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         } else if splitHost.hostedViews != [placeholderView] {
             splitHost.showRoot(placeholderView)
         }
-        // 表示中セッションは高頻度、非表示は間引きで状態監視(P1)。
+        // Monitor the visible session at high frequency, hidden ones throttled (P1).
         stateMonitor.setVisibleSession(selectedID)
 
-        // タイトルに現在のコンテキストを反映(モック: "viterm — feat/sidebar · claude #1")。
+        // Reflect the current context in the title (mock: "viterm — feat/sidebar · claude #1").
         if let selected = appModel.sidebar.selectedSession {
             let branch = appModel.worktrees.first { $0.path == selected.session.worktreePath }?.branch
             let parts = [branch, selected.session.displayName].compactMap { $0 }
@@ -301,11 +305,11 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             )
             render()
             await restoreSessionsIfNeeded()
-            // デバッグ再現用: VITERM_AUTOSTART_SESSION=1 で起動直後にセッションを開く。
+            // For debug reproduction: VITERM_AUTOSTART_SESSION=1 opens a session right after launch.
             if ProcessInfo.processInfo.environment["VITERM_AUTOSTART_SESSION"] != nil {
                 newSession(nil)
             }
-            // デバッグ再現用: VITERM_OPEN_SETTINGS=1 で起動直後に設定ウィンドウを開き、状態をログする。
+            // For debug reproduction: VITERM_OPEN_SETTINGS=1 opens the settings window right after launch and logs its state.
             if ProcessInfo.processInfo.environment["VITERM_OPEN_SETTINGS"] != nil {
                 showSettings(nil)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
@@ -323,15 +327,15 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         render()
     }
 
-    /// worktree 行の選択。記憶があれば最終アクティブタブに復帰し、無ければ先頭タブを選ぶ
-    /// (`SidebarViewModel.selectWorktree` に委譲。起動はしない。タブが無ければ ＋ ボタン /
-    /// ⌘T から明示的に追加する)。
+    /// Selecting a worktree row. Restores the last active tab if remembered, else picks the
+    /// first tab (delegated to `SidebarViewModel.selectWorktree`; nothing is launched — with
+    /// no tabs, add one explicitly via the ＋ button / ⌘T).
     private func selectWorktree(_ worktreePath: String) {
         appModel.selectWorktree(worktreePath)
         render()
     }
 
-    /// ツリーの「＋ セッションを追加」行 / ⌘T から、指定 worktree に既定プリセットを起動する。
+    /// Launch the default preset in the given worktree, from the tree's "＋ add session" row / ⌘T.
     func startDefaultSession(in worktreePath: String) {
         Task { @MainActor in
             do {
@@ -349,14 +353,15 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    // MARK: - セッション構成の永続化・復元
+    // MARK: - Session layout persistence / restore
 
     private let restoreStore = SessionRestoreStore()
     private var didRestoreSessions = false
 
     func persistSessions() {
-        // デバッグ起動(スモークテスト等)はユーザーの実セッション構成を上書きしない。
-        // 過去に、テスト起動が復元途中の縮んだ一覧を保存してしまい実データを失う事故があった。
+        // Debug launches (smoke tests, etc.) must not overwrite the user's real session
+        // layout. There was an incident where a test launch saved the shrunken list from a
+        // half-finished restore and lost real data.
         guard ProcessInfo.processInfo.environment["VITERM_AUTOSTART_SESSION"] == nil else { return }
         restoreStore.save(
             sessions: appModel.sessions,
@@ -366,16 +371,16 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         )
     }
 
-    /// 起動後の初回 refresh 完了時に、前回のセッション構成(選択中 worktree・worktree ごとの
-    /// 最終アクティブセッションを含む)を復元する。
+    /// After the first refresh at launch completes, restore the previous session layout
+    /// (including the selected worktree and each worktree's last active session).
     private func restoreSessionsIfNeeded() async {
         guard !didRestoreSessions else { return }
         didRestoreSessions = true
         guard let state = restoreStore.load(), !state.sessions.isEmpty else { return }
 
         let knownWorktrees = Set(appModel.worktrees.map(\.path))
-        // 復元に失敗したエントリがあると `state.sessions` 上のインデックスと実際に復元された
-        // セッションの対応がズレるため、元のインデックスをキーに保持しておく。
+        // If some entries fail to restore, the indices in `state.sessions` drift out of
+        // step with the actually restored sessions, so keep them keyed by original index.
         var restoredByOriginalIndex: [Int: AgentSession] = [:]
         for (index, persisted) in state.sessions.enumerated() where knownWorktrees.contains(persisted.worktreePath) {
             if let session = try? await appModel.startSession(
@@ -387,9 +392,10 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             }
         }
 
-        // worktree ごとの最終アクティブセッションを先に復元しておく(select(sessionID:) が
-        // セッション自身の worktree を自動的に記憶するため、キーの worktreePath 自体は不要)。
-        // 後続の selectWorktree / selectSession が「記憶があれば復元」を正しく解決できるようにする。
+        // Restore each worktree's last active session first (select(sessionID:)
+        // automatically remembers the session's own worktree, so the key's worktreePath
+        // itself is unnecessary). This lets the subsequent selectWorktree / selectSession
+        // resolve "restore if remembered" correctly.
         for index in (state.activeSessionIndexByWorktree ?? [:]).values {
             guard let session = restoredByOriginalIndex[index] else { continue }
             appModel.selectSession(session.id)
@@ -398,15 +404,15 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         if let worktreePath = state.selectedWorktreePath, knownWorktrees.contains(worktreePath) {
             appModel.selectWorktree(worktreePath)
         } else if let selectedIndex = state.selectedIndex, let session = restoredByOriginalIndex[selectedIndex] {
-            // 旧フォーマット(selectedWorktreePath が無い)からの後方互換。
+            // Backward compatibility with the old format (no selectedWorktreePath).
             appModel.selectSession(session.id)
         }
         render()
     }
 
-    // MARK: - アクション(メニュー/ショートカットから)
+    // MARK: - Actions (from menus / shortcuts)
 
-    /// 現在選択中の worktree(なければ最初の worktree)にセッションを追加する。⌘T
+    /// Add a session to the currently selected worktree (or the first worktree if none). ⌘T
     @objc func newSession(_ sender: Any?) {
         let worktreePath = appModel.sidebar.selectedWorktreePath ?? appModel.worktrees.first?.path
         guard let worktreePath else {
@@ -416,7 +422,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         startDefaultSession(in: worktreePath)
     }
 
-    /// ⌘1..9 選択中 worktree 内のタブ切替(sender.tag に番号。番号採番はタブ局所)。
+    /// ⌘1..9 tab switching within the selected worktree (number in sender.tag; numbering is tab-local).
     @objc func selectShortcutTab(_ sender: Any?) {
         guard let item = sender as? NSMenuItem, let worktree = appModel.sidebar.selectedWorktree else {
             NSSound.beep()
@@ -434,7 +440,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    /// ⌘⇧U 最新の waiting セッションへ。
+    /// ⌘⇧U jump to the most recent waiting session.
     @objc func jumpToWaiting(_ sender: Any?) {
         if appModel.jumpToLatestWaitingSession() {
             render()
@@ -443,19 +449,19 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    /// ⌘⌥↑ 前の worktree へ(リポジトリ横断・循環)。
+    /// ⌘⌥↑ to the previous worktree (across repositories, wrapping).
     @objc func selectPreviousWorktree(_ sender: Any?) {
         appModel.selectPreviousWorktree()
         render()
     }
 
-    /// ⌘⌥↓ 次の worktree へ(リポジトリ横断・循環)。
+    /// ⌘⌥↓ to the next worktree (across repositories, wrapping).
     @objc func selectNextWorktree(_ sender: Any?) {
         appModel.selectNextWorktree()
         render()
     }
 
-    /// ⌘W アクティブタブ(セッション)を閉じる。タブが無ければウィンドウを閉じる(標準動作)。
+    /// ⌘W close the active tab (session). With no tabs, close the window (standard behavior).
     @objc func closeTab(_ sender: Any?) {
         guard let sessionID = appModel.sidebar.selectedSessionID else {
             window?.performClose(sender)
@@ -464,14 +470,14 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         terminateSession(sessionID)
     }
 
-    /// ⌘B サイドバー表示切替。
+    /// ⌘B toggle the sidebar.
     @objc func toggleSidebar2(_ sender: Any?) {
         sidebar.view.isHidden.toggle()
     }
 
-    // MARK: - ペイン分割(T16)
+    // MARK: - Pane splitting (T16)
 
-    /// ⌘D 右に分割 / ⌘⇧D 下に分割。現在の worktree に新規セッションを起動して新ペインに配置する。
+    /// ⌘D split right / ⌘⇧D split down. Launches a new session in the current worktree and places it in the new pane.
     @objc func splitPaneRight(_ sender: Any?) { splitPane(vertically: true) }
     @objc func splitPaneDown(_ sender: Any?) { splitPane(vertically: false) }
 
@@ -503,7 +509,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    /// ⌘⇧W ペインを閉じる(セッションはバックグラウンドで生存し、サイドバーから戻れる)。
+    /// ⌘⇧W close the pane (the session stays alive in the background, reachable from the sidebar).
     @objc func closePane(_ sender: Any?) {
         guard splitHost.closeActivePane() != nil else {
             NSSound.beep()
@@ -512,12 +518,12 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         render()
     }
 
-    /// ⌘] 次のペインへフォーカス移動。
+    /// ⌘] move focus to the next pane.
     @objc func focusNextPane(_ sender: Any?) {
         splitHost.focusNextPane()
     }
 
-    /// ⌘K コマンドパレット(T12b)。
+    /// ⌘K command palette (T12b).
     @objc func showPalette(_ sender: Any?) {
         guard let window else { return }
         let commands = PaletteCommandProvider.commands(
@@ -536,7 +542,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         case .createWorktree:
             newWorktree(nil)
         case let .switchToWorktree(worktreeID):
-            // その worktree の先頭セッションを選択(無ければセッション起動を促す)。
+            // Select the worktree's first session (or prompt to launch one if there is none).
             if let session = appModel.sessions.first(where: { $0.worktreePath == worktreeID }) {
                 appModel.selectSession(session.id)
                 render()
@@ -568,11 +574,12 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
     private var settingsWindowController: SettingsWindowController?
 
-    /// ⌘, 設定ウィンドウ(独立ウィンドウ、カテゴリはツールバーで切替)。変更は即時保存・即時反映。
+    /// ⌘, settings window (standalone window, categories switched via the toolbar).
+    /// Changes save and apply immediately.
     ///
-    /// ウィンドウの生成・表示は必ず「素の」main runloop ターンで行う。Swift Task の中で
-    /// AppKit のウィンドウ/レイアウトを構築すると、@MainActor メソッドの executor チェックが
-    /// Task の executor 参照を読んで EXC_BAD_ACCESS するケースがあるため(実測)。
+    /// Window creation/display must happen on a "plain" main runloop turn. Building AppKit
+    /// windows/layout inside a Swift Task can crash with EXC_BAD_ACCESS when the @MainActor
+    /// method's executor check reads the Task's executor reference (observed).
     @objc func showSettings(_ sender: Any?) {
         DispatchQueue.main.async { [self] in
             if settingsWindowController == nil {
@@ -586,7 +593,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    /// リポジトリ追加(ディレクトリ選択、T15)。
+    /// Add a repository (directory picker, T15).
     @objc func addRepository(_ sender: Any?) {
         guard let window else { return }
         let panel = NSOpenPanel()
@@ -607,7 +614,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    /// 現在の文脈のリポジトリ(選択中 worktree → 先頭リポジトリの順で解決)。
+    /// The repository of the current context (resolved from the selected worktree, then the first repository).
     private var currentRepository: Repository? {
         if let worktreePath = appModel.sidebar.selectedWorktreePath,
            let worktree = appModel.worktrees.first(where: { $0.path == worktreePath }) {
@@ -616,7 +623,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         return appModel.repositories.first
     }
 
-    /// ⌘N worktree 新規作成シート(T10)。現在の文脈のリポジトリが対象。
+    /// ⌘N new-worktree sheet (T10). Targets the repository of the current context.
     @objc func newWorktree(_ sender: Any?) {
         guard let repository = currentRepository else {
             NSSound.beep()
@@ -625,7 +632,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         newWorktree(in: repository)
     }
 
-    /// 指定リポジトリを対象に worktree 作成シートを開く(サイドバーの「＋」/右クリック用)。
+    /// Open the worktree creation sheet for the given repository (for the sidebar's "＋" / right-click).
     func newWorktree(in repository: Repository) {
         guard let window else {
             NSSound.beep()
@@ -658,7 +665,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         Task { @MainActor in
             do {
                 let result = try await appModel.createWorktree(from: request)
-                // createWorktree 内でセッション起動まで済んでいるので、その最新セッションを選択・監視する。
+                // createWorktree already launched the session, so select and watch that latest session.
                 if let session = appModel.sessions.last(where: { $0.worktreePath == result.worktreePath }) {
                     watchSession(session)
                     appModel.selectSession(session.id)
@@ -670,7 +677,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    /// 選択中 worktree をデフォルトブランチへマージして後始末(T11)。
+    /// Merge the selected worktree into the default branch and clean up (T11).
     @objc func mergeCurrentWorktree(_ sender: Any?) {
         guard let selected = appModel.sidebar.selectedWorktreePath else {
             NSSound.beep()
@@ -726,7 +733,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    /// 選択中 worktree を削除(dirty なら確認、T11)。
+    /// Remove the selected worktree (confirm when dirty, T11).
     @objc func removeCurrentWorktree(_ sender: Any?) {
         guard let selected = appModel.sidebar.selectedWorktreePath else {
             NSSound.beep()
@@ -765,7 +772,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    // MARK: - セッション操作(コンテキストメニュー)
+    // MARK: - Session operations (context menu)
 
     private func renameSession(_ sessionID: AgentSession.ID, currentName: String) {
         guard let window else { return }
@@ -801,7 +808,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    // MARK: - NSSplitViewDelegate(サイドバー幅の制約)
+    // MARK: - NSSplitViewDelegate (sidebar width constraints)
 
     func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
         max(proposedMinimumPosition, 180)

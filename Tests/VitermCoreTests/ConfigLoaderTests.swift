@@ -4,7 +4,7 @@ import Testing
 
 @Suite("ConfigLoader")
 struct ConfigLoaderTests {
-    /// テストごとに独立した一時ディレクトリを用意する。
+    /// Provide an independent temporary directory per test.
     private func makeTempDirectory() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("viterm-config-tests-\(UUID().uuidString)", isDirectory: true)
@@ -122,7 +122,7 @@ struct ConfigLoaderTests {
         """.write(to: globalURL, atomically: true, encoding: .utf8)
 
         let config = try ConfigLoader.load(globalURL: globalURL, repositoryRoot: nil)
-        // 組み込み既定(claude/codex/shell)は残ったまま、gemini が末尾に追加される。
+        // The built-in defaults (claude/codex/shell) remain, with gemini appended at the end.
         #expect(config.presets.map(\.name) == ["claude", "codex", "shell", "gemini"])
         #expect(config.presets.first { $0.name == "gemini" } == SessionPreset(name: "gemini", command: "gemini"))
     }

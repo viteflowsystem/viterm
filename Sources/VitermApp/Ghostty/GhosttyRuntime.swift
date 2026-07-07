@@ -2,13 +2,13 @@ import AppKit
 import GhosttyKit
 import VitermCore
 
-/// libghostty のアプリ全体シングルトン(`ghostty_app_t`)を保持するランタイム。
+/// Runtime holding libghostty's app-wide singleton (`ghostty_app_t`).
 ///
-/// - 設定は `~/.config/ghostty/config` 等のデフォルトファイルから継承する(cmux 方式)。
-/// - libghostty からの wakeup コールバックは任意スレッドから呼ばれ得るため、
-///   main スレッドに戻して `ghostty_app_tick` を回す。
-/// - サーフェス系コールバックの `userdata` は surface config に設定した
-///   `GhosttySurfaceView` の unretained ポインタ(Ghostty.app 本体と同じ流儀)。
+/// - Config is inherited from the default files such as `~/.config/ghostty/config` (cmux style).
+/// - The wakeup callback from libghostty may be called from any thread, so hop back to
+///   the main thread to run `ghostty_app_tick`.
+/// - The `userdata` of surface callbacks is the unretained pointer to the
+///   `GhosttySurfaceView` set in the surface config (same convention as Ghostty.app itself).
 @MainActor
 final class GhosttyRuntime {
     static let shared = GhosttyRuntime()
@@ -20,22 +20,23 @@ final class GhosttyRuntime {
         return Unmanaged<GhosttySurfaceView>.fromOpaque(userdata).takeUnretainedValue()
     }
 
-    /// action_cb は(他のコールバックと異なり)userdata を直接渡してくれないため、
-    /// `ghostty_target_s` が指すサーフェスから `ghostty_surface_userdata` 経由で
-    /// 対応する `GhosttySurfaceView` を逆引きする(実装リファレンス: Ghostty.App.swift の
-    /// `surfaceView(from:)`)。
+    /// action_cb (unlike the other callbacks) doesn't hand us userdata directly, so
+    /// reverse-look up the corresponding `GhosttySurfaceView` from the surface that
+    /// `ghostty_target_s` points at, via `ghostty_surface_userdata` (implementation
+    /// reference: `surfaceView(from:)` in Ghostty.App.swift).
     private static func surfaceView(from target: ghostty_target_s) -> GhosttySurfaceView? {
         guard target.tag == GHOSTTY_TARGET_SURFACE, let surface = target.target.surface else { return nil }
         return view(from: ghostty_surface_userdata(surface))
     }
 
-    /// libghostty の `apprt.Action`(OSC 由来のデスクトップ通知・ベル・タイトル・pwd 等)を処理する。
-    /// 状態検出(SessionStateMonitor)のテキストパターン検出より優先される一次シグナルとして、
-    /// 対応する `GhosttySurfaceView` のコールバックへ中継するだけに徹する
-    /// (通知UI・状態遷移の判断はコールバックの呼び出し側の責務)。
+    /// Handles libghostty's `apprt.Action` (OSC-derived desktop notifications, bell,
+    /// title, pwd, etc.). As primary signals taking precedence over state detection's
+    /// (SessionStateMonitor's) text pattern detection, this strictly limits itself to
+    /// relaying to the corresponding `GhosttySurfaceView`'s callbacks (notification UI and
+    /// state-transition decisions are the callback consumer's responsibility).
     ///
-    /// ここで扱わないアクション(ウィンドウ/タブ/スプリット操作等、viterm は独自の
-    /// ウィンドウ管理を持つため libghostty 側の apprt アクションには乗らない)は false を返す。
+    /// Actions not handled here (window/tab/split operations, etc. — viterm has its own
+    /// window management and doesn't ride libghostty's apprt actions) return false.
     private static func handleAction(target: ghostty_target_s, action: ghostty_action_s) -> Bool {
         guard let view = surfaceView(from: target) else { return false }
 
@@ -62,16 +63,16 @@ final class GhosttyRuntime {
 
         case GHOSTTY_ACTION_COMMAND_FINISHED:
             let payload = action.action.command_finished
-            // exit_code は「-1 なら未報告、それ以外は 0-255」(ghostty.h のコメント)。
+            // exit_code is "-1 if unreported, otherwise 0-255" (per the comment in ghostty.h).
             let exitCode: Int32? = payload.exit_code >= 0 ? Int32(payload.exit_code) : nil
-            // duration はナノ秒単位。
+            // duration is in nanoseconds.
             let duration = TimeInterval(payload.duration) / 1_000_000_000
             view.onCommandFinished?(exitCode, duration)
             return true
 
         case GHOSTTY_ACTION_PROGRESS_REPORT:
             let payload = action.action.progress_report
-            // progress は「-1 なら未報告、それ以外は 0-100」(ghostty.h のコメント)。
+            // progress is "-1 if unreported, otherwise 0-100" (per the comment in ghostty.h).
             let progress: Int? = payload.progress >= 0 ? Int(payload.progress) : nil
             view.onProgressReport?(payload.state, progress)
             return true
@@ -133,13 +134,13 @@ final class GhosttyRuntime {
             return true
         }
         runtime.confirm_read_clipboard_cb = { userdata, text, state, _ in
-            // スパイクでは確認ダイアログを出さず常に許可する。
+            // In the spike, always allow without a confirmation dialog.
             guard let view = GhosttyRuntime.view(from: userdata),
                   let surface = view.surface, let text else { return }
             ghostty_surface_complete_clipboard_request(surface, text, state, true)
         }
         runtime.write_clipboard_cb = { _, _, content, count, _ in
-            // content は (mime, data) ペアの配列。text/plain を優先して書き込む。
+            // content is an array of (mime, data) pairs. Prefer writing text/plain.
             guard let content, count > 0 else { return }
             let entries = UnsafeBufferPointer(start: content, count: Int(count))
             let chosen = entries.first { entry in
@@ -149,9 +150,10 @@ final class GhosttyRuntime {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(String(cString: data), forType: .string)
         }
-        // 子プロセス終了(wait_after_command=false)等でサーフェスがクローズを要求したとき。
-        // 第2引数は「プロセスがまだ生きているか(確認が必要か)」だが、viterm では
-        // どちらもセッション終了として扱い、後始末はホスト側コールバックに委ねる。
+        // When the surface requests closing, e.g. on child process exit
+        // (wait_after_command=false). The second argument is "is the process still alive
+        // (does this need confirmation)", but viterm treats both as session termination
+        // and leaves cleanup to the host-side callback.
         runtime.close_surface_cb = { userdata, _ in
             guard let view = GhosttyRuntime.view(from: userdata) else { return }
             DispatchQueue.main.async {

@@ -1,23 +1,24 @@
 import AppKit
 import VitermCore
 
-/// サイドバー: リポジトリ → worktree の2階層ツリー。セッションはタブバー(`TabBarView`)側に
-/// 表示されるためサイドバーには現れず、worktree 行に配下セッションの状態がロールアップ表示される。
-/// データソースは VitermCore.SidebarViewModel(値型)。set(viewModel:) で丸ごと差し替える。
+/// Sidebar: a two-level tree of repository → worktree. Sessions appear on the tab bar
+/// (`TabBarView`) instead of the sidebar; each worktree row rolls up the state of its
+/// sessions. The data source is VitermCore.SidebarViewModel (a value type), replaced
+/// wholesale via set(viewModel:).
 @MainActor
 final class SidebarViewController: NSViewController {
-    /// worktree 行の選択(選択の主語は worktree)。
+    /// Selection of a worktree row (selection is keyed on the worktree).
     var onSelectWorktree: ((String) -> Void)?
     var onAddRepository: (() -> Void)?
     var onNewWorktree: (() -> Void)?
     var onNewSession: (() -> Void)?
     var onShowPalette: (() -> Void)?
-    /// worktree の右クリックメニュー「セッションを追加」(引数は worktree パス)。
+    /// The worktree right-click menu's "セッションを追加" (add session); argument is the worktree path.
     var onAddSession: ((String) -> Void)?
-    // コンテキストメニュー(右クリック)のアクション。
+    // Context menu (right-click) actions.
     var onMergeWorktree: ((String) -> Void)?
     var onRemoveWorktree: ((String) -> Void)?
-    /// リポジトリ行の「＋」/右クリック→新規 worktree(引数はリポジトリパス)。
+    /// The repository row's "＋" / right-click → new worktree; argument is the repository path.
     var onNewWorktreeInRepository: ((String) -> Void)?
 
     private let outlineView = NSOutlineView()
@@ -25,7 +26,7 @@ final class SidebarViewController: NSViewController {
     private let emptyState = NSStackView()
     private var viewModel = SidebarViewModel(repositories: [], worktrees: [], sessions: [])
 
-    // NSOutlineView の item は参照同一性で管理されるため、ツリーを class ノードに変換して保持する。
+    // NSOutlineView manages items by reference identity, so the tree is converted into class nodes and retained.
     private final class Node {
         enum Kind {
             case repository(RepositoryNode)
@@ -62,7 +63,7 @@ final class SidebarViewController: NSViewController {
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
 
-        // 空状態(リポジトリ未登録)のガイド。
+        // Empty-state guide (no repositories registered).
         emptyState.orientation = .vertical
         emptyState.alignment = .centerX
         emptyState.spacing = 8
@@ -75,7 +76,7 @@ final class SidebarViewController: NSViewController {
         emptyState.addArrangedSubview(emptyButton)
         emptyState.isHidden = true
 
-        // 下部アクションバー(UIモックの sb-actions 準拠: 薄いテキスト行のヒント兼ボタン)。
+        // Bottom action bar (per the UI mock's sb-actions: faint text rows doubling as hints and buttons).
         let actionBar = NSStackView()
         actionBar.orientation = .vertical
         actionBar.alignment = .leading
@@ -92,8 +93,9 @@ final class SidebarViewController: NSViewController {
         let container = NSStackView()
         container.orientation = .vertical
         container.spacing = 0
-        // 縦スタックの既定 alignment は centerX で、フッターがブロックごと中央に寄ってしまう。
-        // 全子要素を横幅いっぱいに揃えて、行の左寄せはactionBar内で行う(UIモック準拠)。
+        // A vertical stack's default alignment is centerX, which would center the whole
+        // footer block. Stretch all children to full width; left-aligning the rows happens
+        // inside actionBar (per the UI mock).
         container.alignment = .leading
         container.addArrangedSubview(scrollView)
         container.addArrangedSubview(separator)
@@ -115,10 +117,10 @@ final class SidebarViewController: NSViewController {
         view = container
     }
 
-    /// sb-actions の1行: 「⌘N 新規 worktree」のような、ヒント(等幅・薄)+ラベルのテキスト行。
-    /// ボタンだが装飾は付けない(モック準拠)。
+    /// One sb-actions row: a text line of hint (monospaced, faint) + label, like
+    /// "⌘N 新規 worktree". A button, but undecorated (per the mock).
     private func actionRow(hint: String, title: String, action: Selector) -> NSButton {
-        // NSButton は attributedTitle を既定で中央揃えにするため、段落スタイルで左寄せを明示する。
+        // NSButton centers attributedTitle by default, so left alignment is made explicit with a paragraph style.
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .left
         let attributed = NSMutableAttributedString()
@@ -146,10 +148,11 @@ final class SidebarViewController: NSViewController {
     @objc private func didTapShowPalette() { onShowPalette?() }
 
     func set(viewModel: SidebarViewModel) {
-        // 選択変更だけの再描画ではツリーを作り直さない(reloadData は展開状態を破棄するうえ、
-        // 行クリックの delegate 通知中に同期 reload すると NSOutlineView の状態を壊しやすい)。
-        // ツリーの内容(リポジトリ/worktree の構成・状態)が前回と同一なら、選択ハイライトの
-        // 同期だけで返す。
+        // Don't rebuild the tree for a selection-only redraw (reloadData discards expansion
+        // state, and a synchronous reload during a row-click delegate notification easily
+        // corrupts NSOutlineView's state). If the tree contents (repository/worktree
+        // composition and state) are identical to last time, just sync the selection
+        // highlight and return.
         let treeUnchanged = viewModel.repositories == self.viewModel.repositories
         self.viewModel = viewModel
         emptyState.isHidden = !viewModel.repositories.isEmpty
@@ -158,10 +161,11 @@ final class SidebarViewController: NSViewController {
             return
         }
 
-        // reloadData は展開状態を破棄するため、直前に「いま実際に畳まれている行」を
-        // アウトラインから直接採取し、再構築後に畳まれていなかった行だけ展開し直す。
-        // (イベント通知の蓄積で追跡すると reloadData 前後の通知の拾い方次第で実態と
-        // ズレていくため、毎回スナップショットを取る。新規に現れた行は既定で展開。)
+        // reloadData discards expansion state, so sample "the rows actually collapsed right
+        // now" directly from the outline beforehand, and after the rebuild re-expand only
+        // the rows that weren't collapsed. (Tracking via accumulated event notifications
+        // drifts from reality depending on how notifications around reloadData are picked
+        // up, so take a snapshot every time. Newly appearing rows default to expanded.)
         let collapsedIDs = snapshotCollapsedIDs()
 
         rootNodes = viewModel.repositories.map { repo in
@@ -174,8 +178,8 @@ final class SidebarViewController: NSViewController {
         syncSelection()
     }
 
-    /// 現在のツリー(再構築前の rootNodes)から、畳まれているリポジトリ行の ID を集める。
-    /// 初回(rootNodes が空)は空集合 = 全展開が既定。
+    /// Collect the IDs of collapsed repository rows from the current tree (rootNodes before
+    /// the rebuild). On first run (rootNodes empty) this is the empty set = all expanded by default.
     private func snapshotCollapsedIDs() -> Set<String> {
         var collapsed: Set<String> = []
         for repoNode in rootNodes {
@@ -186,7 +190,7 @@ final class SidebarViewController: NSViewController {
         return collapsed
     }
 
-    /// reloadData 後、スナップショットで畳まれていなかったリポジトリ行を展開状態に戻す。
+    /// After reloadData, re-expand the repository rows that weren't collapsed in the snapshot.
     private func restoreExpansion(collapsedIDs: Set<String>) {
         for repoNode in rootNodes {
             guard let repoID = nodeID(repoNode), !collapsedIDs.contains(repoID) else { continue }
@@ -201,8 +205,8 @@ final class SidebarViewController: NSViewController {
         }
     }
 
-    /// プログラムからの選択反映中は selectionDidChange をコールバックに再入させない
-    /// (render → syncSelection → didChange → render… の無限再帰防止)。
+    /// While programmatically applying selection, don't let selectionDidChange re-enter the
+    /// callback (prevents infinite recursion: render → syncSelection → didChange → render…).
     private var isSyncingSelection = false
 
     private func syncSelection() {
@@ -252,7 +256,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         guard let node = item as? Node else { return nil }
 
-        // 行 = [先頭アクセサリ?] タイトル …スペーサ… [右寄せ情報群](UIモック準拠)
+        // Row = [leading accessory?] title …spacer… [right-aligned info] (per the UI mock)
         let stack = NSStackView()
         stack.orientation = .horizontal
         stack.spacing = 6
@@ -267,14 +271,15 @@ extension SidebarViewController: NSOutlineViewDelegate {
             if waiting > 0 {
                 stack.addArrangedSubview(badge("\(waiting)"))
             }
-            // このリポジトリに worktree を追加する「＋」(常時表示。作成対象を明確にする)。
+            // The "＋" to add a worktree to this repository (always shown; makes the creation target explicit).
             stack.addArrangedSubview(addWorktreeButton(repositoryPath: repo.repository.path))
 
         case let .worktree(wt):
             stack.addArrangedSubview(label(wt.worktree.branch, size: 11, weight: .semibold))
-            // 配下セッションの状態ドットをロールアップ表示(セッションごとに1ドット、表示順)。
-            // タブ化でセッション行が無くなったぶん、ここが「どの worktree で何が起きているか」を
-            // 一覧できる唯一の場所になる(必須要件)。
+            // Roll up the state dots of the sessions underneath (one dot per session, in
+            // display order). With session rows gone after the tab redesign, this is the
+            // only place giving an overview of "what's happening in which worktree" (a hard
+            // requirement).
             if !wt.sessions.isEmpty {
                 let dotsStack = NSStackView(views: wt.sessions.map { stateDot(for: $0.session.state, size: 7) })
                 dotsStack.orientation = .horizontal
@@ -286,8 +291,9 @@ extension SidebarViewController: NSOutlineViewDelegate {
                 stack.addArrangedSubview(badge("\(waiting)"))
             }
             stack.addArrangedSubview(spacer())
-            // git 情報: ↑↓(main との commit 差)+ staged(オレンジ●)/ unstaged(赤●)の有無。
-            // 差分行数は「base との差か未コミット差か」が紛らわしいため表示しない。
+            // Git info: ↑↓ (commit diff vs main) + presence of staged (orange ●) / unstaged
+            // (red ●) changes. Diff line counts are not shown — "diff vs base or uncommitted
+            // diff?" is too easy to confuse.
             var git: [(String, NSColor, String?)] = []
             if wt.worktree.ahead > 0 { git.append(("↑\(wt.worktree.ahead)", .secondaryLabelColor, nil)) }
             if wt.worktree.behind > 0 { git.append(("↓\(wt.worktree.behind)", .secondaryLabelColor, nil)) }
@@ -303,7 +309,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
                 gitStack.addArrangedSubview(item)
             }
             stack.addArrangedSubview(gitStack)
-            // ホバーで worktree 削除のゴミ箱を出す(メイン worktree = リポジトリ本体は削除不可のため除外)。
+            // Show the worktree-removal trash can on hover (excluded for the main worktree = the repository itself, which can't be removed).
             if wt.worktree.path != wt.worktree.repositoryPath {
                 let path = wt.id
                 return makeCell(stack: stack, hoverTrash: { [weak self] in
@@ -315,7 +321,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
         return makeCell(stack: stack, hoverTrash: nil)
     }
 
-    /// 行のスタックをセルに包む。`hoverTrash` を渡すとホバー時にゴミ箱ボタンを表示する。
+    /// Wrap the row's stack in a cell. Passing `hoverTrash` shows a trash button on hover.
     private func makeCell(
         stack: NSStackView,
         hoverTrash: (() -> Void)?,
@@ -367,8 +373,9 @@ extension SidebarViewController: NSOutlineViewDelegate {
         return view
     }
 
-    /// 状態ドット(busy=オレンジ ● / waiting=青 ◐ / idle=枠のみ ○)。UIモックの .st 相当。
-    /// worktree 行のロールアップ表示は一回り小さい `size: 7`(モックの `.st.sm` 相当)を使う。
+    /// State dot (busy = orange ● / waiting = blue ◐ / idle = outline-only ○). Equivalent
+    /// to the UI mock's .st. The worktree row's roll-up display uses the slightly smaller
+    /// `size: 7` (the mock's `.st.sm`).
     private func stateDot(for state: AgentSession.State, size: CGFloat = 8) -> NSView {
         let dot = NSView()
         dot.wantsLayer = true
@@ -391,7 +398,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
         return dot
     }
 
-    /// リポジトリ行の「＋」(新規 worktree)ボタン。
+    /// The repository row's "＋" (new worktree) button.
     private func addWorktreeButton(repositoryPath: String) -> NSButton {
         let button = NSButton()
         button.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "新規 worktree")
@@ -411,7 +418,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
         onNewWorktreeInRepository?(path)
     }
 
-    /// waiting 数のバッジ(青いピル)。UIモックの .badge 相当。
+    /// Badge with the waiting count (blue pill). Equivalent to the UI mock's .badge.
     private func badge(_ text: String) -> NSView {
         let field = NSTextField(labelWithString: text)
         field.font = .boldSystemFont(ofSize: 9)
@@ -442,7 +449,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
     }
 
 
-    // MARK: - コンテキストメニュー
+    // MARK: - Context menu
 
     private func clickedNode() -> Node? {
         let row = outlineView.clickedRow
@@ -472,7 +479,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
         let rowView = AccentBarRowView()
-        // 2つ目以降のリポジトリ行の上にボーダーを引く(UIモックの .repo-sep 相当)。
+        // Draw a border above every repository row but the first (equivalent to the UI mock's .repo-sep).
         if let node = item as? Node, case .repository = node.kind,
            let first = rootNodes.first, first !== node {
             rowView.drawsTopSeparator = true
@@ -481,7 +488,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
     }
 }
 
-/// ホバー時のみゴミ箱ボタンを表示する行セル(worktree 削除に使用)。
+/// Row cell that shows a trash button only on hover (used for worktree removal).
 private final class HoverTrashCellView: NSTableCellView {
     var onTrash: (() -> Void)?
 
@@ -563,8 +570,8 @@ extension SidebarViewController: NSMenuDelegate {
     }
 }
 
-/// 選択行のハイライト(UIモックの .sess.active 相当: 背景 + 左端2pxのアクセントバー)と
-/// リポジトリ区切りの上ボーダー(.repo-sep 相当)。
+/// Selected-row highlight (equivalent to the UI mock's .sess.active: background + a 2px
+/// accent bar at the left edge) and the repository-separator top border (equivalent to .repo-sep).
 private final class AccentBarRowView: NSTableRowView {
     var drawsTopSeparator = false
 

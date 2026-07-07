@@ -2,8 +2,8 @@ import AppKit
 import GitKit
 import VitermCore
 
-/// worktree 新規作成シート(T10)。docs/ui-mock.html Screen 03 準拠。
-/// 頭脳は VitermCore.NewWorktreeFormModel、このクラスは AppKit への写像のみ。
+/// New-worktree sheet (T10). Per docs/ui-mock.html Screen 03.
+/// The brains are in VitermCore.NewWorktreeFormModel; this class is only the mapping onto AppKit.
 @MainActor
 final class NewWorktreeSheet: NSViewController {
     private var form: NewWorktreeFormModel
@@ -57,7 +57,7 @@ final class NewWorktreeSheet: NSViewController {
         branchField.delegate = self
         stack.addArrangedSubview(fieldGroup(label: "ブランチ名", control: branchField))
 
-        // エラー(ブランチ名/パス衝突)はブランチ名フィールドの直下に沿わせる。
+        // Errors (branch name / path collision) sit directly beneath the branch name field.
         errorLabel.font = .systemFont(ofSize: 11)
         errorLabel.textColor = .systemRed
         errorLabel.isHidden = true
@@ -98,7 +98,7 @@ final class NewWorktreeSheet: NSViewController {
         launchCheckbox.action = #selector(formChanged)
         stack.addArrangedSubview(launchCheckbox)
 
-        // ボタン行は幅いっぱいに広げて右寄せする。
+        // The button row stretches to full width and right-aligns.
         let cancel = NSButton(title: "キャンセル", target: self, action: #selector(didCancel))
         cancel.keyEquivalent = "\u{1b}"
         cancel.bezelStyle = .rounded
@@ -128,7 +128,7 @@ final class NewWorktreeSheet: NSViewController {
         syncFromForm()
     }
 
-    /// ラベル + コントロール(+ 任意のキャプション)を縦に積んだ、幅固定の1グループ。
+    /// One fixed-width group stacking label + control (+ optional caption) vertically.
     private func fieldGroup(label text: String, control: NSView, caption: NSView? = nil) -> NSView {
         let label = NSTextField(labelWithString: text)
         label.font = .systemFont(ofSize: 11)

@@ -4,14 +4,14 @@ import Testing
 import VitermCore
 @testable import VitermServices
 
-// MARK: - フェイク
+// MARK: - Fakes
 //
-// AppModel は git 実行・ファイルI/O・セッション起動を一切自前で行わず、すべて
-// AppModelDependencies.swift のプロトコル越しに行う。ここではそれらのフェイクを用意し、
-// 実 git・実ファイルシステムに触れずに AppModel の振る舞いだけを検証する。
+// AppModel never runs git, does file I/O, or launches sessions itself — everything goes
+// through the protocols in AppModelDependencies.swift. Here we provide fakes for those
+// and verify only AppModel's behavior, without touching real git or the real filesystem.
 
-/// 設定の読み込みと永続化を1つのインメモリ状態として振る舞うフェイク
-/// (addRepository → refresh で「保存した内容が読み直される」ことを検証するのに使う)。
+/// Fake behaving as one in-memory state for both config loading and persistence
+/// (used to verify that addRepository → refresh re-reads what was saved).
 final class FakeConfigStore: ConfigProviding, RepositoryConfigPersisting, @unchecked Sendable {
     var config: VitermConfig
     var loadError: Error?
@@ -31,7 +31,7 @@ final class FakeConfigStore: ConfigProviding, RepositoryConfigPersisting, @unche
 }
 
 final class FakeRepositoryDiscovery: RepositoryDiscovering, @unchecked Sendable {
-    /// ルートディレクトリ(の `path`)ごとに返す結果。無ければ `defaultRepositoriesToReturn`。
+    /// Result returned per root directory (its `path`). Falls back to `defaultRepositoriesToReturn`.
     var repositoriesByRoot: [String: [Repository]] = [:]
     var defaultRepositoriesToReturn: [Repository] = []
     private(set) var requestedRootDirectories: [URL] = []
@@ -127,15 +127,16 @@ final class FakeSessionLauncher: SessionLaunching, @unchecked Sendable {
     }
 }
 
-/// テスト用の即時発火クロック。実時間を待たずに `sleep(for:)` から即座に返る。
-/// `startAutoRefresh` のポーリング間隔待ちを飛ばして即座に tick を発生させたい場合に使う。
+/// Immediately-firing test clock. Returns from `sleep(for:)` right away without waiting
+/// real time. Used to skip `startAutoRefresh`'s polling-interval wait and produce ticks
+/// immediately.
 struct ImmediateAutoRefreshClock: AutoRefreshClock {
     func sleep(for duration: Duration) async {}
 }
 
-/// 1回目の `sleep(for:)` だけ即座に発火し、2回目以降は(テストの時間スケールでは)
-/// 実質無限に待つクロック。「最初の tick だけ検証したいが、その後ビジーループにしたくない」
-/// テスト(`stopAutoRefresh` の検証)向け。
+/// Clock whose first `sleep(for:)` fires immediately while subsequent calls wait
+/// effectively forever (on the test's time scale). For tests that want to verify only
+/// the first tick without busy-looping afterwards (the `stopAutoRefresh` verification).
 actor SingleShotThenForeverAutoRefreshClock: AutoRefreshClock {
     private var hasFiredOnce = false
 
@@ -148,9 +149,10 @@ actor SingleShotThenForeverAutoRefreshClock: AutoRefreshClock {
     }
 }
 
-/// `scan(repositories:)` の完了を外部から制御できるゲート。
-/// 「前回の refresh() がまだ走っている間は次の tick をスキップする」ことを検証するために、
-/// scan を意図的に一時停止させておき、テスト側の任意のタイミングで完了させる。
+/// Gate allowing external control over when `scan(repositories:)` completes.
+/// To verify that "the next tick is skipped while the previous refresh() is still
+/// running", the scan is deliberately paused and completed at a moment of the test's
+/// choosing.
 actor AutoRefreshGate {
     private var isOpen = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -167,7 +169,7 @@ actor AutoRefreshGate {
     }
 }
 
-/// `AutoRefreshGate` で `scan` の完了タイミングを制御できるスキャナー。
+/// Scanner whose `scan` completion timing is controlled via `AutoRefreshGate`.
 actor GatedWorktreeStatusScanner: WorktreeStatusScanning {
     let gate = AutoRefreshGate()
     private(set) var scanCount = 0
@@ -179,7 +181,7 @@ actor GatedWorktreeStatusScanner: WorktreeStatusScanning {
     }
 }
 
-// MARK: - テスト
+// MARK: - Tests
 
 @MainActor
 @Suite("AppModel")
@@ -336,8 +338,8 @@ struct AppModelTests {
         let scanner = FakeWorktreeStatusScanner()
         let model = makeModel(scanner: scanner)
 
-        // onRefreshCompleted は AppModel(@MainActor)から呼ばれ、このテスト自体も
-        // @MainActor 上で実行されるため、単純なローカル変数のキャプチャで安全に数えられる。
+        // onRefreshCompleted is called from AppModel (@MainActor) and this test itself
+        // also runs on @MainActor, so a simple local-variable capture counts safely.
         var completedCount = 0
         model.onRefreshCompleted = { completedCount += 1 }
 
@@ -360,19 +362,19 @@ struct AppModelTests {
         model.startAutoRefresh(interval: .seconds(30), clock: ImmediateAutoRefreshClock())
         defer { model.stopAutoRefresh() }
 
-        // 最初の refresh() が scan() の中で足止めされるまで待つ。
+        // Wait until the first refresh() is held up inside scan().
         while await scanner.scanCount == 0 {
             try? await Task.sleep(for: .milliseconds(5))
         }
 
-        // クロックが即時発火するため、この間に複数 tick が到達しようとしているはずだが、
-        // 1回目の refresh() がまだ完了していないので scan() は増えない。
+        // The clock fires immediately, so multiple ticks should be arriving meanwhile, but
+        // scan() doesn't increase because the first refresh() hasn't completed yet.
         try? await Task.sleep(for: .milliseconds(100))
         #expect(await scanner.scanCount == 1, "前回の refresh() が完了するまで次の tick はスキップされる")
 
         await scanner.gate.open()
 
-        // 1回目が完了すれば、以降の tick で refresh() が再開し scan() が呼ばれる。
+        // Once the first completes, refresh() resumes on later ticks and scan() gets called.
         while await scanner.scanCount < 2 {
             try? await Task.sleep(for: .milliseconds(5))
         }
@@ -672,7 +674,7 @@ struct AppModelTests {
         #expect(notifier.calls.isEmpty)
     }
 
-    // MARK: 選択の委譲
+    // MARK: Selection delegation
 
     @Test("選択系メソッドはSidebarViewModelへ委譲される")
     func selectionMethodsDelegateToSidebar() async {

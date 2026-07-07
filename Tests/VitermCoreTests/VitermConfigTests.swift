@@ -22,7 +22,7 @@ struct VitermConfigTests {
         let project = VitermConfigFile(worktreePathTemplate: "~/p/{branch}")
         let config = VitermConfig.merge(global: global, project: project)
         #expect(config.worktreePathTemplate == "~/p/{branch}")
-        // project 側が触れていないフィールドはグローバルにフォールバック
+        // Fields the project side doesn't touch fall back to the global config
         #expect(config.copySessionDataByDefault == false)
     }
 
@@ -126,8 +126,8 @@ struct VitermConfigTests {
         let project = VitermConfigFile(statusHooks: StatusHooksFile(onBusy: "p-busy"))
         let config = VitermConfig.merge(global: global, project: project)
 
-        // onBusy はプロジェクトが上書き、onIdle はプロジェクトが触れていないのでグローバルにフォールバック、
-        // onWaitingInput はどちらも未指定なので nil のまま。
+        // onBusy is overridden by the project; onIdle is untouched by the project so it
+        // falls back to global; onWaitingInput is unspecified in both, so it stays nil.
         #expect(config.statusHooks.onBusy == "p-busy")
         #expect(config.statusHooks.onIdle == "g-idle")
         #expect(config.statusHooks.onWaitingInput == nil)
@@ -140,7 +140,7 @@ struct VitermConfigTests {
         let global = VitermConfigFile(discoveryRoots: ["~/dev", "~/work"])
         #expect(VitermConfig.merge(global: global, project: nil).discoveryRoots == ["~/dev", "~/work"])
 
-        // プロジェクト側に discoveryRoots があってもグローバルの値がそのまま使われる。
+        // Even with discoveryRoots on the project side, the global value is used as-is.
         let project = VitermConfigFile(discoveryRoots: ["~/project-only"])
         #expect(VitermConfig.merge(global: global, project: project).discoveryRoots == ["~/dev", "~/work"])
     }

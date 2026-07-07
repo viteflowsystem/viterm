@@ -1,16 +1,17 @@
 import AppKit
 import VitermCore
 
-/// タブバー: 選択中 worktree のセッションをタブとして表示する(UIモックの `.tabbar` 相当)。
-/// タブ = セッション 1:1。データソースは `VitermCore.TabBarViewModel`(値型)。
-/// `set(viewModel:)` で丸ごと差し替える(SidebarViewController と同じ流儀)。
+/// Tab bar: shows the selected worktree's sessions as tabs (equivalent to the UI mock's
+/// `.tabbar`). Tab = session, 1:1. The data source is `VitermCore.TabBarViewModel` (a
+/// value type), replaced wholesale via `set(viewModel:)` (same convention as
+/// SidebarViewController).
 final class TabBarView: NSView {
     var onSelectTab: ((AgentSession.ID) -> Void)?
-    /// タブのホバー閉じるボタン、または ⌘W から。
+    /// From the tab's hover close button, or ⌘W.
     var onCloseTab: ((AgentSession.ID) -> Void)?
-    /// タブの右クリックメニュー「リネーム…」(引数は現在の表示名)。
+    /// From the tab's right-click menu "リネーム…" (rename); argument is the current display name.
     var onRenameTab: ((AgentSession.ID, String) -> Void)?
-    /// ＋ ボタン(新規セッション)。
+    /// The ＋ button (new session).
     var onAddTab: (() -> Void)?
 
     static let height: CGFloat = 34
@@ -51,9 +52,9 @@ final class TabBarView: NSView {
             bottomSeparator.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
-        // NSScrollView + NSStackView によるオーバーフロー時の横スクロール(UIモックの
-        // overflow-x: auto 相当)。documentView の trailing を固定しないことで、stack の
-        // 内容量に応じて幅がスクロールビューより広がれる。
+        // Horizontal scrolling on overflow via NSScrollView + NSStackView (equivalent to
+        // the UI mock's overflow-x: auto). By not pinning the documentView's trailing, the
+        // stack's width can grow beyond the scroll view with its content.
         scrollView.documentView = stack
         stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -67,7 +68,7 @@ final class TabBarView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    /// タブ列を丸ごと差し替える。
+    /// Replace the whole tab row.
     func set(viewModel: TabBarViewModel) {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for tab in viewModel.tabs {
@@ -80,7 +81,7 @@ final class TabBarView: NSView {
         stack.addArrangedSubview(makeAddButton())
     }
 
-    /// ＋(新規セッション、⌘T)ボタン。UIモックの `.tab.add` 相当。
+    /// The ＋ (new session, ⌘T) button. Equivalent to the UI mock's `.tab.add`.
     private func makeAddButton() -> NSButton {
         let button = NSButton()
         button.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "新規セッション")
@@ -97,8 +98,9 @@ final class TabBarView: NSView {
     @objc private func didTapAdd() { onAddTab?() }
 }
 
-/// タブ1つぶん: 状態ドット+名前+waitingInput バッジ+⌘番号、ホバーで閉じるボタン(UIモックの
-/// `.tab` 相当)。アクティブなタブは背景+上端2pxのアクセントバーで強調する。
+/// One tab: state dot + name + waitingInput badge + ⌘ number, with a close button on
+/// hover (equivalent to the UI mock's `.tab`). The active tab is emphasized with a
+/// background + a 2px accent bar at the top edge.
 private final class TabItemView: NSView {
     var onSelect: (() -> Void)?
     var onClose: (() -> Void)?
@@ -212,7 +214,7 @@ private final class TabItemView: NSView {
     @objc private func didTapClose() { onClose?() }
     @objc private func didSelectRename() { onRename?() }
 
-    /// 状態ドット(SidebarViewController.stateDot と同仕様)。
+    /// State dot (same spec as SidebarViewController.stateDot).
     private static func stateDot(for state: AgentSession.State) -> NSView {
         let dot = NSView()
         dot.wantsLayer = true
@@ -235,7 +237,7 @@ private final class TabItemView: NSView {
         return dot
     }
 
-    /// waitingInput バッジ(SidebarViewController.badge と同仕様)。
+    /// waitingInput badge (same spec as SidebarViewController.badge).
     private static func badge(_ text: String) -> NSView {
         let field = NSTextField(labelWithString: text)
         field.font = .boldSystemFont(ofSize: 9)

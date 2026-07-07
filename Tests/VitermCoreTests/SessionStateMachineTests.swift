@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import VitermCore
 
-/// テスト用の detector。`signal` を書き換えることで、時系列に沿った出力の変化を模擬できる。
+/// Test detector. Rewriting `signal` simulates output changes over time.
 private final class MutableStubDetector: StateDetector, @unchecked Sendable {
     let toolName = "stub"
     var signal: DetectionSignal
@@ -48,7 +48,7 @@ struct SessionStateMachineTests {
         machine.recordOutput(screenLines: ["esc to interrupt"], at: t0)
         #expect(machine.currentState(at: t0) == .busy)
 
-        // t=0.6: 出力が止まった(スピナー等が消えた) → idle candidate 開始。
+        // t=0.6: output stopped (spinner etc. disappeared) → idle candidate begins.
         stub.signal = .none
         machine.recordOutput(screenLines: ["done"], at: t0.addingTimeInterval(0.6))
 
@@ -62,19 +62,19 @@ struct SessionStateMachineTests {
         let stub = MutableStubDetector(signal: .busy)
         var machine = SessionStateMachine(detector: stub, initialState: .busy)
 
-        // t=0.5: 出力が止まった → idle candidate 開始。
+        // t=0.5: output stopped → idle candidate begins.
         stub.signal = .none
         machine.recordOutput(screenLines: ["done"], at: t0.addingTimeInterval(0.5))
 
-        // t=1.0: 再びbusyシグナルが来た → idle candidate はリセットされる。
+        // t=1.0: a busy signal arrived again → the idle candidate is reset.
         stub.signal = .busy
         machine.recordOutput(screenLines: ["esc to interrupt"], at: t0.addingTimeInterval(1.0))
 
-        // リセットされていなければ 0.5+1.5=2.0 でidle確定してしまうが、
-        // リセットされていれば t=1.0 の時点ではまだ busy のまま。
+        // Without the reset, idle would be finalized at 0.5+1.5=2.0; with it, the state is
+        // still busy at t=1.0.
         #expect(machine.currentState(at: t0.addingTimeInterval(2.1)) == .busy)
 
-        // t=1.1: 再び出力が止まった → idle candidate がこの時刻から数え直される。
+        // t=1.1: output stopped again → the idle candidate is re-counted from this time.
         stub.signal = .none
         machine.recordOutput(screenLines: ["done"], at: t0.addingTimeInterval(1.1))
         #expect(machine.currentState(at: t0.addingTimeInterval(2.5)) == .busy, "1.1+1.5=2.6秒より前はまだ確定しない")
@@ -90,11 +90,11 @@ struct SessionStateMachineTests {
             initialState: .idle
         )
         machine.recordResize(at: t0)
-        // 抑制ウィンドウ内(250ms以内)に来た出力(本来ならbusyシグナル)は無視される。
+        // Output arriving within the suppression window (within 250ms) — normally a busy signal — is ignored.
         machine.recordOutput(screenLines: ["garbled redraw"], at: t0.addingTimeInterval(0.1))
         #expect(machine.currentState(at: t0.addingTimeInterval(0.1)) == .idle)
 
-        // 抑制ウィンドウを過ぎれば通常通り判定される。
+        // Past the suppression window, evaluation happens normally.
         machine.recordOutput(screenLines: ["esc to interrupt"], at: t0.addingTimeInterval(0.3))
         #expect(machine.currentState(at: t0.addingTimeInterval(0.3)) == .busy)
     }
@@ -107,15 +107,15 @@ struct SessionStateMachineTests {
             configuration: .init(idleDebounce: 1.0, resizeSuppressionWindow: 0.5),
             initialState: .busy
         )
-        // t=0: 出力が止まった → idle candidate 開始(1.0秒後の t=1.0 でidle確定するはず)。
+        // t=0: output stopped → idle candidate begins (idle should finalize 1.0s later at t=1.0).
         machine.recordOutput(screenLines: ["done"], at: t0)
 
-        // t=0.9: debounce満了(t=1.0)の直前にリサイズが起きたとする。抑制ウィンドウは 0.9〜1.4。
+        // t=0.9: suppose a resize happens just before the debounce expires (t=1.0). The suppression window is 0.9-1.4.
         machine.recordResize(at: t0.addingTimeInterval(0.9))
 
-        // 抑制ウィンドウ内では、本来ならidle確定するt=1.0地点でもidleにならない。
+        // Within the suppression window, even at t=1.0 — where idle would normally finalize — the state doesn't become idle.
         #expect(machine.currentState(at: t0.addingTimeInterval(1.0)) == .busy)
-        // 抑制ウィンドウが明けた後(t=1.5)は通常通りidle debounceの経過で確定する。
+        // After the suppression window ends (t=1.5), idle finalizes normally as the debounce elapses.
         #expect(machine.currentState(at: t0.addingTimeInterval(1.5)) == .idle)
     }
 

@@ -1,20 +1,21 @@
 import AppKit
 import GhosttyKit
 
-/// libghostty サーフェス1枚をホストする NSView。
+/// NSView hosting one libghostty surface.
 ///
-/// レンダリング(Metal)は libghostty が nsview に対して直接行うため、
-/// ホスト側の責務は「サイズ・フォーカス・入力イベントをサーフェスへ中継する」こと。
-/// 実装リファレンス: Ghostty.app macOS 版 SurfaceView_AppKit.swift
+/// libghostty renders (Metal) directly onto the nsview, so the host's job is relaying
+/// size, focus, and input events to the surface.
+/// Implementation reference: Ghostty.app macOS SurfaceView_AppKit.swift
 final class GhosttySurfaceView: NSView {
-    // deinit(nonisolated)から解放するため unsafe 指定。書き込みは init/deinit のみ。
+    // Marked unsafe so it can be freed from deinit (nonisolated). Written only in init/deinit.
     nonisolated(unsafe) private(set) var surface: ghostty_surface_t?
 
-    /// IME 変換中(未確定)のテキスト。NSTextInputClient の setMarkedText/unmarkText で更新する。
+    /// Text being composed by the IME (unconfirmed). Updated via NSTextInputClient's setMarkedText/unmarkText.
     private var markedText = NSMutableAttributedString()
 
-    /// keyDown 処理中のみ non-nil。interpretKeyEvents 経由で呼ばれた insertText の結果をここに
-    /// 蓄積し、まとめて sendKey に渡す(実装リファレンス: SurfaceView_AppKit.swift の同名の仕組み)。
+    /// Non-nil only while keyDown is being handled. Results of insertText called via
+    /// interpretKeyEvents accumulate here and are passed to sendKey in one go
+    /// (implementation reference: the same mechanism in SurfaceView_AppKit.swift).
     private var keyTextAccumulator: [String]?
 
     /// The mouse cursor shape currently requested by libghostty
@@ -26,53 +27,57 @@ final class GhosttySurfaceView: NSView {
     /// Guards against changing the cursor shape while outside the view.
     private var mouseInside = false
 
-    // MARK: - OSC 通知(GhosttyRuntime.action_cb から呼ばれる)
+    // MARK: - OSC notifications (called from GhosttyRuntime.action_cb)
     //
-    // libghostty がターミナル出力中の OSC シーケンス(デスクトップ通知は OSC 9/777、pwd は OSC 7 等)
-    // を解釈すると action_cb が呼ばれ、GhosttyRuntime が対応するサーフェスの本コールバックを
-    // 発火する。状態検出の一次シグナルとして SessionStateMonitor 等から利用する想定
-    // (docs/ghostty-integration.md 参照)。
+    // When libghostty interprets OSC sequences in terminal output (desktop notifications
+    // are OSC 9/777, pwd is OSC 7, etc.), action_cb fires and GhosttyRuntime invokes the
+    // corresponding surface's callback here. Intended for use by SessionStateMonitor and
+    // others as a primary state-detection signal (see docs/ghostty-integration.md).
 
-    /// OSC 9 / OSC 777 によるデスクトップ通知(`GHOSTTY_ACTION_DESKTOP_NOTIFICATION`)を受信した。
+    /// Received a desktop notification via OSC 9 / OSC 777 (`GHOSTTY_ACTION_DESKTOP_NOTIFICATION`).
     var onDesktopNotification: ((_ title: String, _ body: String) -> Void)?
 
-    /// ベル(`GHOSTTY_ACTION_RING_BELL`)を受信した。
+    /// Received the bell (`GHOSTTY_ACTION_RING_BELL`).
     var onBell: (() -> Void)?
 
-    /// OSC 0/1/2 等によるタイトル変更(`GHOSTTY_ACTION_SET_TITLE`)を受信した。
+    /// Received a title change via OSC 0/1/2 etc. (`GHOSTTY_ACTION_SET_TITLE`).
     var onTitleChange: ((_ title: String) -> Void)?
 
-    /// OSC 7 によるカレントディレクトリ変更(`GHOSTTY_ACTION_PWD`)を受信した。
+    /// Received a working-directory change via OSC 7 (`GHOSTTY_ACTION_PWD`).
     var onPwdChange: ((_ pwd: String) -> Void)?
 
-    /// 子プロセスの終了等で libghostty がサーフェスのクローズを要求した(`close_surface_cb` 経由)。
-    /// セッションの後始末(一覧からの削除・ペインのクローズ)は呼び出し側の責務。
+    /// libghostty requested closing the surface (via `close_surface_cb`), e.g. because the
+    /// child process exited. Session cleanup (removal from the list, closing the pane) is
+    /// the caller's responsibility.
     var onSurfaceClose: (() -> Void)?
 
-    /// コマンド終了(`GHOSTTY_ACTION_COMMAND_FINISHED`)を受信した。OSC 133 のセマンティック
-    /// プロンプト(`end_input_start_output` → `end_command`)由来で、シェル統合が有効な場合のみ
-    /// 発火する(docs/ghostty-integration.md 参照。viterm は現状シェル統合リソースを配布して
-    /// いないため発火しない)。`exitCode` は終了コードが報告されていれば 0-255、未報告なら nil。
-    /// `duration` はコマンドの実行時間(秒)。
+    /// Received command completion (`GHOSTTY_ACTION_COMMAND_FINISHED`). Comes from OSC 133
+    /// semantic prompts (`end_input_start_output` → `end_command`) and only fires when
+    /// shell integration is enabled (see docs/ghostty-integration.md; viterm currently
+    /// ships no shell integration resources, so it never fires). `exitCode` is 0-255 when
+    /// an exit code was reported, nil otherwise. `duration` is the command's run time in
+    /// seconds.
     var onCommandFinished: ((_ exitCode: Int32?, _ duration: TimeInterval) -> Void)?
 
-    /// 進捗レポート(`GHOSTTY_ACTION_PROGRESS_REPORT`、OSC 9;4 由来)を受信した。シェル統合とは
-    /// 無関係に、実行中のプログラムが直接 OSC 9;4 を出力すれば発火しうる(docs/ghostty-integration.md
-    /// 参照)。`progress` は 0-100 の割合が報告されていればその値、未報告なら nil。
+    /// Received a progress report (`GHOSTTY_ACTION_PROGRESS_REPORT`, from OSC 9;4).
+    /// Independent of shell integration — any running program emitting OSC 9;4 directly can
+    /// trigger it (see docs/ghostty-integration.md). `progress` is the reported 0-100
+    /// percentage, or nil when unreported.
     var onProgressReport: ((_ state: ghostty_action_progress_report_state_e, _ progress: Int?) -> Void)?
 
     /// - Parameters:
-    ///   - command: 起動コマンド。nil ならユーザーのデフォルトシェル。
-    ///   - workingDirectory: 作業ディレクトリ。nil ならホーム。
+    ///   - command: The command to launch. nil means the user's default shell.
+    ///   - workingDirectory: The working directory. nil means home.
     init(command: String? = nil, workingDirectory: String? = nil) {
         super.init(frame: .zero)
         wantsLayer = true
-        // SessionStateMonitor 等がリサイズ通知(frameDidChangeNotification)に依存する。
+        // SessionStateMonitor and others depend on resize notifications (frameDidChangeNotification).
         postsFrameChangedNotifications = true
 
-        // モニター接続・解像度変更等で画面が変わっても viewDidChangeBackingProperties が
-        // 呼ばれないケースがあるため、画面変更通知から手動で発火する
-        // (実装リファレンス: SurfaceView_AppKit.swift、ghostty#2731)。
+        // There are cases where viewDidChangeBackingProperties is not called when the
+        // screen changes (monitor connected, resolution change, etc.), so fire it manually
+        // from the screen-change notification
+        // (implementation reference: SurfaceView_AppKit.swift, ghostty#2731).
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(windowDidChangeScreen(_:)),
@@ -89,8 +94,8 @@ final class GhosttySurfaceView: NSView {
         config.userdata = Unmanaged.passUnretained(self).toOpaque()
         config.scale_factor = Double(NSScreen.main?.backingScaleFactor ?? 2.0)
 
-        // withCString のスコープ内で ghostty_surface_new まで完了させる必要がある
-        // (config が保持する const char* はコピーされないため)。
+        // ghostty_surface_new must complete within the withCString scope
+        // (the const char* held by config is not copied).
         func create(_ cfg: inout ghostty_surface_config_s) {
             surface = ghostty_surface_new(app, &cfg)
         }
@@ -140,12 +145,13 @@ final class GhosttySurfaceView: NSView {
         super.viewDidChangeBackingProperties()
         guard let window else { return }
 
-        // 解像度・DPI は自前(libghostty)で調整するため、レイヤの contentsScale を
-        // 画面のスケールに合わせておく。これがズレていると Core Animation のコンポジタが
-        // 合成時にレイヤ内容を拡大縮小してしまい、ズームされたような表示になる
-        // (実装リファレンス: SurfaceView_AppKit.swift の同名メソッド)。
+        // Resolution/DPI is handled by libghostty itself, so keep the layer's
+        // contentsScale in sync with the screen's scale. If they drift apart, the Core
+        // Animation compositor scales the layer contents during compositing, producing a
+        // zoomed-looking display
+        // (implementation reference: the same method in SurfaceView_AppKit.swift).
         CATransaction.begin()
-        // contentsScale 変更時の暗黙のスケールアニメーションを抑止する。
+        // Suppress the implicit scale animation when contentsScale changes.
         CATransaction.setDisableActions(true)
         layer?.contentsScale = window.backingScaleFactor
         CATransaction.commit()
@@ -156,8 +162,9 @@ final class GhosttySurfaceView: NSView {
         syncSurfaceSize()
     }
 
-    /// ウィンドウが別の画面へ移った(またはモニター構成が変わった)。vsync 用のディスプレイ ID を
-    /// 更新し、スケールが変わった場合に備えて viewDidChangeBackingProperties を発火し直す。
+    /// The window moved to another screen (or the monitor configuration changed). Update
+    /// the display ID used for vsync, and re-fire viewDidChangeBackingProperties in case
+    /// the scale changed.
     @objc private func windowDidChangeScreen(_ notification: Notification) {
         guard let window,
               let object = notification.object as? NSWindow, window == object,
@@ -192,9 +199,9 @@ final class GhosttySurfaceView: NSView {
 
     // MARK: - Font size
 
-    // メニュー(target: nil の first responder 経由)から呼ばれる。ghostty のキーバインド
-    // アクションをそのまま実行するので、フォントサイズの実際の変更・再レイアウトは
-    // libghostty 側が行う。
+    // Called from the menu (via the target: nil first responder chain). These run ghostty
+    // keybinding actions as-is, so the actual font size change and relayout happen on the
+    // libghostty side.
 
     @objc func increaseFontSize(_ sender: Any?) { performBindingAction("increase_font_size:1") }
     @objc func decreaseFontSize(_ sender: Any?) { performBindingAction("decrease_font_size:1") }
@@ -213,12 +220,13 @@ final class GhosttySurfaceView: NSView {
             return
         }
 
-        // preedit(変換中)かどうかを interpretKeyEvents 呼び出し前に記録しておく。
-        // IME がこの入力で preedit を打ち切った場合(例: 変換中に Backspace)の composing 判定に使う。
+        // Record whether we were in preedit (composing) before calling interpretKeyEvents.
+        // Used for the composing decision when the IME aborts the preedit on this input
+        // (e.g. Backspace during composition).
         let markedTextBefore = markedText.length > 0
 
-        // interpretKeyEvents 経由で NSTextInputClient(setMarkedText/insertText)にこのキー
-        // イベントを処理させる。通常入力・IME確定テキストは insertText 側で蓄積する。
+        // Let NSTextInputClient (setMarkedText/insertText) handle this key event via
+        // interpretKeyEvents. Regular input and IME-confirmed text accumulate in insertText.
         keyTextAccumulator = []
         defer { keyTextAccumulator = nil }
         interpretKeyEvents([event])
@@ -227,13 +235,14 @@ final class GhosttySurfaceView: NSView {
 
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         if let accumulated = keyTextAccumulator, !accumulated.isEmpty {
-            // insertText で確定したテキスト(通常入力 or IME確定)。
+            // Text confirmed by insertText (regular input or IME confirmation).
             for text in accumulated {
                 sendKey(action, event: event, text: text, composing: false)
             }
         } else {
-            // insertText が呼ばれなかった通常のキー(矢印・Enter・Ctrl+C 等)。変換中、または
-            // この入力で変換が打ち切られた場合は composing を立てて ghostty 側に伝える。
+            // Ordinary keys where insertText was not called (arrows, Enter, Ctrl+C, etc.).
+            // If composing, or if composition was aborted by this input, set composing so
+            // ghostty knows.
             sendKey(
                 action,
                 event: event,
@@ -260,14 +269,14 @@ final class GhosttySurfaceView: NSView {
             return
         }
 
-        // 変換中は修飾キー単体の press/release を送らない(本家 SurfaceView_AppKit.swift 準拠)。
+        // While composing, don't send bare modifier press/release (per upstream SurfaceView_AppKit.swift).
         guard markedText.length == 0 else { return }
 
         let mods = Self.ghosttyMods(event.modifierFlags)
         var action = GHOSTTY_ACTION_RELEASE
         if mods.rawValue & mod != 0 {
-            // 押されたのが左右どちら側の修飾キーかを判定する。反対側の同じ修飾キーがまだ
-            // 押されたままの場合は release として扱う。
+            // Determine which side (left/right) of the modifier was pressed. If the same
+            // modifier on the other side is still held down, treat this as a release.
             let sidePressed: Bool
             switch event.keyCode {
             case 0x3C: sidePressed = event.modifierFlags.rawValue & UInt(NX_DEVICERSHIFTKEYMASK) != 0
@@ -292,24 +301,25 @@ final class GhosttySurfaceView: NSView {
         var key = ghostty_input_key_s()
         key.action = action
         key.mods = Self.ghosttyMods(event.modifierFlags)
-        // control と command はテキスト変換に寄与しないと仮定し、それ以外(shift/option)は
-        // 変換で消費されたとみなす(本家 ghosttyKeyEvent と同じヒューリスティック)。
-        // これを NONE にすると、IME 確定テキストが shift 付きキー(例: 変換中の「?」)に
-        // 載って届いたとき ghostty core の effective mods に shift が残り、kitty keyboard
-        // protocol 有効時に確定テキストが捨てられて CSI シーケンスだけが送られてしまう。
+        // Assume control and command don't contribute to text translation, and treat the
+        // rest (shift/option) as consumed by translation (same heuristic as upstream
+        // ghosttyKeyEvent). If this were NONE, then when IME-confirmed text arrives on a
+        // shifted key (e.g. "?" during composition), shift would remain in ghostty core's
+        // effective mods, and with the kitty keyboard protocol enabled the confirmed text
+        // would be dropped and only a CSI sequence sent.
         key.consumed_mods = Self.ghosttyMods(event.modifierFlags.subtracting([.control, .command]))
         key.keycode = UInt32(event.keyCode)
         key.composing = composing
-        // unshifted codepoint は「修飾なしで打った場合の文字」("?" キーなら "/")。
-        // charactersIgnoringModifiers は shift を落とさないため使わない(本家準拠)。
-        // characters(byApplyingModifiers:) は keyDown/keyUp 以外の NSEvent では使えない。
+        // The unshifted codepoint is "the character typed without modifiers" ("/" for the
+        // "?" key). charactersIgnoringModifiers doesn't drop shift, so it isn't used (per
+        // upstream). characters(byApplyingModifiers:) only works on keyDown/keyUp NSEvents.
         key.unshifted_codepoint = 0
         if event.type == .keyDown || event.type == .keyUp {
             key.unshifted_codepoint = event.characters(byApplyingModifiers: [])?.unicodeScalars.first?.value ?? 0
         }
 
-        // 単一の制御文字(Ctrl+C 等)やファンクションキー相当の PUA コードポイントはここでは
-        // 送らない。ghostty 側が keycode/mods から制御バイトやエスケープシーケンスを組み立てる。
+        // Single control characters (Ctrl+C, etc.) and function-key PUA codepoints are not
+        // sent here. ghostty builds the control bytes / escape sequences from keycode/mods.
         if let text, let codepoint = text.utf8.first, codepoint >= 0x20 {
             text.withCString { cstr in
                 key.text = cstr
@@ -321,8 +331,9 @@ final class GhosttySurfaceView: NSView {
         }
     }
 
-    /// キーイベントから ghostty へ送るテキストを求める。制御文字・ファンクションキーの PUA
-    /// コードポイントは除外する(実装リファレンス: NSEvent+Extension.swift の ghosttyCharacters)。
+    /// Derive the text to send to ghostty from a key event. Excludes control characters
+    /// and function-key PUA codepoints (implementation reference: ghosttyCharacters in
+    /// NSEvent+Extension.swift).
     private static func ghosttyText(for event: NSEvent) -> String? {
         guard let characters = event.characters else { return nil }
         if characters.count == 1, let scalar = characters.unicodeScalars.first {
@@ -337,7 +348,7 @@ final class GhosttySurfaceView: NSView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        // ⌘V ペースト: NSPasteboard から直接サーフェスにテキストを送る。
+        // ⌘V paste: send the text straight from NSPasteboard to the surface.
         if event.modifierFlags.contains(.command),
            event.charactersIgnoringModifiers == "v",
            let surface,
@@ -350,8 +361,8 @@ final class GhosttySurfaceView: NSView {
         return super.performKeyEquivalent(with: event)
     }
 
-    /// markedText の内容を ghostty の preedit 表示に反映する。markedText が空になった場合
-    /// (確定 or 変換キャンセル)は clearIfNeeded が立っていれば preedit をクリアする。
+    /// Reflect markedText into ghostty's preedit display. If markedText became empty
+    /// (confirmed or composition canceled), clear the preedit when clearIfNeeded is set.
     private func syncPreedit(clearIfNeeded: Bool) {
         guard let surface else { return }
         if markedText.length > 0 {
@@ -359,7 +370,7 @@ final class GhosttySurfaceView: NSView {
             let len = str.utf8CString.count
             if len > 0 {
                 str.withCString { ptr in
-                    // 末尾の NUL 終端文字の分を引く。
+                    // Subtract the trailing NUL terminator.
                     ghostty_surface_preedit(surface, ptr, UInt(len - 1))
                 }
             }
@@ -456,7 +467,7 @@ final class GhosttySurfaceView: NSView {
     }
 
     override func otherMouseDown(with event: NSEvent) {
-        // 中クリック(ボタン番号2)のみ中継する。
+        // Relay middle-click (button number 2) only.
         guard let surface, event.buttonNumber == 2 else { return }
         _ = ghostty_surface_mouse_button(
             surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_MIDDLE, Self.ghosttyMods(event.modifierFlags))
@@ -497,7 +508,7 @@ final class GhosttySurfaceView: NSView {
     private func reportMousePos(_ event: NSEvent) {
         guard let surface else { return }
         let pos = convert(event.locationInWindow, from: nil)
-        // libghostty は左上原点の座標系を期待する。
+        // libghostty expects a top-left-origin coordinate system.
         ghostty_surface_mouse_pos(surface, pos.x, frame.height - pos.y, Self.ghosttyMods(event.modifierFlags))
     }
 
@@ -509,21 +520,23 @@ final class GhosttySurfaceView: NSView {
     }
 }
 
-// MARK: - NSTextInputClient (日本語 IME 対応)
+// MARK: - NSTextInputClient (Japanese IME support)
 //
-// keyDown 内の interpretKeyEvents([event]) がこのメソッド群を呼び出す。通常入力・IME 確定
-// テキストは insertText、変換中(preedit)は setMarkedText/unmarkText 経由で処理される。
-// 実装リファレンス: SurfaceView_AppKit.swift の同名メソッド群。
-// NSTextInputClient 準拠。
+// interpretKeyEvents([event]) inside keyDown invokes these methods. Regular input and
+// IME-confirmed text go through insertText; in-progress composition (preedit) goes
+// through setMarkedText/unmarkText.
+// Implementation reference: the same methods in SurfaceView_AppKit.swift.
+// Conforms to NSTextInputClient.
 //
-// 注意: `extension ...: @MainActor NSTextInputClient`(isolated conformance)にすると、
-// 別ウィンドウが key になる瞬間に AppKit が旧 first responder のこのビューへ
-// `NSTextInputContext initWithClient:` → `validAttributesForMarkedText` を呼ぶ経路で、
-// ランタイムの executor チェックが EXC_BAD_ACCESS でクラッシュする(実測)。
-// AppKit はこれらのメソッドを必ずメインスレッドで呼ぶ契約なので、各メソッドを
-// nonisolated + `MainActor.assumeIsolated` にして witness 呼び出し時の executor
-// チェック(クラッシュの発生箇所)自体を発生させない。conformance の isolation 宣言は
-// doCommand(by:)(NSResponder の @MainActor オーバーライド)が要件を満たす都合で残す。
+// Note: with `extension ...: @MainActor NSTextInputClient` (isolated conformance), the
+// runtime's executor check crashes with EXC_BAD_ACCESS (observed) on the path where, the
+// moment another window becomes key, AppKit calls
+// `NSTextInputContext initWithClient:` → `validAttributesForMarkedText` on this view as
+// the old first responder. AppKit contractually calls these methods on the main thread,
+// so each method is made nonisolated + `MainActor.assumeIsolated`, avoiding the executor
+// check at the witness call (where the crash occurs) altogether. The conformance's
+// isolation declaration stays because doCommand(by:) (a @MainActor override from
+// NSResponder) satisfies the requirement that way.
 extension GhosttySurfaceView: @MainActor NSTextInputClient {
     nonisolated func hasMarkedText() -> Bool {
         MainActor.assumeIsolated {
@@ -549,8 +562,8 @@ extension GhosttySurfaceView: @MainActor NSTextInputClient {
     }
 
     nonisolated func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-        // `Any`(非 Sendable)を MainActor クロージャに持ち込めないため、先に String へ落とす。
-        // preedit はプレーンテキストしか使わないので属性は捨てて問題ない。
+        // `Any` (non-Sendable) can't be carried into a MainActor closure, so lower it to
+        // String first. The preedit only uses plain text, so dropping attributes is fine.
         let text: String
         switch string {
         case let v as NSAttributedString: text = v.string
@@ -560,8 +573,9 @@ extension GhosttySurfaceView: @MainActor NSTextInputClient {
         MainActor.assumeIsolated {
             markedText = NSMutableAttributedString(string: text)
 
-            // keyDown の外(キーボードレイアウト切り替え等)からの変更は即座に preedit へ反映する。
-            // keyDown 内であれば、keyDown 側が呼び出し後にまとめて syncPreedit する。
+            // Changes from outside keyDown (keyboard layout switch, etc.) are reflected
+            // into the preedit immediately. Within keyDown, the keyDown side calls
+            // syncPreedit once afterwards.
             if keyTextAccumulator == nil {
                 syncPreedit(clearIfNeeded: true)
             }
@@ -583,8 +597,8 @@ extension GhosttySurfaceView: @MainActor NSTextInputClient {
     nonisolated func validAttributesForMarkedText() -> [NSAttributedString.Key] { [] }
 
     nonisolated func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
-        // NSAttributedString は Sendable ではないため、クロージャからは String で受けて
-        // 外で NSAttributedString にする。
+        // NSAttributedString is not Sendable, so receive a String from the closure and
+        // build the NSAttributedString outside.
         let string: String? = MainActor.assumeIsolated {
             guard let surface, range.length > 0 else { return nil }
             var text = ghostty_text_s()
@@ -603,14 +617,14 @@ extension GhosttySurfaceView: @MainActor NSTextInputClient {
                 return NSRect(x: frame.origin.x, y: frame.origin.y, width: 0, height: 0)
             }
 
-            // ghostty がカーソル位置(IME 候補ウィンドウを出すべき場所)を教えてくれる。
+            // ghostty tells us the cursor position (where the IME candidate window should go).
             var x: Double = 0
             var y: Double = 0
             var width: Double = 0
             var height: Double = 0
             ghostty_surface_ime_point(surface, &x, &y, &width, &height)
 
-            // ghostty の座標系は左上原点なので、AppKit の左下原点(ウィンドウ座標)に変換する。
+            // ghostty's coordinate system is top-left-origin; convert to AppKit's bottom-left origin (window coordinates).
             let viewRect = NSRect(x: x, y: frame.size.height - y, width: width, height: height)
             let winRect = convert(viewRect, to: nil)
             guard let window else { return winRect }
@@ -619,7 +633,7 @@ extension GhosttySurfaceView: @MainActor NSTextInputClient {
     }
 
     nonisolated func insertText(_ string: Any, replacementRange: NSRange) {
-        // `Any`(非 Sendable)を MainActor クロージャに持ち込めないため、先に String へ落とす。
+        // `Any` (non-Sendable) can't be carried into a MainActor closure, so lower it to String first.
         let chars: String
         switch string {
         case let v as NSAttributedString: chars = v.string
@@ -629,25 +643,25 @@ extension GhosttySurfaceView: @MainActor NSTextInputClient {
         MainActor.assumeIsolated {
             guard let surface, NSApp.currentEvent != nil else { return }
 
-            // insertText が呼ばれた時点で変換は確定しているので preedit を終了する。
+            // By the time insertText is called, composition is confirmed, so end the preedit.
             unmarkTextIsolated()
 
             if var accumulated = keyTextAccumulator {
-                // keyDown 処理中: 後段の sendKey にまとめて渡すため蓄積するだけ。
+                // During keyDown handling: just accumulate, to pass to the later sendKey in one go.
                 accumulated.append(chars)
                 keyTextAccumulator = accumulated
                 return
             }
 
-            // keyDown の外からの確定(絵文字ピッカー、音声入力等)は直接送る。
+            // Confirmations from outside keyDown (emoji picker, dictation, etc.) are sent directly.
             chars.withCString { cstr in
                 ghostty_surface_text(surface, cstr, UInt(chars.utf8.count))
             }
         }
     }
 
-    /// NSResponder.doCommand(by:) をオーバーライドし、未対応コマンドで NSBeep が鳴るのを防ぐ。
+    /// Override NSResponder.doCommand(by:) to prevent NSBeep on unsupported commands.
     override func doCommand(by selector: Selector) {
-        // 現時点では特別なコマンド処理はしない(既存動作を壊さないための最小実装)。
+        // No special command handling for now (minimal implementation to avoid breaking existing behavior).
     }
 }

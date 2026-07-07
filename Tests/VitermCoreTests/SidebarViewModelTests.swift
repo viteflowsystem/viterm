@@ -6,9 +6,9 @@ import Testing
 struct SidebarViewModelTests {
     let t0 = Date(timeIntervalSince1970: 1_700_000_000)
 
-    // viterm リポジトリ: main worktree(zsh) + feat/sidebar worktree(claude #1 busy, claude #2 waiting, codex #1 idle)
-    // webapp リポジトリ: fix/login worktree(claude #1 busy)
-    // docs/ui-mock.html の Screen 01 相当の構成。
+    // viterm repository: main worktree (zsh) + feat/sidebar worktree (claude #1 busy, claude #2 waiting, codex #1 idle)
+    // webapp repository: fix/login worktree (claude #1 busy)
+    // A setup equivalent to Screen 01 of docs/ui-mock.html.
     func makeFixture() -> (repos: [Repository], worktrees: [Worktree], sessions: [AgentSession]) {
         let viterm = Repository(name: "viterm", path: "/repo/viterm")
         let webapp = Repository(name: "webapp", path: "/repo/webapp")
@@ -203,7 +203,7 @@ struct SidebarViewModelTests {
         #expect(viewModel.stateSummary == SessionStateSummary())
     }
 
-    // MARK: - worktree 選択
+    // MARK: - Worktree selection
 
     @Test("selectはselectedWorktreePathとactiveSessionByWorktreeも更新する")
     func selectSyncsWorktreeSelection() {
@@ -222,11 +222,11 @@ struct SidebarViewModelTests {
         let fixture = makeFixture()
         var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
 
-        // worktree A(main, zsh)を選択している状態を作る。
+        // Set up a state where worktree A (main, zsh) is selected.
         viewModel.selectWorktree("/repo/viterm")
         #expect(viewModel.selectedWorktreePath == "/repo/viterm")
 
-        // worktree B(feat/sidebar)に属する既知のセッションを直接selectする。
+        // Directly select a known session belonging to worktree B (feat/sidebar).
         let sessionInWorktreeB = fixture.sessions.first { $0.displayName == "claude #1" && $0.worktreePath == "/wt/viterm/feat-sidebar" }!
         viewModel.select(sessionID: sessionInWorktreeB.id)
 

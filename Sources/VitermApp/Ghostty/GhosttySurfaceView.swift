@@ -292,10 +292,21 @@ final class GhosttySurfaceView: NSView {
         var key = ghostty_input_key_s()
         key.action = action
         key.mods = Self.ghosttyMods(event.modifierFlags)
-        key.consumed_mods = GHOSTTY_MODS_NONE
+        // control と command はテキスト変換に寄与しないと仮定し、それ以外(shift/option)は
+        // 変換で消費されたとみなす(本家 ghosttyKeyEvent と同じヒューリスティック)。
+        // これを NONE にすると、IME 確定テキストが shift 付きキー(例: 変換中の「?」)に
+        // 載って届いたとき ghostty core の effective mods に shift が残り、kitty keyboard
+        // protocol 有効時に確定テキストが捨てられて CSI シーケンスだけが送られてしまう。
+        key.consumed_mods = Self.ghosttyMods(event.modifierFlags.subtracting([.control, .command]))
         key.keycode = UInt32(event.keyCode)
         key.composing = composing
-        key.unshifted_codepoint = event.charactersIgnoringModifiers?.unicodeScalars.first?.value ?? 0
+        // unshifted codepoint は「修飾なしで打った場合の文字」("?" キーなら "/")。
+        // charactersIgnoringModifiers は shift を落とさないため使わない(本家準拠)。
+        // characters(byApplyingModifiers:) は keyDown/keyUp 以外の NSEvent では使えない。
+        key.unshifted_codepoint = 0
+        if event.type == .keyDown || event.type == .keyUp {
+            key.unshifted_codepoint = event.characters(byApplyingModifiers: [])?.unicodeScalars.first?.value ?? 0
+        }
 
         // 単一の制御文字(Ctrl+C 等)やファンクションキー相当の PUA コードポイントはここでは
         // 送らない。ghostty 側が keycode/mods から制御バイトやエスケープシーケンスを組み立てる。

@@ -70,6 +70,15 @@ final class GhosttySurfaceView: NSView {
         // SessionStateMonitor 等がリサイズ通知(frameDidChangeNotification)に依存する。
         postsFrameChangedNotifications = true
 
+        // モニター接続・解像度変更等で画面が変わっても viewDidChangeBackingProperties が
+        // 呼ばれないケースがあるため、画面変更通知から手動で発火する
+        // (実装リファレンス: SurfaceView_AppKit.swift、ghostty#2731)。
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidChangeScreen(_:)),
+            name: NSWindow.didChangeScreenNotification,
+            object: nil)
+
         guard let app = GhosttyRuntime.shared.app else { return }
 
         var config = ghostty_surface_config_new()
@@ -129,10 +138,38 @@ final class GhosttySurfaceView: NSView {
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
+        guard let window else { return }
+
+        // 解像度・DPI は自前(libghostty)で調整するため、レイヤの contentsScale を
+        // 画面のスケールに合わせておく。これがズレていると Core Animation のコンポジタが
+        // 合成時にレイヤ内容を拡大縮小してしまい、ズームされたような表示になる
+        // (実装リファレンス: SurfaceView_AppKit.swift の同名メソッド)。
+        CATransaction.begin()
+        // contentsScale 変更時の暗黙のスケールアニメーションを抑止する。
+        CATransaction.setDisableActions(true)
+        layer?.contentsScale = window.backingScaleFactor
+        CATransaction.commit()
+
         guard let surface else { return }
-        let scale = window?.backingScaleFactor ?? 2.0
+        let scale = window.backingScaleFactor
         ghostty_surface_set_content_scale(surface, scale, scale)
         syncSurfaceSize()
+    }
+
+    /// ウィンドウが別の画面へ移った(またはモニター構成が変わった)。vsync 用のディスプレイ ID を
+    /// 更新し、スケールが変わった場合に備えて viewDidChangeBackingProperties を発火し直す。
+    @objc private func windowDidChangeScreen(_ notification: Notification) {
+        guard let window,
+              let object = notification.object as? NSWindow, window == object,
+              let screen = window.screen,
+              let surface else { return }
+
+        let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32
+        ghostty_surface_set_display_id(surface, displayID ?? 0)
+
+        DispatchQueue.main.async { [weak self] in
+            self?.viewDidChangeBackingProperties()
+        }
     }
 
     private func syncSurfaceSize() {
@@ -151,6 +188,21 @@ final class GhosttySurfaceView: NSView {
         let ok = super.resignFirstResponder()
         if ok, let surface { ghostty_surface_set_focus(surface, false) }
         return ok
+    }
+
+    // MARK: - Font size
+
+    // メニュー(target: nil の first responder 経由)から呼ばれる。ghostty のキーバインド
+    // アクションをそのまま実行するので、フォントサイズの実際の変更・再レイアウトは
+    // libghostty 側が行う。
+
+    @objc func increaseFontSize(_ sender: Any?) { performBindingAction("increase_font_size:1") }
+    @objc func decreaseFontSize(_ sender: Any?) { performBindingAction("decrease_font_size:1") }
+    @objc func resetFontSize(_ sender: Any?) { performBindingAction("reset_font_size") }
+
+    private func performBindingAction(_ action: String) {
+        guard let surface else { return }
+        _ = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
     }
 
     // MARK: - Keyboard
@@ -274,6 +326,15 @@ final class GhosttySurfaceView: NSView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // ⌘=(US 配列で shift なしの ⌘+)も文字拡大として扱う。メニューの
+        // keyEquivalent "+" では拾えないため、ここで先に処理する。
+        if event.modifierFlags.contains(.command),
+           !event.modifierFlags.contains(.shift),
+           event.charactersIgnoringModifiers == "=" {
+            increaseFontSize(nil)
+            return true
+        }
+
         // ⌘V ペースト: NSPasteboard から直接サーフェスにテキストを送る。
         if event.modifierFlags.contains(.command),
            event.charactersIgnoringModifiers == "v",

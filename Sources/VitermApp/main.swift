@@ -123,6 +123,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let toggle = NSMenuItem(title: "サイドバー表示切替", action: #selector(MainWindowController.toggleSidebar2(_:)), keyEquivalent: "b")
         toggle.target = controller
         viewMenu.addItem(toggle)
+
+        // フォントサイズ調整。target なし(first responder 経由)でフォーカス中の
+        // GhosttySurfaceView に届く。⌘=(shift なしの ⌘+)はメニューでは拾えないが、
+        // keyDown 経由で libghostty core のデフォルトキーバインド(super+equal)が処理する
+        // (本家 Ghostty.app と同じ構図)。
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(NSMenuItem(
+            title: "文字を大きく",
+            action: #selector(GhosttySurfaceView.increaseFontSize(_:)),
+            keyEquivalent: "+"))
+        viewMenu.addItem(NSMenuItem(
+            title: "文字を小さく",
+            action: #selector(GhosttySurfaceView.decreaseFontSize(_:)),
+            keyEquivalent: "-"))
+        viewMenu.addItem(NSMenuItem(
+            title: "文字サイズをリセット",
+            action: #selector(GhosttySurfaceView.resetFontSize(_:)),
+            keyEquivalent: "0"))
         viewMenuItem.submenu = viewMenu
         main.addItem(viewMenuItem)
 

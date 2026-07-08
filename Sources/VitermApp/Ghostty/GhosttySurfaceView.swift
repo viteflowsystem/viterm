@@ -74,6 +74,10 @@ final class GhosttySurfaceView: NSView {
         // SessionStateMonitor and others depend on resize notifications (frameDidChangeNotification).
         postsFrameChangedNotifications = true
 
+        // Accept files/URLs/text dropped onto the terminal (drag & drop). The dropped
+        // paths are inserted into the buffer at the cursor (see NSDraggingDestination below).
+        registerForDraggedTypes(Array(Self.dropTypes))
+
         // There are cases where viewDidChangeBackingProperties is not called when the
         // screen changes (monitor connected, resolution change, etc.), so fire it manually
         // from the screen-change notification
@@ -663,5 +667,60 @@ extension GhosttySurfaceView: @MainActor NSTextInputClient {
     /// Override NSResponder.doCommand(by:) to prevent NSBeep on unsupported commands.
     override func doCommand(by selector: Selector) {
         // No special command handling for now (minimal implementation to avoid breaking existing behavior).
+    }
+}
+
+// MARK: - NSDraggingDestination (file / URL / text drop)
+//
+// Dropping files, URLs, or text onto the terminal inserts the corresponding text at the
+// cursor: file paths and URLs are shell-escaped (individually, space-joined for multiple
+// files), plain text is inserted as-is. Text is sent straight to the surface via
+// ghostty_surface_text (same path as ⌘V paste), bypassing insertText's IME accumulator and
+// currentEvent guard, which don't apply to a drop.
+// Implementation reference: the same extension in SurfaceView_AppKit.swift.
+extension GhosttySurfaceView {
+    static let dropTypes: Set<NSPasteboard.PasteboardType> = [.string, .fileURL, .URL]
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard let types = sender.draggingPasteboard.types else { return [] }
+        // AppKit should only deliver types we registered for, but double-check.
+        if Set(types).isDisjoint(with: Self.dropTypes) { return [] }
+        // .copy shows the proper "+" drag icon.
+        return .copy
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let pb = sender.draggingPasteboard
+
+        let content: String?
+        if let url = pb.string(forType: .URL) {
+            // URLs first: escaped as-is.
+            content = Self.shellEscape(url)
+        } else if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
+            // File URLs next: each path escaped individually, joined by a space.
+            content = urls.map { Self.shellEscape($0.path) }.joined(separator: " ")
+        } else if let str = pb.string(forType: .string) {
+            // Plain text is not escaped: it may be a command the user wants to run.
+            content = str
+        } else {
+            content = nil
+        }
+
+        guard let content, let surface else { return false }
+        content.withCString { cstr in
+            ghostty_surface_text(surface, cstr, UInt(content.utf8.count))
+        }
+        return true
+    }
+
+    /// Escape shell-sensitive characters by prefixing each with a backslash. Suitable for
+    /// inserting paths/URLs into a live terminal buffer (reference: Ghostty.Shell.escape).
+    private static func shellEscape(_ str: String) -> String {
+        let escapeCharacters = "\\ ()[]{}<>\"'`!#$&;|*?\t"
+        var result = str
+        for char in escapeCharacters {
+            result = result.replacingOccurrences(of: String(char), with: "\\\(char)")
+        }
+        return result
     }
 }

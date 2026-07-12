@@ -23,6 +23,13 @@ Design reference: https://claude.ai/code/artifact/83ddb620-188e-45a4-879b-6ec774
 | Empty lanes | removed entirely | high |
 | Lane order within lane | most recent stateChangedAt first | high |
 
+## Implementation status
+
+- [x] Step 1 core (issue #2): filterText / filteredRepositories / RepositoryNode.stateSummary / rebuilt() carry-over + tests (commit fe92730)
+- [x] Step 1 UI: search field header, filtered rendering, collapsed busy badge, "/" & Esc, IME-safe write-back (commit 6b6035b). Verified on device: narrowing, 該当なし, Esc clear, selection retention, collapsed badge, slash focus. Note: clicking a worktree row moves focus to the terminal, so "/" is mainly useful right after Esc or when the tree has focus — as designed, but worth watching.
+- [ ] Step 2 (issue #21): SidebarDisplayMode + stateLanes + persistence
+- [ ] Step 3 (issue #22): SidebarStateListView + Cmd+B toggle + Cmd+Shift+B hide fix + Ghostty paste guard
+
 ## Progress log
 
 - 2026-07-12: Note created. Launching research agents (sidebar UI, AppModel/state flow, keyboard shortcuts/persistence).

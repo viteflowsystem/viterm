@@ -20,10 +20,15 @@ final class SidebarViewController: NSViewController {
     var onRemoveWorktree: ((String) -> Void)?
     /// The repository row's "＋" / right-click → new worktree; argument is the repository path.
     var onNewWorktreeInRepository: ((String) -> Void)?
+    /// Fired as the filter field's text changes (continuous). Argument is the new filter text.
+    var onFilterChange: ((String) -> Void)?
 
     private let outlineView = NSOutlineView()
     private let scrollView = NSScrollView()
     private let emptyState = NSStackView()
+    private let emptyStateLabel = NSTextField(labelWithString: "リポジトリが未登録です")
+    private var emptyStateButton: NSButton?
+    private let searchField = NSSearchField()
     private var viewModel = SidebarViewModel(repositories: [], worktrees: [], sessions: [])
 
     // NSOutlineView manages items by reference identity, so the tree is converted into class nodes and retained.
@@ -63,16 +68,29 @@ final class SidebarViewController: NSViewController {
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
 
-        // Empty-state guide (no repositories registered).
+        // Filter field (design: docs/design/sidebar-state-view.md §3.1). "/" focuses it
+        // while the sidebar has focus; Esc clears it. It compresses first when the
+        // sidebar gets narrow.
+        searchField.placeholderString = "絞り込み"
+        searchField.controlSize = .small
+        searchField.font = .systemFont(ofSize: 11)
+        searchField.delegate = self
+        searchField.sendsSearchStringImmediately = true
+        searchField.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        let header = NSStackView(views: [searchField])
+        header.orientation = .horizontal
+        header.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 6, right: 10)
+
+        // Empty-state guide (no repositories registered / no filter match).
         emptyState.orientation = .vertical
         emptyState.alignment = .centerX
         emptyState.spacing = 8
-        let emptyLabel = NSTextField(labelWithString: "リポジトリが未登録です")
-        emptyLabel.textColor = .secondaryLabelColor
-        emptyLabel.font = .systemFont(ofSize: 12)
+        emptyStateLabel.textColor = .secondaryLabelColor
+        emptyStateLabel.font = .systemFont(ofSize: 12)
         let emptyButton = NSButton(title: "リポジトリを追加…", target: self, action: #selector(didTapAddRepository))
         emptyButton.bezelStyle = .rounded
-        emptyState.addArrangedSubview(emptyLabel)
+        emptyStateButton = emptyButton
+        emptyState.addArrangedSubview(emptyStateLabel)
         emptyState.addArrangedSubview(emptyButton)
         emptyState.isHidden = true
 
@@ -90,18 +108,27 @@ final class SidebarViewController: NSViewController {
         let separator = NSBox()
         separator.boxType = .separator
 
-        let container = NSStackView()
+        let container = SlashKeyStackView()
+        // "/" anywhere in the sidebar (e.g. while the outline view has focus) jumps to the
+        // filter field. Handled in keyDown so it only fires when the key actually reaches
+        // the sidebar's responder chain — typing "/" inside the field itself is unaffected.
+        container.onSlashKey = { [weak self] in
+            guard let self else { return false }
+            return self.view.window?.makeFirstResponder(self.searchField) ?? false
+        }
         container.orientation = .vertical
         container.spacing = 0
         // A vertical stack's default alignment is centerX, which would center the whole
         // footer block. Stretch all children to full width; left-aligning the rows happens
         // inside actionBar (per the UI mock).
         container.alignment = .leading
+        container.addArrangedSubview(header)
         container.addArrangedSubview(scrollView)
         container.addArrangedSubview(separator)
         container.addArrangedSubview(actionBar)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
+            header.widthAnchor.constraint(equalTo: container.widthAnchor),
             scrollView.widthAnchor.constraint(equalTo: container.widthAnchor),
             separator.widthAnchor.constraint(equalTo: container.widthAnchor),
             actionBar.widthAnchor.constraint(equalTo: container.widthAnchor),
@@ -148,14 +175,26 @@ final class SidebarViewController: NSViewController {
     @objc private func didTapShowPalette() { onShowPalette?() }
 
     func set(viewModel: SidebarViewModel) {
+        // Write the model's filter text back into the field, but never clobber live
+        // editing: skip when the values already match, and skip while the field is
+        // composing text with an IME (marked text) — this method also runs on the
+        // periodic auto-refresh, which must not destroy in-progress Japanese input.
+        let isComposing = (searchField.currentEditor() as? NSTextView)?.hasMarkedText() ?? false
+        if searchField.stringValue != viewModel.filterText, !isComposing {
+            searchField.stringValue = viewModel.filterText
+        }
+
         // Don't rebuild the tree for a selection-only redraw (reloadData discards expansion
         // state, and a synchronous reload during a row-click delegate notification easily
-        // corrupts NSOutlineView's state). If the tree contents (repository/worktree
-        // composition and state) are identical to last time, just sync the selection
-        // highlight and return.
-        let treeUnchanged = viewModel.repositories == self.viewModel.repositories
+        // corrupts NSOutlineView's state). If the visible tree contents (filtered
+        // repository/worktree composition and state) are identical to last time, just sync
+        // the selection highlight and return. The gate and the rootNodes mapping below must
+        // use the same (filtered) tree — comparing one and rendering the other breaks
+        // change detection.
+        let filtered = viewModel.filteredRepositories
+        let treeUnchanged = filtered == self.viewModel.filteredRepositories
         self.viewModel = viewModel
-        emptyState.isHidden = !viewModel.repositories.isEmpty
+        updateEmptyState(filtered: filtered)
         if treeUnchanged {
             syncSelection()
             return
@@ -168,7 +207,7 @@ final class SidebarViewController: NSViewController {
         // up, so take a snapshot every time. Newly appearing rows default to expanded.)
         let collapsedIDs = snapshotCollapsedIDs()
 
-        rootNodes = viewModel.repositories.map { repo in
+        rootNodes = filtered.map { repo in
             Node(kind: .repository(repo), children: repo.worktrees.map { wt in
                 Node(kind: .worktree(wt))
             })
@@ -176,6 +215,22 @@ final class SidebarViewController: NSViewController {
         outlineView.reloadData()
         restoreExpansion(collapsedIDs: collapsedIDs)
         syncSelection()
+    }
+
+    /// Empty state doubles as "no repositories registered" (with the add button) and
+    /// "filter matched nothing" (message only).
+    private func updateEmptyState(filtered: [RepositoryNode]) {
+        if viewModel.repositories.isEmpty {
+            emptyStateLabel.stringValue = "リポジトリが未登録です"
+            emptyStateButton?.isHidden = false
+            emptyState.isHidden = false
+        } else if filtered.isEmpty {
+            emptyStateLabel.stringValue = "該当なし"
+            emptyStateButton?.isHidden = true
+            emptyState.isHidden = false
+        } else {
+            emptyState.isHidden = true
+        }
     }
 
     /// Collect the IDs of collapsed repository rows from the current tree (rootNodes before
@@ -267,9 +322,14 @@ extension SidebarViewController: NSOutlineViewDelegate {
             let title = label(repo.repository.name, size: 11, weight: .bold)
             stack.addArrangedSubview(title)
             stack.addArrangedSubview(spacer())
-            let waiting = repo.waitingSessionCount
-            if waiting > 0 {
-                stack.addArrangedSubview(badge("\(waiting)"))
+            let summary = repo.stateSummary
+            if summary.waitingInput > 0 {
+                stack.addArrangedSubview(badge("\(summary.waitingInput)"))
+            }
+            // While collapsed, the worktree rows' state dots are invisible, so also roll
+            // up the busy count (waiting stays always-on as the higher-priority signal).
+            if summary.busy > 0, !outlineView.isItemExpanded(node) {
+                stack.addArrangedSubview(badge("\(summary.busy)", color: .systemOrange))
             }
             // The "＋" to add a worktree to this repository (always shown; makes the creation target explicit).
             stack.addArrangedSubview(addWorktreeButton(repositoryPath: repo.repository.path))
@@ -418,14 +478,14 @@ extension SidebarViewController: NSOutlineViewDelegate {
         onNewWorktreeInRepository?(path)
     }
 
-    /// Badge with the waiting count (blue pill). Equivalent to the UI mock's .badge.
-    private func badge(_ text: String) -> NSView {
+    /// Count badge pill (blue = waiting, orange = busy). Equivalent to the UI mock's .badge.
+    private func badge(_ text: String, color: NSColor = .systemBlue) -> NSView {
         let field = NSTextField(labelWithString: text)
         field.font = .boldSystemFont(ofSize: 9)
         field.textColor = .white
         field.alignment = .center
         field.wantsLayer = true
-        field.layer?.backgroundColor = NSColor.systemBlue.cgColor
+        field.layer?.backgroundColor = color.cgColor
         field.layer?.cornerRadius = 7
         field.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -485,6 +545,53 @@ extension SidebarViewController: NSOutlineViewDelegate {
             rowView.drawsTopSeparator = true
         }
         return rowView
+    }
+
+    // The repository row's busy badge is collapsed-only, so re-render the row when its
+    // expansion state flips (the cell is not rebuilt automatically).
+    func outlineViewItemDidExpand(_ notification: Notification) {
+        reloadBadgeRow(from: notification)
+    }
+
+    func outlineViewItemDidCollapse(_ notification: Notification) {
+        reloadBadgeRow(from: notification)
+    }
+
+    private func reloadBadgeRow(from notification: Notification) {
+        guard let node = notification.userInfo?["NSObject"] as? Node else { return }
+        outlineView.reloadItem(node, reloadChildren: false)
+    }
+}
+
+extension SidebarViewController: NSSearchFieldDelegate {
+    func controlTextDidChange(_ notification: Notification) {
+        onFilterChange?(searchField.stringValue)
+    }
+
+    /// Esc in the filter field: clear it and hand focus back to the tree.
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        guard selector == #selector(NSResponder.cancelOperation(_:)) else { return false }
+        searchField.stringValue = ""
+        onFilterChange?("")
+        view.window?.makeFirstResponder(outlineView)
+        return true
+    }
+}
+
+/// Sidebar container that turns a bare "/" key press (reaching the sidebar's responder
+/// chain, e.g. while the outline view has focus) into "focus the filter field". Key events
+/// consumed by a focused text field never get here, so typing "/" into the filter itself
+/// (branch names like feature/foo) is unaffected.
+private final class SlashKeyStackView: NSStackView {
+    var onSlashKey: (() -> Bool)?
+
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == "/",
+           event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
+           onSlashKey?() == true {
+            return
+        }
+        super.keyDown(with: event)
     }
 }
 

@@ -59,6 +59,11 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         sidebar.onSelectWorktree = { [weak self] worktreePath in
             self?.selectWorktree(worktreePath)
         }
+        sidebar.onFilterChange = { [weak self] text in
+            guard let self else { return }
+            self.appModel.setSidebarFilter(text)
+            self.render()
+        }
         sidebar.onAddRepository = { [weak self] in self?.addRepository(nil) }
         sidebar.onNewWorktree = { [weak self] in self?.newWorktree(nil) }
         sidebar.onNewSession = { [weak self] in self?.newSession(nil) }

@@ -1,0 +1,58 @@
+# Implementation Note: Sidebar Filter (A) + State Lane View (E)
+
+Working log for the design phase. Updated as work progresses.
+Design reference: https://claude.ai/code/artifact/83ddb620-188e-45a4-879b-6ec7746179ca
+
+## Status
+
+- [x] Kickoff (2026-07-12)
+- [x] Codebase research (parallel agents)
+- [x] Design document draft (`docs/design/sidebar-state-view.md`)
+- [x] Adversarial review (multi-perspective) + revisions
+- [x] Final design ready for implementation issues
+
+## Decisions (tentative — flagged for user confirmation, not blocking)
+
+| Topic | Tentative decision | Confidence |
+| --- | --- | --- |
+| View toggle shortcut | ⌘⌥V (check for conflicts during research) | needs user confirmation |
+| Idle lane default | collapsed (not hidden) | needs user confirmation |
+| State view granularity | per-session | high |
+| Repo headers inside lanes | none (flat; repo shown inside card) | high |
+| Filter scope | shared across both view modes | high |
+| Empty lanes | removed entirely | high |
+| Lane order within lane | most recent stateChangedAt first | high |
+
+## Progress log
+
+- 2026-07-12: Note created. Launching research agents (sidebar UI, AppModel/state flow, keyboard shortcuts/persistence).
+- 2026-07-12: Sidebar UI research done. Key findings:
+  - **The sidebar has NO session rows** — sessions were removed in the tab redesign; worktree rows roll up session states as dots (`stateDot(for:)`, SidebarViewController.swift:379). The artifact's mocks showing session rows in the tree are outdated. Impacts E: lane cards at session granularity are *new* UI, not a rearrangement; also A's filter targets are repo/worktree names (+ maybe session names without visible rows — needs a decision).
+  - Reload policy: `set(viewModel:)` skips `reloadData()` when `repositories` unchanged (Equatable, L156); collapse state snapshot/restore is session-volatile, no persistence.
+  - Insertion point for filter field + view toggle: `loadView()` container stack, just before scrollView (L100); needs explicit width anchor (container alignment is .leading).
+  - E recommendation from research: do NOT extend NSOutlineView; add an independent lane subview (NSStackView or sectioned NSTableView) toggled via `isHidden`, fed from existing `flattenedSessions`. Selection propagation can reuse `select(sessionID:)` (worktree follows session).
+  - waiting badge (`badge()`, L422) and StatusBarView's `stateSummary` usage already cover much of A's badge aggregation.
+- 2026-07-12: AppModel + shortcuts research done. Key findings:
+  - `rebuildSidebar()` (AppModel.swift:208) is the single rebuild point; carried-over state is exactly `selectedSessionID` / `selectedWorktreePath` / `activeSessionByWorktree`. Filter text & view mode should follow the same carry-over pattern; known pitfall = forgetting to carry over on init.
+  - No UserDefaults anywhere; persistence is JSON config (`~/.config/viterm/config.json`, `RepositoryConfigPersisting` as the protocol precedent). View mode persistence → new config field + persister protocol.
+  - **⌘⌥V conflict**: `GhosttySurfaceView.performKeyEquivalent` (L354) intercepts ⌘V checking only `.command`, ignoring `.option` — ⌘⌥V would paste into the terminal instead. Either guard `.option` there (correct fix regardless) or pick alternative (⌘⇧O / ⌘.). Tentative: fix the guard AND use ⌘⌥V.
+  - Focus-scoped key precedent: PalettePanel's NSSearchField + `doCommandBy` (moveUp/moveDown/cancelOperation). Sidebar has no keyDown override today; `/`-to-focus needs a container-level performKeyEquivalent scoped to sidebar focus — new pattern.
+  - `SessionStateSummary` + `WorktreeNode.dominantState` already exist and cover badge/lane math. Tests: Swift Testing, Japanese test names, `makeFixture()` style.
+- 2026-07-12: All research complete → drafting `docs/design/sidebar-state-view.md`.
+- 2026-07-12: Draft complete. Adversarial review started (2 parallel: correctness-vs-code / AppKit+UX).
+- 2026-07-12: AppKit+UX review returned. Findings to fold in (pending correctness review):
+  - **C1** Model→field write-back unspecified; naive `stringValue` sync during 30s auto-refresh destroys IME marked text. Fix: spec a "set(viewModel:) must not clobber live editing" contract (skip when `hasMarkedText`, skip when equal).
+  - **C2** `/`-focus override would swallow "/" typed *into* the search field (performKeyEquivalent is offered to all subviews regardless of first responder — confirmed via GhosttySurfaceView precedent). Branch names like `feature/foo` hit this constantly. Fix: guard must exclude the search field itself being first responder.
+  - **M1** The reload gate (L156) and `rootNodes` mapping (L171) must switch to `filteredRepositories` *together*; spec as an explicit pair.
+  - **M2** Lane re-sort on every state change → cards jump under the cursor; add known-issue note + mitigation option (short re-sort suppression after interaction), or explicitly defer as P2.
+  - **M3** Narrow-sidebar header layout: search field compresses first; segmented control keeps fixed size. Specify priorities.
+  - **m1** Esc: note PalettePanel modality assumption. **m2** All-idle case renders a nearly empty list; add empty-state line (e.g. 「待機中・作業中のセッションはありません」).
+- 2026-07-12: Correctness review (vs. actual code) returned. Verified findings applied:
+  - **C1** `AgentSessionState` doesn't exist → `AgentSession.State` (nested enum). Fixed in §1.2.
+  - **C2** `SessionStateSummary` / `dominantState` are existing helpers; lanes read per-session state directly, counts reuse the summary. Clarified.
+  - **C3** "AccentBarRowView doesn't exist" — **false positive**; verified by grep: SidebarViewController.swift:575. Rejected, no change.
+  - **C4** `toggleSidebar2` is single-view isHidden only; two-view exclusive swap is new code. Wording fixed.
+  - **C5** Config write-back must be read-modify-write (re-decode → set one field → re-encode), never a stale snapshot. Added to §2.3.
+  - **C6** "issue #14 doesn't exist" — reviewer searched code only; it exists on GitHub (config hot-reload). Reworded as future-feature compatibility.
+  - **M1** Scroll position across filter reloads: explicitly accepted as not preserved (open question). **M2** Structural carry-over protection: added `rebuilt(...)` helper so carried fields have one home. **M3** `badge(_:)` is a generic pill helper; call sites extended. **M4** Synthesized `==` includes filterText — noted. Minor line-number corrections applied.
+- 2026-07-12: All UX findings (C1 IME write-back contract, C2 `/`-swallow guard, M1 paired-line switch, M2 lane-churn known issue, M3 narrow-header priorities, m1/m2) folded into §3.1–3.3. **Design finalized.** Next: implementation issues (plan in §5), user confirmations still pending: toggle shortcut ⌘⌥V (needs real-device check vs libghostty), idle-lane default (collapsed).

@@ -23,6 +23,9 @@ public struct SidebarViewModel: Sendable, Equatable {
     public private(set) var selectedWorktreePath: String?
     /// Last active session per worktree. Remembered so returning to a worktree restores the same tab.
     public private(set) var activeSessionByWorktree: [String: AgentSession.ID]
+    /// Incremental filter over the tree (repo / branch / session names). Empty = no filtering.
+    /// Ephemeral UI state: carried across rebuilds via `rebuilt(...)`, never persisted.
+    public private(set) var filterText: String
 
     /// - Parameters:
     ///   - repositories: Repositories shown in the sidebar. The order of this array is the display order.
@@ -35,18 +38,40 @@ public struct SidebarViewModel: Sendable, Equatable {
     ///   - selectedWorktreePath: Initially selected worktree. Passing a path not in the tree
     ///     is fine (`selectedWorktree` returns `nil`).
     ///   - activeSessionByWorktree: The per-worktree last-active-session memory from before the rebuild.
+    ///   - filterText: The incremental filter text from before the rebuild.
     public init(
         repositories: [Repository],
         worktrees: [Worktree],
         sessions: [AgentSession],
         selectedSessionID: AgentSession.ID? = nil,
         selectedWorktreePath: String? = nil,
-        activeSessionByWorktree: [String: AgentSession.ID] = [:]
+        activeSessionByWorktree: [String: AgentSession.ID] = [:],
+        filterText: String = ""
     ) {
         self.repositories = Self.buildTree(repositories: repositories, worktrees: worktrees, sessions: sessions)
         self.selectedSessionID = selectedSessionID
         self.selectedWorktreePath = selectedWorktreePath
         self.activeSessionByWorktree = activeSessionByWorktree
+        self.filterText = filterText
+    }
+
+    /// Rebuild the tree from fresh source data, carrying over every piece of UI state
+    /// (selection, per-worktree memory, filter). `AppModel.rebuildSidebar()` must use this
+    /// instead of `init` so that newly added UI-state fields have exactly one carry-over spot.
+    public func rebuilt(
+        repositories: [Repository],
+        worktrees: [Worktree],
+        sessions: [AgentSession]
+    ) -> SidebarViewModel {
+        SidebarViewModel(
+            repositories: repositories,
+            worktrees: worktrees,
+            sessions: sessions,
+            selectedSessionID: selectedSessionID,
+            selectedWorktreePath: selectedWorktreePath,
+            activeSessionByWorktree: activeSessionByWorktree,
+            filterText: filterText
+        )
     }
 
     private static func buildTree(
@@ -69,6 +94,40 @@ public struct SidebarViewModel: Sendable, Equatable {
                 return WorktreeNode(worktree: worktree, sessions: childSessions)
             }
             return RepositoryNode(repository: repository, worktrees: childWorktrees)
+        }
+    }
+
+    // MARK: - Filtering
+
+    /// Set the incremental filter text. Filtering only affects the derived
+    /// `filteredRepositories`; selection is never cleared by filtering.
+    public mutating func setFilterText(_ text: String) {
+        filterText = text
+    }
+
+    /// The tree narrowed by `filterText` (case-insensitive substring match against
+    /// repository name, worktree branch name, and session display name).
+    ///
+    /// Matching keeps ancestors: a matching repository keeps all its worktrees; a
+    /// matching worktree (or a worktree containing a matching session) is kept with all
+    /// its sessions. Session names are filterable even though the tree shows no session
+    /// rows — the match keeps the owning worktree visible.
+    /// Empty filter returns `repositories` unchanged (fast path).
+    public var filteredRepositories: [RepositoryNode] {
+        let needle = filterText.trimmingCharacters(in: .whitespaces)
+        guard !needle.isEmpty else { return repositories }
+        return repositories.compactMap { repository in
+            if repository.repository.name.localizedCaseInsensitiveContains(needle) {
+                return repository
+            }
+            let worktrees = repository.worktrees.filter { worktree in
+                worktree.worktree.branch.localizedCaseInsensitiveContains(needle)
+                    || worktree.sessions.contains { $0.session.displayName.localizedCaseInsensitiveContains(needle) }
+            }
+            guard !worktrees.isEmpty else { return nil }
+            var narrowed = repository
+            narrowed.worktrees = worktrees
+            return narrowed
         }
     }
 

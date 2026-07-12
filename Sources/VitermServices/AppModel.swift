@@ -206,17 +206,18 @@ public final class AppModel {
     }
 
     private func rebuildSidebar() {
-        let previousSessionSelection = sidebar.selectedSessionID
-        let previousWorktreeSelection = sidebar.selectedWorktreePath
-        let previousActiveByWorktree = sidebar.activeSessionByWorktree
-        sidebar = SidebarViewModel(
+        // `rebuilt(...)` carries over all UI state (selection, per-worktree memory, filter)
+        // in one place; adding a new carried field must not require touching this call site.
+        sidebar = sidebar.rebuilt(
             repositories: repositories,
             worktrees: worktrees,
-            sessions: sessions,
-            selectedSessionID: previousSessionSelection,
-            selectedWorktreePath: previousWorktreeSelection,
-            activeSessionByWorktree: previousActiveByWorktree
+            sessions: sessions
         )
+    }
+
+    /// Update the sidebar's incremental filter text.
+    public func setSidebarFilter(_ text: String) {
+        sidebar.setFilterText(text)
     }
 
     // MARK: - PaletteAction dispatch

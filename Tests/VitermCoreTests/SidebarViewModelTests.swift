@@ -398,4 +398,116 @@ struct SidebarViewModelTests {
         #expect(viewModel.selectedSession?.session.displayName == "claude #2")
         #expect(viewModel.activeSessionByWorktree["/wt/viterm/feat-sidebar"] == viewModel.selectedSessionID)
     }
+
+    // MARK: - Filtering
+
+    @Test("空フィルタはツリーをそのまま返す")
+    func emptyFilterReturnsFullTree() {
+        let fixture = makeFixture()
+        let viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+
+        #expect(viewModel.filteredRepositories == viewModel.repositories)
+    }
+
+    @Test("リポジトリ名の一致はworktreeをすべて残す")
+    func repositoryMatchKeepsAllWorktrees() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.setFilterText("viterm")
+
+        let filtered = viewModel.filteredRepositories
+        #expect(filtered.map(\.repository.name) == ["viterm"])
+        #expect(filtered[0].worktrees.map(\.worktree.branch) == ["main", "feat/sidebar"])
+    }
+
+    @Test("ブランチ名の一致は祖先リポジトリを残し、他のworktreeは隠す")
+    func branchMatchKeepsAncestorRepository() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.setFilterText("feat/side")
+
+        let filtered = viewModel.filteredRepositories
+        #expect(filtered.map(\.repository.name) == ["viterm"])
+        #expect(filtered[0].worktrees.map(\.worktree.branch) == ["feat/sidebar"])
+        // Sessions under a matching worktree are all kept.
+        #expect(filtered[0].worktrees[0].sessions.count == 3)
+    }
+
+    @Test("セッション名の一致は所属worktreeを残す(ツリーにセッション行はなくても可視性を保つ)")
+    func sessionMatchKeepsOwningWorktree() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.setFilterText("codex")
+
+        let filtered = viewModel.filteredRepositories
+        #expect(filtered.map(\.repository.name) == ["viterm"])
+        #expect(filtered[0].worktrees.map(\.worktree.branch) == ["feat/sidebar"])
+    }
+
+    @Test("フィルタは大文字小文字を区別しない")
+    func filterIsCaseInsensitive() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.setFilterText("VITERM")
+
+        #expect(viewModel.filteredRepositories.map(\.repository.name) == ["viterm"])
+    }
+
+    @Test("どこにも一致しないフィルタは空配列を返す")
+    func noMatchYieldsEmptyArray() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.setFilterText("zzz-no-match")
+
+        #expect(viewModel.filteredRepositories.isEmpty)
+    }
+
+    @Test("フィルタで選択が隠れても選択状態はクリアされない")
+    func filteringDoesNotClearSelection() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.selectWorktree("/wt/viterm/feat-sidebar")
+        let selectedSession = viewModel.selectedSessionID
+
+        viewModel.setFilterText("webapp") // hides the selected worktree
+
+        #expect(viewModel.filteredRepositories.map(\.repository.name) == ["webapp"])
+        #expect(viewModel.selectedWorktreePath == "/wt/viterm/feat-sidebar")
+        #expect(viewModel.selectedSessionID == selectedSession)
+    }
+
+    @Test("rebuiltは選択・worktree記憶・フィルタをすべて引き継ぐ")
+    func rebuiltCarriesOverAllUIState() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.selectWorktree("/wt/viterm/feat-sidebar")
+        viewModel.setFilterText("claude")
+
+        let rebuilt = viewModel.rebuilt(
+            repositories: fixture.repos,
+            worktrees: fixture.worktrees,
+            sessions: fixture.sessions
+        )
+
+        #expect(rebuilt.filterText == "claude")
+        #expect(rebuilt.selectedWorktreePath == viewModel.selectedWorktreePath)
+        #expect(rebuilt.selectedSessionID == viewModel.selectedSessionID)
+        #expect(rebuilt.activeSessionByWorktree == viewModel.activeSessionByWorktree)
+    }
+
+    @Test("リポジトリ単位の状態集計はworktree横断で数える")
+    func repositoryStateSummaryAggregatesAcrossWorktrees() {
+        let fixture = makeFixture()
+        let viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+
+        let viterm = viewModel.repositories[0].stateSummary
+        #expect(viterm.busy == 1)
+        #expect(viterm.waitingInput == 1)
+        #expect(viterm.idle == 2)
+
+        let webapp = viewModel.repositories[1].stateSummary
+        #expect(webapp.busy == 1)
+        #expect(webapp.waitingInput == 0)
+        #expect(webapp.idle == 0)
+    }
 }

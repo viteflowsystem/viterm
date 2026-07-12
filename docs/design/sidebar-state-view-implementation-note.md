@@ -15,7 +15,7 @@ Design reference: https://claude.ai/code/artifact/83ddb620-188e-45a4-879b-6ec774
 
 | Topic | Tentative decision | Confidence |
 | --- | --- | --- |
-| View toggle shortcut | ⌘⌥V (check for conflicts during research) | needs user confirmation |
+| View toggle shortcut | **decided**: Cmd+B = tree⇄state, Cmd+Shift+B = show/hide (user, 2026-07-12) | done |
 | Idle lane default | collapsed (not hidden) | needs user confirmation |
 | State view granularity | per-session | high |
 | Repo headers inside lanes | none (flat; repo shown inside card) | high |
@@ -55,4 +55,5 @@ Design reference: https://claude.ai/code/artifact/83ddb620-188e-45a4-879b-6ec774
   - **C5** Config write-back must be read-modify-write (re-decode → set one field → re-encode), never a stale snapshot. Added to §2.3.
   - **C6** "issue #14 doesn't exist" — reviewer searched code only; it exists on GitHub (config hot-reload). Reworded as future-feature compatibility.
   - **M1** Scroll position across filter reloads: explicitly accepted as not preserved (open question). **M2** Structural carry-over protection: added `rebuilt(...)` helper so carried fields have one home. **M3** `badge(_:)` is a generic pill helper; call sites extended. **M4** Synthesized `==` includes filterText — noted. Minor line-number corrections applied.
+- 2026-07-12: Shortcut decided with the user: **Cmd+B = tree⇄state toggle** (reveals sidebar if hidden), **Cmd+Shift+B = sidebar show/hide** (reassigned). User also reported the existing hide is broken — `toggleSidebar2` flips `isHidden` only, leaving the NSSplitView pane area; verified in code (MainWindowController.swift:474, sidebar is an arrangedSubview at L218). Collapse fix bundled into the design (§3.4).
 - 2026-07-12: All UX findings (C1 IME write-back contract, C2 `/`-swallow guard, M1 paired-line switch, M2 lane-churn known issue, M3 narrow-header priorities, m1/m2) folded into §3.1–3.3. **Design finalized.** Next: implementation issues (plan in §5), user confirmations still pending: toggle shortcut ⌘⌥V (needs real-device check vs libghostty), idle-lane default (collapsed).

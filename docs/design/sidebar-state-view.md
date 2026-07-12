@@ -267,14 +267,28 @@ view, width pinned to the clip view.)
 
 ### 3.4 View menu + shortcut
 
-Menu item under 表示 (View): 「サイドバーを状態別に表示」, toggling
-tree ⇄ state. Shortcut **⌘⌥V**, plus a required guard fix:
-`GhosttySurfaceView.performKeyEquivalent` (GhosttySurfaceView.swift:354-365)
-currently intercepts ⌘V checking only `.command`; add
-`!event.modifierFlags.contains(.option)` so ⌘⌥V is not swallowed as a terminal
-paste. (This guard is a correctness fix independent of this feature.)
-Fallback if real-device testing still shows interference (libghostty core
-keybindings): ⌘⇧O.
+Shortcuts (decided with the user, 2026-07-12):
+
+- **Cmd+B** — toggle tree ⇄ state view (menu: 「サイドバーを状態別に表示」).
+  Reassigned from its current binding (sidebar show/hide, main.swift:124).
+  If the sidebar is hidden when pressed, reveal it first.
+- **Cmd+Shift+B** — show/hide the sidebar (menu: 「サイドバー表示切替」),
+  taking over `toggleSidebar2`.
+
+**Bug fix bundled with the reassignment:** `toggleSidebar2`
+(MainWindowController.swift:474) only flips `sidebar.view.isHidden`; the
+sidebar is an arranged subview of a plain `NSSplitView`
+(MainWindowController.swift:218), so the divider and pane width remain — the
+content disappears but the empty area stays. Fix: on hide, remember the
+current width and set the divider position to 0 (collapse); on show, restore
+the remembered width (`splitView.autosaveName = "viterm.sidebar"` already
+persists positions).
+
+Independent correctness fix, kept in scope:
+`GhosttySurfaceView.performKeyEquivalent`
+(Sources/VitermApp/Ghostty/GhosttySurfaceView.swift:354-366) intercepts ⌘V
+checking only `.command`, so any modified paste combo (⌘⌥V etc.) is swallowed
+as a plain terminal paste; add a guard for extra modifiers.
 
 ### 3.5 Status bar interaction
 
@@ -323,7 +337,7 @@ Each step lands independently; 1 ships value alone.
 
 | Question | Tentative | Notes |
 | --- | --- | --- |
-| Toggle shortcut | ⌘⌥V + Ghostty guard fix | fallback ⌘⇧O; needs real-device check |
+| Toggle shortcut | **decided**: Cmd+B (view toggle) / Cmd+Shift+B (show/hide) | user decision 2026-07-12; includes collapse bug fix |
 | Idle lane default | collapsed | user preference pending |
 | Repo badges when expanded | show only when collapsed | waiting badge stays always-on as today |
 | Keyboard nav under filter | operates on full tree | follow-up: constrain to filtered nodes |

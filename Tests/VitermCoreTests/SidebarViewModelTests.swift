@@ -510,4 +510,64 @@ struct SidebarViewModelTests {
         #expect(webapp.waitingInput == 0)
         #expect(webapp.idle == 0)
     }
+
+    // MARK: - State lanes
+
+    @Test("stateLanesは状態別にセッションをグルーピングし非正規化する")
+    func stateLanesGroupSessionsByState() {
+        let fixture = makeFixture()
+        let viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+
+        let lanes = viewModel.stateLanes
+        #expect(lanes.waiting.map(\.sessionName) == ["claude #2"])
+        #expect(lanes.busy.map(\.sessionName) == ["claude #1", "claude #1"])
+        #expect(lanes.idle.map(\.sessionName) == ["zsh", "codex #1"])
+
+        let waiting = lanes.waiting[0]
+        #expect(waiting.repositoryName == "viterm")
+        #expect(waiting.branch == "feat/sidebar")
+        #expect(waiting.worktreePath == "/wt/viterm/feat-sidebar")
+        #expect(waiting.state == .waitingInput)
+    }
+
+    @Test("レーン内はstateChangedAtの新しい順、nilは最後、同時刻は表示順")
+    func laneOrdersByStateChangedAtDescending() {
+        let repo = Repository(name: "r", path: "/repo/r")
+        let wt = Worktree(path: "/repo/r", repositoryPath: repo.path, branch: "main")
+        let old = AgentSession(worktreePath: wt.path, presetName: "claude", displayName: "old", state: .waitingInput, stateChangedAt: t0)
+        let new = AgentSession(worktreePath: wt.path, presetName: "claude", displayName: "new", state: .waitingInput, stateChangedAt: t0.addingTimeInterval(60))
+        let unknownA = AgentSession(worktreePath: wt.path, presetName: "claude", displayName: "unknownA", state: .waitingInput)
+        let unknownB = AgentSession(worktreePath: wt.path, presetName: "claude", displayName: "unknownB", state: .waitingInput)
+
+        let viewModel = SidebarViewModel(repositories: [repo], worktrees: [wt], sessions: [unknownA, old, unknownB, new])
+
+        #expect(viewModel.stateLanes.waiting.map(\.sessionName) == ["new", "old", "unknownA", "unknownB"])
+    }
+
+    @Test("stateLanesはフィルタ済みツリーから導出される")
+    func stateLanesDeriveFromFilteredTree() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.setFilterText("webapp")
+
+        let lanes = viewModel.stateLanes
+        #expect(lanes.waiting.isEmpty)
+        #expect(lanes.busy.map(\.repositoryName) == ["webapp"])
+        #expect(lanes.idle.isEmpty)
+    }
+
+    @Test("rebuiltはdisplayModeも引き継ぐ")
+    func rebuiltCarriesOverDisplayMode() {
+        let fixture = makeFixture()
+        var viewModel = SidebarViewModel(repositories: fixture.repos, worktrees: fixture.worktrees, sessions: fixture.sessions)
+        viewModel.setDisplayMode(.state)
+
+        let rebuilt = viewModel.rebuilt(
+            repositories: fixture.repos,
+            worktrees: fixture.worktrees,
+            sessions: fixture.sessions
+        )
+
+        #expect(rebuilt.displayMode == .state)
+    }
 }

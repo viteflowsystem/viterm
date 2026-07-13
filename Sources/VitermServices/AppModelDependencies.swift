@@ -19,6 +19,11 @@ public protocol RepositoryConfigPersisting: Sendable {
     func persist(repositories: [Repository]) throws
 }
 
+/// Abstraction over persisting sidebar UI preferences (display mode) to the global config.
+public protocol SidebarPreferencePersisting: Sendable {
+    func persist(sidebarDisplayMode: SidebarDisplayMode) throws
+}
+
 /// Abstraction over auto-discovering git repositories under a root (wrapper around `RepositoryDiscovery`).
 public protocol RepositoryDiscovering: Sendable {
     func discover(rootDirectory: URL) -> [Repository]
@@ -108,6 +113,31 @@ public struct LiveRepositoryConfigPersister: RepositoryConfigPersisting {
         )
         var file = (try? ConfigLoader.loadFile(at: globalConfigURL)) ?? VitermConfigFile()
         file.repositories = repositories
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(file)
+        try data.write(to: globalConfigURL, options: .atomic)
+    }
+}
+
+/// Default implementation that re-reads the global config file and overwrites only its
+/// `sidebarDisplayMode` field (read-modify-write; other fields, including ones the user
+/// edited by hand since the app launched, are preserved).
+public struct LiveSidebarPreferencePersister: SidebarPreferencePersisting {
+    public var globalConfigURL: URL
+
+    public init(globalConfigURL: URL = ConfigLoader.defaultGlobalConfigURL()) {
+        self.globalConfigURL = globalConfigURL
+    }
+
+    public func persist(sidebarDisplayMode: SidebarDisplayMode) throws {
+        try FileManager.default.createDirectory(
+            at: globalConfigURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        var file = (try? ConfigLoader.loadFile(at: globalConfigURL)) ?? VitermConfigFile()
+        file.sidebarDisplayMode = sidebarDisplayMode.rawValue
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

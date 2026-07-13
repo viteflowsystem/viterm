@@ -26,6 +26,9 @@ public struct SidebarViewModel: Sendable, Equatable {
     /// Incremental filter over the tree (repo / branch / session names). Empty = no filtering.
     /// Ephemeral UI state: carried across rebuilds via `rebuilt(...)`, never persisted.
     public private(set) var filterText: String
+    /// Which body the sidebar shows (tree / state lanes). Carried across rebuilds via
+    /// `rebuilt(...)`; persisted to the global config by `AppModel`.
+    public private(set) var displayMode: SidebarDisplayMode
 
     /// - Parameters:
     ///   - repositories: Repositories shown in the sidebar. The order of this array is the display order.
@@ -39,6 +42,7 @@ public struct SidebarViewModel: Sendable, Equatable {
     ///     is fine (`selectedWorktree` returns `nil`).
     ///   - activeSessionByWorktree: The per-worktree last-active-session memory from before the rebuild.
     ///   - filterText: The incremental filter text from before the rebuild.
+    ///   - displayMode: The sidebar body mode (tree / state lanes) from before the rebuild.
     public init(
         repositories: [Repository],
         worktrees: [Worktree],
@@ -46,13 +50,15 @@ public struct SidebarViewModel: Sendable, Equatable {
         selectedSessionID: AgentSession.ID? = nil,
         selectedWorktreePath: String? = nil,
         activeSessionByWorktree: [String: AgentSession.ID] = [:],
-        filterText: String = ""
+        filterText: String = "",
+        displayMode: SidebarDisplayMode = .tree
     ) {
         self.repositories = Self.buildTree(repositories: repositories, worktrees: worktrees, sessions: sessions)
         self.selectedSessionID = selectedSessionID
         self.selectedWorktreePath = selectedWorktreePath
         self.activeSessionByWorktree = activeSessionByWorktree
         self.filterText = filterText
+        self.displayMode = displayMode
     }
 
     /// Rebuild the tree from fresh source data, carrying over every piece of UI state
@@ -70,7 +76,8 @@ public struct SidebarViewModel: Sendable, Equatable {
             selectedSessionID: selectedSessionID,
             selectedWorktreePath: selectedWorktreePath,
             activeSessionByWorktree: activeSessionByWorktree,
-            filterText: filterText
+            filterText: filterText,
+            displayMode: displayMode
         )
     }
 
@@ -129,6 +136,51 @@ public struct SidebarViewModel: Sendable, Equatable {
             narrowed.worktrees = worktrees
             return narrowed
         }
+    }
+
+    // MARK: - State lanes
+
+    /// Switch the sidebar body mode (tree / state lanes).
+    public mutating func setDisplayMode(_ mode: SidebarDisplayMode) {
+        displayMode = mode
+    }
+
+    /// Sessions grouped by state for the lane view, derived from the *filtered* tree
+    /// (the shared filter narrows both modes). Within each lane: newest `stateChangedAt`
+    /// first — consistent with the ⌘⇧U "latest waiting" semantics — with `nil` sorting
+    /// last and ties keeping display order.
+    public var stateLanes: SidebarStateLanes {
+        var cards: [StateLaneCard] = []
+        for repository in filteredRepositories {
+            for worktree in repository.worktrees {
+                for session in worktree.sessions {
+                    cards.append(StateLaneCard(
+                        id: session.id,
+                        sessionName: session.session.displayName,
+                        state: session.session.state,
+                        repositoryName: repository.repository.name,
+                        branch: worktree.worktree.branch,
+                        worktreePath: worktree.worktree.path,
+                        stateChangedAt: session.session.stateChangedAt
+                    ))
+                }
+            }
+        }
+        // Stable sort: `sorted(by:)` in Swift is not documented as stable, so sort an
+        // enumerated array with the display-order index as the explicit tiebreaker.
+        func laneSorted(_ lane: [StateLaneCard]) -> [StateLaneCard] {
+            lane.enumerated().sorted { lhs, rhs in
+                let lhsTime = lhs.element.stateChangedAt ?? .distantPast
+                let rhsTime = rhs.element.stateChangedAt ?? .distantPast
+                if lhsTime != rhsTime { return lhsTime > rhsTime }
+                return lhs.offset < rhs.offset
+            }.map(\.element)
+        }
+        return SidebarStateLanes(
+            waiting: laneSorted(cards.filter { $0.state == .waitingInput }),
+            busy: laneSorted(cards.filter { $0.state == .busy }),
+            idle: laneSorted(cards.filter { $0.state == .idle })
+        )
     }
 
     /// Sessions across all repositories and worktrees, in display order.

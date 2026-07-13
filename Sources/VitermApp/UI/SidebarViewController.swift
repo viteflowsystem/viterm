@@ -22,9 +22,15 @@ final class SidebarViewController: NSViewController {
     var onNewWorktreeInRepository: ((String) -> Void)?
     /// Fired as the filter field's text changes (continuous). Argument is the new filter text.
     var onFilterChange: ((String) -> Void)?
+    /// The header segmented control switched the body mode (tree / state lanes).
+    var onDisplayModeChange: ((SidebarDisplayMode) -> Void)?
+    /// A state-lane card was clicked; argument is the session ID.
+    var onSelectSession: ((AgentSession.ID) -> Void)?
 
     private let outlineView = NSOutlineView()
     private let scrollView = NSScrollView()
+    private let stateListView = SidebarStateListView()
+    private let modeControl = NSSegmentedControl()
     private let emptyState = NSStackView()
     private let emptyStateLabel = NSTextField(labelWithString: "リポジトリが未登録です")
     private var emptyStateButton: NSButton?
@@ -77,8 +83,30 @@ final class SidebarViewController: NSViewController {
         searchField.delegate = self
         searchField.sendsSearchStringImmediately = true
         searchField.setContentCompressionResistancePriority(.init(1), for: .horizontal)
-        let header = NSStackView(views: [searchField])
+
+        // Tree ⇄ state-lane toggle. The search field compresses first when the sidebar
+        // narrows; the segmented control keeps its fixed size.
+        modeControl.segmentCount = 2
+        modeControl.setImage(
+            NSImage(systemSymbolName: "list.bullet.indent", accessibilityDescription: "ツリー表示"),
+            forSegment: 0
+        )
+        modeControl.setImage(
+            NSImage(systemSymbolName: "circle.grid.2x1", accessibilityDescription: "状態別表示"),
+            forSegment: 1
+        )
+        modeControl.setToolTip("ツリー表示", forSegment: 0)
+        modeControl.setToolTip("状態別表示 (⌘B)", forSegment: 1)
+        modeControl.controlSize = .small
+        modeControl.selectedSegment = 0
+        modeControl.target = self
+        modeControl.action = #selector(didSwitchDisplayMode)
+        modeControl.setContentHuggingPriority(.required, for: .horizontal)
+        modeControl.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        let header = NSStackView(views: [searchField, modeControl])
         header.orientation = .horizontal
+        header.spacing = 6
         header.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 6, right: 10)
 
         // Empty-state guide (no repositories registered / no filter match).
@@ -124,12 +152,20 @@ final class SidebarViewController: NSViewController {
         container.alignment = .leading
         container.addArrangedSubview(header)
         container.addArrangedSubview(scrollView)
+        // The state-lane body is an exclusive sibling of the tree's scroll view;
+        // the mode toggle flips isHidden between the two.
+        stateListView.isHidden = true
+        stateListView.onSelectSession = { [weak self] sessionID in
+            self?.onSelectSession?(sessionID)
+        }
+        container.addArrangedSubview(stateListView)
         container.addArrangedSubview(separator)
         container.addArrangedSubview(actionBar)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             header.widthAnchor.constraint(equalTo: container.widthAnchor),
             scrollView.widthAnchor.constraint(equalTo: container.widthAnchor),
+            stateListView.widthAnchor.constraint(equalTo: container.widthAnchor),
             separator.widthAnchor.constraint(equalTo: container.widthAnchor),
             actionBar.widthAnchor.constraint(equalTo: container.widthAnchor),
         ])
@@ -169,6 +205,10 @@ final class SidebarViewController: NSViewController {
         return button
     }
 
+    @objc private func didSwitchDisplayMode() {
+        onDisplayModeChange?(modeControl.selectedSegment == 1 ? .state : .tree)
+    }
+
     @objc private func didTapAddRepository() { onAddRepository?() }
     @objc private func didTapNewWorktree() { onNewWorktree?() }
     @objc private func didTapNewSession() { onNewSession?() }
@@ -194,6 +234,14 @@ final class SidebarViewController: NSViewController {
         let filtered = viewModel.filteredRepositories
         let treeUnchanged = filtered == self.viewModel.filteredRepositories
         self.viewModel = viewModel
+
+        // Body mode: flip between the tree and the state lanes; keep the segment in sync.
+        let isStateMode = viewModel.displayMode == .state
+        scrollView.isHidden = isStateMode
+        stateListView.isHidden = !isStateMode
+        modeControl.selectedSegment = isStateMode ? 1 : 0
+        stateListView.set(lanes: viewModel.stateLanes, selectedSessionID: viewModel.selectedSessionID)
+
         updateEmptyState(filtered: filtered)
         if treeUnchanged {
             syncSelection()
@@ -220,6 +268,12 @@ final class SidebarViewController: NSViewController {
     /// Empty state doubles as "no repositories registered" (with the add button) and
     /// "filter matched nothing" (message only).
     private func updateEmptyState(filtered: [RepositoryNode]) {
+        // The lane view draws its own placeholder; the overlay is anchored to the tree's
+        // (hidden) scroll view and must not float over the lanes.
+        if viewModel.displayMode == .state {
+            emptyState.isHidden = true
+            return
+        }
         if viewModel.repositories.isEmpty {
             emptyStateLabel.stringValue = "リポジトリが未登録です"
             emptyStateButton?.isHidden = false

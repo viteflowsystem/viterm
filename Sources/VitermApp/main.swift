@@ -121,7 +121,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addRepo.target = controller
         viewMenu.addItem(addRepo)
         viewMenu.addItem(.separator())
-        let toggle = NSMenuItem(title: "サイドバー表示切替", action: #selector(MainWindowController.toggleSidebar2(_:)), keyEquivalent: "b")
+        // ⌘B switches the sidebar body (tree ⇄ state lanes); show/hide moved to ⌘⇧B
+        // (an uppercase keyEquivalent implies the Shift modifier).
+        let displayMode = NSMenuItem(title: "サイドバーを状態別に表示", action: #selector(MainWindowController.toggleSidebarDisplayMode(_:)), keyEquivalent: "b")
+        displayMode.target = controller
+        viewMenu.addItem(displayMode)
+        let toggle = NSMenuItem(title: "サイドバー表示切替", action: #selector(MainWindowController.toggleSidebar2(_:)), keyEquivalent: "B")
         toggle.target = controller
         viewMenu.addItem(toggle)
 

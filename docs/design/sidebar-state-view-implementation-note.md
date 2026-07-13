@@ -27,8 +27,22 @@ Design reference: https://claude.ai/code/artifact/83ddb620-188e-45a4-879b-6ec774
 
 - [x] Step 1 core (issue #2): filterText / filteredRepositories / RepositoryNode.stateSummary / rebuilt() carry-over + tests (commit fe92730)
 - [x] Step 1 UI: search field header, filtered rendering, collapsed busy badge, "/" & Esc, IME-safe write-back (commit 6b6035b). Verified on device: narrowing, 該当なし, Esc clear, selection retention, collapsed badge, slash focus. Note: clicking a worktree row moves focus to the terminal, so "/" is mainly useful right after Esc or when the tree has focus — as designed, but worth watching.
-- [ ] Step 2 (issue #21): SidebarDisplayMode + stateLanes + persistence
-- [ ] Step 3 (issue #22): SidebarStateListView + Cmd+B toggle + Cmd+Shift+B hide fix + Ghostty paste guard
+- [x] Step 2 (issue #21): SidebarDisplayMode + stateLanes + config persistence (read-modify-write), launch seeding, carry-over + tests (commit 69b6947)
+- [x] Step 3 (issue #22): SidebarStateListView (lanes UI), header segmented control, Cmd+B mode toggle (reveals hidden sidebar first), Cmd+Shift+B show/hide with divider-collapse fix, Ghostty plain-⌘V-only paste guard (commit 7f9b018)
+- [ ] On-device verification by the user (checklist below)
+
+### On-device verification checklist (user)
+
+1. Cmd+B → サイドバーが状態レーン(待機中/作業中/アイドル)に切り替わる。もう一度で戻る
+2. ヘッダ右のセグメントでも同じ切替ができ、Cmd+B と同期する
+3. アイドルレーンは既定で折りたたみ。ヘッダクリックで展開/折りたたみ
+4. レーンのカードをクリック → そのセッションにフォーカス移動(タブ・ターミナル追従)
+5. フィルタ文字列が状態ビューにも効く(絞った状態でモード切替しても維持)
+6. 待機中・作業中が空のとき「待機中・作業中のセッションはありません」の1行が出る
+7. モードが config.json に保存され、再起動後も維持される(`sidebarDisplayMode: "state"`)
+8. config.json の他フィールド(presets等の手編集)が切替後も消えていない
+9. Cmd+Shift+B → サイドバーが領域ごと消える(以前の「空領域が残る」が直っている)。再度で元の幅に復元
+10. ターミナルで ⌘⌥V を押してもペーストされない(⌘V は従来どおりペースト)
 
 ## Progress log
 

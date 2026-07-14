@@ -16,7 +16,6 @@ public struct StateLaneCard: Sendable, Equatable, Identifiable {
     public var state: AgentSession.State
     public var repositoryName: String
     public var branch: String
-    public var worktreePath: String
     public var stateChangedAt: Date?
 
     public init(
@@ -25,7 +24,6 @@ public struct StateLaneCard: Sendable, Equatable, Identifiable {
         state: AgentSession.State,
         repositoryName: String,
         branch: String,
-        worktreePath: String,
         stateChangedAt: Date?
     ) {
         self.id = id
@@ -33,7 +31,6 @@ public struct StateLaneCard: Sendable, Equatable, Identifiable {
         self.state = state
         self.repositoryName = repositoryName
         self.branch = branch
-        self.worktreePath = worktreePath
         self.stateChangedAt = stateChangedAt
     }
 }

@@ -160,21 +160,14 @@ public struct SidebarViewModel: Sendable, Equatable {
                         state: session.session.state,
                         repositoryName: repository.repository.name,
                         branch: worktree.worktree.branch,
-                        worktreePath: worktree.worktree.path,
                         stateChangedAt: session.session.stateChangedAt
                     ))
                 }
             }
         }
-        // Stable sort: `sorted(by:)` in Swift is not documented as stable, so sort an
-        // enumerated array with the display-order index as the explicit tiebreaker.
+        // `sorted(by:)` is documented as stable, so ties (and nil-vs-nil) keep display order.
         func laneSorted(_ lane: [StateLaneCard]) -> [StateLaneCard] {
-            lane.enumerated().sorted { lhs, rhs in
-                let lhsTime = lhs.element.stateChangedAt ?? .distantPast
-                let rhsTime = rhs.element.stateChangedAt ?? .distantPast
-                if lhsTime != rhsTime { return lhsTime > rhsTime }
-                return lhs.offset < rhs.offset
-            }.map(\.element)
+            lane.sorted { ($0.stateChangedAt ?? .distantPast) > ($1.stateChangedAt ?? .distantPast) }
         }
         return SidebarStateLanes(
             waiting: laneSorted(cards.filter { $0.state == .waitingInput }),

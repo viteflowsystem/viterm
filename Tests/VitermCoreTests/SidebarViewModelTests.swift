@@ -526,7 +526,6 @@ struct SidebarViewModelTests {
         let waiting = lanes.waiting[0]
         #expect(waiting.repositoryName == "viterm")
         #expect(waiting.branch == "feat/sidebar")
-        #expect(waiting.worktreePath == "/wt/viterm/feat-sidebar")
         #expect(waiting.state == .waitingInput)
     }
 

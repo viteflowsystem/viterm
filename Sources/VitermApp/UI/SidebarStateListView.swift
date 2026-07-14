@@ -219,28 +219,30 @@ private final class FlippedStackContainer: NSView {
 }
 
 /// Card chrome: rounded background with selection accent / idle dimming.
+/// Colors are applied directly on state change (not via `updateLayer()`, which AppKit
+/// only calls when `wantsUpdateLayer` is overridden — same pattern as PalettePanel).
 private final class CardBackgroundView: NSView {
-    var isSelected = false { didSet { needsDisplay = true } }
+    var isSelected = false { didSet { updateColors() } }
     var isDimmed = false { didSet { alphaValue = isDimmed ? 0.6 : 1.0 } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.cornerRadius = 6
+        layer?.borderWidth = 1
+        updateColors()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    override func updateLayer() {
+    private func updateColors() {
         if isSelected {
             layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor
             layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.5).cgColor
-            layer?.borderWidth = 1
         } else {
             layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.05).cgColor
             layer?.borderColor = NSColor.separatorColor.cgColor
-            layer?.borderWidth = 1
         }
     }
 }

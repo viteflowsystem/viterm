@@ -102,7 +102,11 @@ final class SidebarViewController: NSViewController {
         modeControl.target = self
         modeControl.action = #selector(didSwitchDisplayMode)
         modeControl.setContentHuggingPriority(.required, for: .horizontal)
-        modeControl.setContentCompressionResistancePriority(.required, for: .horizontal)
+        // Compressible (just above the search field's priority 1): if the sidebar pane
+        // ever passes through a zero-width layout, a required fixed width would make the
+        // header stack's internal required constraints unsatisfiable, and Auto Layout
+        // breaks such conflicts by *permanently* dropping a constraint.
+        modeControl.setContentCompressionResistancePriority(.init(2), for: .horizontal)
 
         let header = NSStackView(views: [searchField, modeControl])
         header.orientation = .horizontal
@@ -162,13 +166,21 @@ final class SidebarViewController: NSViewController {
         container.addArrangedSubview(separator)
         container.addArrangedSubview(actionBar)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
+        // Full-width constraints run at 999, not required: if the pane ever passes
+        // through a zero-width layout, a required constraint would conflict with fixed-
+        // size content and Auto Layout would permanently drop an arbitrary constraint.
+        // At 999 the constraint is merely unsatisfied and recovers on its own.
+        let fullWidthConstraints = [
             header.widthAnchor.constraint(equalTo: container.widthAnchor),
             scrollView.widthAnchor.constraint(equalTo: container.widthAnchor),
             stateListView.widthAnchor.constraint(equalTo: container.widthAnchor),
             separator.widthAnchor.constraint(equalTo: container.widthAnchor),
             actionBar.widthAnchor.constraint(equalTo: container.widthAnchor),
-        ])
+        ]
+        for constraint in fullWidthConstraints {
+            constraint.priority = NSLayoutConstraint.Priority(999)
+        }
+        NSLayoutConstraint.activate(fullWidthConstraints)
 
         emptyState.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(emptyState)

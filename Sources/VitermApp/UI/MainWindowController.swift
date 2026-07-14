@@ -487,25 +487,33 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
     /// The sidebar width before the last hide, restored on the next show.
     private var lastSidebarWidth: CGFloat = 240
+    /// Whether the sidebar pane is detached (⌘⇧B). Also lifts the delegate's min-width
+    /// constraint while collapsed.
+    private var isSidebarCollapsed = false
 
-    /// ⌘⇧B show/hide the sidebar. Flipping `isHidden` alone leaves the split pane's
-    /// area in place, so also collapse the divider to 0 (and restore the remembered
-    /// width on show).
+    /// ⌘⇧B show/hide the sidebar. Detach/re-insert instead of hiding or collapsing the
+    /// divider to 0: squeezing the live sidebar through a zero-width layout left stale
+    /// pixels on screen (ghost rendering with correct frames), and moving the divider
+    /// while the subview was hidden wedged the divider state. Removing the pane avoids
+    /// both. (An NSSplitViewController migration was tried and reverted: the sidebar
+    /// ended up on the wrong side.)
     @objc func toggleSidebar2(_ sender: Any?) {
-        if sidebar.view.isHidden {
-            sidebar.view.isHidden = false
-            splitView.setPosition(lastSidebarWidth, ofDividerAt: 0)
+        if isSidebarCollapsed {
+            isSidebarCollapsed = false
+            splitView.insertArrangedSubview(sidebar.view, at: 0)
+            splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+            splitView.setPosition(max(lastSidebarWidth, 180), ofDividerAt: 0)
         } else {
             lastSidebarWidth = sidebar.view.frame.width
-            sidebar.view.isHidden = true
-            splitView.setPosition(0, ofDividerAt: 0)
+            isSidebarCollapsed = true
+            sidebar.view.removeFromSuperview()
         }
     }
 
     /// ⌘B toggle the sidebar body between the tree and the state lanes.
     /// If the sidebar is hidden, reveal it first (the toggle should never be invisible).
     @objc func toggleSidebarDisplayMode(_ sender: Any?) {
-        if sidebar.view.isHidden {
+        if isSidebarCollapsed {
             toggleSidebar2(nil)
         }
         let next: SidebarDisplayMode = appModel.sidebar.displayMode == .tree ? .state : .tree
@@ -849,12 +857,12 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     // MARK: - NSSplitViewDelegate (sidebar width constraints)
 
     func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-        // While hidden, the divider must be allowed to sit at 0 (sidebar collapsed).
-        sidebar.view.isHidden ? proposedMinimumPosition : max(proposedMinimumPosition, 180)
+        // While collapsed, the divider must be allowed to sit at 0.
+        isSidebarCollapsed ? proposedMinimumPosition : max(proposedMinimumPosition, 180)
     }
 
     func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-        sidebar.view.isHidden ? proposedMaximumPosition : min(proposedMaximumPosition, 480)
+        isSidebarCollapsed ? proposedMaximumPosition : min(proposedMaximumPosition, 480)
     }
 
     static func presentError(_ error: any Error, in window: NSWindow?) {

@@ -36,6 +36,8 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     private let stateMonitor = SessionStateMonitor()
     /// UNUserNotificationCenter is unavailable outside an .app bundle (swift run), so detect at launch.
     private let notificationsAvailable = Bundle.main.bundleIdentifier != nil
+    /// Watches the global config file so on-disk edits take effect without a restart.
+    private var configWatcher: ConfigFileWatcher?
 
     init(appModel: AppModel, sessionManager: SessionManager) {
         self.appModel = appModel
@@ -103,6 +105,29 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         appModel.startAutoRefresh()
         if notificationsAvailable {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
+
+        // Hot-reload: apply on-disk edits to the global config without a restart.
+        let watcher = ConfigFileWatcher(url: ConfigLoader.defaultGlobalConfigURL()) { [weak self] in
+            self?.reloadConfigAndApply()
+        }
+        watcher.start()
+        configWatcher = watcher
+    }
+
+    /// Reload the config and re-apply the parts that live outside `AppModel` (presets,
+    /// worktree branch map), then redraw. Lighter than `refreshAndRender()`: it does not
+    /// re-run session restore or debug autostart. A parse error is handled inside
+    /// `AppModel.refresh()` (previous config kept, error recorded), so a bad edit never
+    /// crashes or clears state.
+    func reloadConfigAndApply() {
+        Task { @MainActor in
+            await appModel.refresh()
+            sessionManager.presets = appModel.config.presets
+            sessionManager.worktreeBranches = Dictionary(
+                uniqueKeysWithValues: appModel.worktrees.map { ($0.path, $0.branch) }
+            )
+            render()
         }
     }
 

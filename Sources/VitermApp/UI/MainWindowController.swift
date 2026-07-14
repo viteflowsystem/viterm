@@ -9,7 +9,7 @@ import VitermServices
 /// Ties AppModel (state) and SessionManager (surface instances) together and wires up
 /// the keyboard shortcuts.
 @MainActor
-final class MainWindowController: NSWindowController {
+final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     let appModel: AppModel
     let sessionManager: SessionManager
 
@@ -32,12 +32,7 @@ final class MainWindowController: NSWindowController {
         return view
     }()
     private let statusBar = StatusBarView()
-    // NSSplitViewController rather than a hand-rolled NSSplitView: collapsing a plain
-    // split view by hand (divider to 0 / hidden subview / detach) is a known minefield —
-    // ghost rendering, wedged dividers, hangs on rapid toggling. NSSplitViewItem's
-    // isCollapsed goes through the supported layout/redraw path.
-    private let splitViewController = NSSplitViewController()
-    private var sidebarItem: NSSplitViewItem?
+    private let splitView = NSSplitView()
     private let stateMonitor = SessionStateMonitor()
     /// UNUserNotificationCenter is unavailable outside an .app bundle (swift run), so detect at launch.
     private let notificationsAvailable = Bundle.main.bundleIdentifier != nil
@@ -214,6 +209,11 @@ final class MainWindowController: NSWindowController {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     private func setUpContent() {
+        splitView.isVertical = true
+        splitView.dividerStyle = .thin
+
+        let sidebarView = sidebar.view
+
         // Terminal side: stack the tab bar (top) and splitHost (bottom) vertically.
         let termContainer = NSView()
         tabBar.translatesAutoresizingMaskIntoConstraints = false
@@ -230,22 +230,15 @@ final class MainWindowController: NSWindowController {
             splitHost.bottomAnchor.constraint(equalTo: termContainer.bottomAnchor),
         ])
 
-        let sidebarSplitItem = NSSplitViewItem(viewController: sidebar)
-        sidebarSplitItem.minimumThickness = 180
-        sidebarSplitItem.maximumThickness = 480
-        sidebarSplitItem.canCollapse = true
+        splitView.addArrangedSubview(sidebarView)
+        splitView.addArrangedSubview(termContainer)
         // Preferentially preserve the sidebar's width while keeping the divider draggable.
-        sidebarSplitItem.holdingPriority = .defaultHigh
-        sidebarItem = sidebarSplitItem
-
-        let termViewController = NSViewController()
-        termViewController.view = termContainer
-
-        splitViewController.addSplitViewItem(sidebarSplitItem)
-        splitViewController.addSplitViewItem(NSSplitViewItem(viewController: termViewController))
-        splitViewController.splitView.isVertical = true
-        splitViewController.splitView.dividerStyle = .thin
-        splitViewController.splitView.autosaveName = "viterm.sidebar"
+        // Min/max widths are managed by the delegate (constrainMin/MaxCoordinate)
+        // (an external width constraint on an arranged subview is treated as required and
+        // freezes dragging).
+        splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+        splitView.delegate = self
+        splitView.autosaveName = "viterm.sidebar"
 
         tabBar.onSelectTab = { [weak self] sessionID in self?.select(sessionID: sessionID) }
         tabBar.onCloseTab = { [weak self] sessionID in self?.terminateSession(sessionID) }
@@ -264,23 +257,22 @@ final class MainWindowController: NSWindowController {
         }
 
         let root = NSView()
-        let splitViewHost = splitViewController.view
-        splitViewHost.translatesAutoresizingMaskIntoConstraints = false
+        splitView.translatesAutoresizingMaskIntoConstraints = false
         statusBar.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(splitViewHost)
+        root.addSubview(splitView)
         root.addSubview(statusBar)
         NSLayoutConstraint.activate([
-            splitViewHost.topAnchor.constraint(equalTo: root.topAnchor),
-            splitViewHost.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            splitViewHost.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            splitViewHost.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+            splitView.topAnchor.constraint(equalTo: root.topAnchor),
+            splitView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            splitView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            splitView.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
             statusBar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             statusBar.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             statusBar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
         window?.contentView = root
         DispatchQueue.main.async { [self] in
-            splitViewController.splitView.setPosition(240, ofDividerAt: 0)
+            splitView.setPosition(240, ofDividerAt: 0)
         }
     }
 
@@ -493,19 +485,28 @@ final class MainWindowController: NSWindowController {
         terminateSession(sessionID)
     }
 
-    /// ⌘⇧B show/hide the sidebar via NSSplitViewItem.isCollapsed (the supported collapse
-    /// path; hand-rolled divider/hidden/detach variants all misbehaved — ghost rendering,
-    /// wedged dividers, hangs on rapid toggling).
+    /// The sidebar width before the last hide, restored on the next show.
+    private var lastSidebarWidth: CGFloat = 240
+
+    /// ⌘⇧B show/hide the sidebar. Flipping `isHidden` alone leaves the split pane's
+    /// area in place, so also collapse the divider to 0 (and restore the remembered
+    /// width on show).
     @objc func toggleSidebar2(_ sender: Any?) {
-        guard let sidebarItem else { return }
-        sidebarItem.animator().isCollapsed.toggle()
+        if sidebar.view.isHidden {
+            sidebar.view.isHidden = false
+            splitView.setPosition(lastSidebarWidth, ofDividerAt: 0)
+        } else {
+            lastSidebarWidth = sidebar.view.frame.width
+            sidebar.view.isHidden = true
+            splitView.setPosition(0, ofDividerAt: 0)
+        }
     }
 
     /// ⌘B toggle the sidebar body between the tree and the state lanes.
-    /// If the sidebar is collapsed, reveal it first (the toggle should never be invisible).
+    /// If the sidebar is hidden, reveal it first (the toggle should never be invisible).
     @objc func toggleSidebarDisplayMode(_ sender: Any?) {
-        if let sidebarItem, sidebarItem.isCollapsed {
-            sidebarItem.animator().isCollapsed = false
+        if sidebar.view.isHidden {
+            toggleSidebar2(nil)
         }
         let next: SidebarDisplayMode = appModel.sidebar.displayMode == .tree ? .state : .tree
         appModel.setSidebarDisplayMode(next)
@@ -843,6 +844,17 @@ final class MainWindowController: NSWindowController {
             guard response == .alertFirstButtonReturn else { return }
             self?.cleanUpSession(sessionID)
         }
+    }
+
+    // MARK: - NSSplitViewDelegate (sidebar width constraints)
+
+    func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+        // While hidden, the divider must be allowed to sit at 0 (sidebar collapsed).
+        sidebar.view.isHidden ? proposedMinimumPosition : max(proposedMinimumPosition, 180)
+    }
+
+    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+        sidebar.view.isHidden ? proposedMaximumPosition : min(proposedMaximumPosition, 480)
     }
 
     static func presentError(_ error: any Error, in window: NSWindow?) {

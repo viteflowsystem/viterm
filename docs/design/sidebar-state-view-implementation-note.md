@@ -29,6 +29,7 @@ Design reference: https://claude.ai/code/artifact/83ddb620-188e-45a4-879b-6ec774
 - [x] Step 1 UI: search field header, filtered rendering, collapsed busy badge, "/" & Esc, IME-safe write-back (commit 6b6035b). Verified on device: narrowing, 該当なし, Esc clear, selection retention, collapsed badge, slash focus. Note: clicking a worktree row moves focus to the terminal, so "/" is mainly useful right after Esc or when the tree has focus — as designed, but worth watching.
 - [x] Step 2 (issue #21): SidebarDisplayMode + stateLanes + config persistence (read-modify-write), launch seeding, carry-over + tests (commit 69b6947)
 - [x] Step 3 (issue #22): SidebarStateListView (lanes UI), header segmented control, Cmd+B mode toggle (reveals hidden sidebar first), Cmd+Shift+B show/hide with divider-collapse fix, Ghostty plain-⌘V-only paste guard (commit 7f9b018)
+- [x] Sidebar collapse rework (833084f): every hand-rolled collapse of the plain NSSplitView failed differently — divider-to-0 ghosted the header (frames correct, stale pixels, healed on deactivate; confirmed via AX geometry + zero constraint logs), setPosition-while-hidden wedged the divider, detach/re-insert hung under rapid Cmd+Shift+B. Web research (Apple Forums thread 74369, NSVisualEffectView backdrop caching) confirmed zero-width collapse is a known minefield and NSSplitViewItem.isCollapsed is the supported path → migrated to NSSplitViewController. Spam-tested 30x @30ms: responsive, geometry intact.
 - [ ] On-device verification by the user (checklist below)
 
 ### On-device verification checklist (user)

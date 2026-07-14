@@ -94,6 +94,13 @@ public struct GitService: Sendable {
             }
     }
 
+    /// Delete a local branch. Uses `git branch -d` (safe: refuses branches with unmerged
+    /// commits) by default; pass `force` for `-D`. A branch currently checked out in any
+    /// worktree cannot be deleted and git will report an error.
+    public func deleteBranch(_ name: String, in repository: URL, force: Bool = false) async throws {
+        try await runner.run(["branch", force ? "-D" : "-d", name], in: repository)
+    }
+
     /// Return how far `branch` is ahead/behind its `upstream`.
     public func aheadBehind(branch: String, upstream: String, in repository: URL) async throws -> AheadBehind {
         let command = "rev-list --left-right --count \(upstream)...\(branch)"

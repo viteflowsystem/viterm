@@ -338,6 +338,14 @@ public final class AppModel {
         await refresh()
     }
 
+    /// Delete a local branch (`git branch -d`, safe by default). Kept separate from
+    /// `removeWorktree` so the caller can treat a failed branch deletion (e.g. unmerged
+    /// commits) as non-fatal after the worktree itself was already removed.
+    public func deleteBranch(_ name: String, in repositoryPath: String, force: Bool = false) async throws {
+        try await worktreeRemover.deleteBranch(name, in: URL(fileURLWithPath: repositoryPath), force: force)
+        await refresh()
+    }
+
     // MARK: - Repository registration
 
     /// Register a repository, persist it to the global config, then `refresh()`.

@@ -77,11 +77,18 @@ final class FakeWorktreeProvisioner: WorktreeProvisioning, @unchecked Sendable {
 
 final class FakeWorktreeRemover: WorktreeRemoving, @unchecked Sendable {
     private(set) var removedPaths: [(path: URL, repository: URL, force: Bool)] = []
+    private(set) var deletedBranches: [(name: String, repository: URL, force: Bool)] = []
     var shouldThrow = false
+    var branchDeletionShouldThrow = false
 
     func removeWorktree(at path: URL, in repository: URL, force: Bool) async throws {
         if shouldThrow { throw StubError(description: "remove failed") }
         removedPaths.append((path, repository, force))
+    }
+
+    func deleteBranch(_ name: String, in repository: URL, force: Bool) async throws {
+        if branchDeletionShouldThrow { throw StubError(description: "branch delete failed") }
+        deletedBranches.append((name, repository, force))
     }
 }
 
@@ -615,6 +622,33 @@ struct AppModelTests {
 
         await #expect(throws: StubError.self) {
             try await model.removeWorktree(at: "/wt/feat", in: "/repo/viterm")
+        }
+        #expect(scanner.scannedRepositories.isEmpty)
+    }
+
+    @Test("deleteBranchはリムーバーにブランチ名を渡し、完了後にrefreshする")
+    func deleteBranchDelegatesAndRefreshes() async throws {
+        let remover = FakeWorktreeRemover()
+        let scanner = FakeWorktreeStatusScanner()
+        let model = makeModel(scanner: scanner, remover: remover)
+
+        try await model.deleteBranch("feat/x", in: "/repo/viterm")
+
+        #expect(remover.deletedBranches.count == 1)
+        #expect(remover.deletedBranches.first?.name == "feat/x")
+        #expect(remover.deletedBranches.first?.force == false)
+        #expect(scanner.scannedRepositories.count == 1)
+    }
+
+    @Test("deleteBranchが失敗した場合はrefreshされない")
+    func deleteBranchFailurePropagatesAndSkipsRefresh() async {
+        let remover = FakeWorktreeRemover()
+        remover.branchDeletionShouldThrow = true
+        let scanner = FakeWorktreeStatusScanner()
+        let model = makeModel(scanner: scanner, remover: remover)
+
+        await #expect(throws: StubError.self) {
+            try await model.deleteBranch("feat/x", in: "/repo/viterm")
         }
         #expect(scanner.scannedRepositories.isEmpty)
     }

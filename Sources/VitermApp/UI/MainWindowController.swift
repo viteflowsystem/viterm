@@ -583,10 +583,22 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
+    /// ⌘P quick-open: fuzzy-jump to any session or worktree across all repositories.
+    @objc func showQuickOpen(_ sender: Any?) {
+        guard let window else { return }
+        let commands = QuickOpenProvider.commands(repositories: appModel.sidebar.repositories)
+        PalettePanel.show(over: window, commands: commands) { [weak self] action in
+            self?.performPaletteAction(action)
+        }
+    }
+
     private func performPaletteAction(_ action: PaletteAction) {
         switch action {
         case .createWorktree:
             newWorktree(nil)
+        case let .switchToSession(sessionID):
+            appModel.selectSession(sessionID)
+            render()
         case let .switchToWorktree(worktreeID):
             // Select the worktree's first session (or prompt to launch one if there is none).
             if let session = appModel.sessions.first(where: { $0.worktreePath == worktreeID }) {

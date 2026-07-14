@@ -61,6 +61,8 @@ public enum PaletteAction: Sendable, Equatable, Hashable {
     case createWorktree
     /// Switch to the given worktree.
     case switchToWorktree(worktreeID: String)
+    /// Jump directly to the given session (used by ⌘P quick-open).
+    case switchToSession(sessionID: AgentSession.ID)
     /// Merge the given worktree's branch (the merge/rebase choice is up to the UI).
     case mergeWorktree(worktreeID: String)
     /// Remove the given worktree (the confirmation dialog is up to the UI).

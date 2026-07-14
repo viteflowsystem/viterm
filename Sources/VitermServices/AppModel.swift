@@ -265,6 +265,9 @@ public final class AppModel {
         case let .switchToWorktree(worktreeID):
             await switchToWorktree(worktreeID)
             return .completed
+        case let .switchToSession(sessionID):
+            selectSession(sessionID)
+            return .completed
         case let .startSession(worktreeID, presetName):
             do {
                 _ = try await startSession(worktreePath: worktreeID, presetName: presetName)

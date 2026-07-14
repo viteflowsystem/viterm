@@ -73,6 +73,7 @@ public final class AppModel {
 
     private let configProvider: any ConfigProviding
     private let repositoryConfigPersister: any RepositoryConfigPersisting
+    private let sidebarPreferencePersister: any SidebarPreferencePersisting
     private let repositoryDiscovery: any RepositoryDiscovering
     private let worktreeStatusScanner: any WorktreeStatusScanning
     private let worktreeProvisioner: any WorktreeProvisioning
@@ -84,6 +85,7 @@ public final class AppModel {
     public init(
         configProvider: any ConfigProviding = LiveConfigProvider(),
         repositoryConfigPersister: any RepositoryConfigPersisting = LiveRepositoryConfigPersister(),
+        sidebarPreferencePersister: any SidebarPreferencePersisting = LiveSidebarPreferencePersister(),
         repositoryDiscovery: any RepositoryDiscovering = RepositoryDiscovery(),
         worktreeStatusScanner: any WorktreeStatusScanning = WorktreeStatusScanner(),
         worktreeProvisioner: any WorktreeProvisioning = WorktreeProvisioner(),
@@ -94,6 +96,7 @@ public final class AppModel {
     ) {
         self.configProvider = configProvider
         self.repositoryConfigPersister = repositoryConfigPersister
+        self.sidebarPreferencePersister = sidebarPreferencePersister
         self.repositoryDiscovery = repositoryDiscovery
         self.worktreeStatusScanner = worktreeStatusScanner
         self.worktreeProvisioner = worktreeProvisioner
@@ -129,6 +132,14 @@ public final class AppModel {
             loadedConfig = config
         }
         config = loadedConfig
+
+        // Seed the sidebar display mode from config once, on the first successful load.
+        // Later refreshes must not override an in-session toggle (the toggle also writes
+        // the config back, but a stale in-flight read should never flip the UI).
+        if !hasSeededSidebarDisplayMode {
+            hasSeededSidebarDisplayMode = true
+            sidebar.setDisplayMode(loadedConfig.sidebarDisplayMode)
+        }
 
         var mergedRepositories = loadedConfig.repositories
         if !loadedConfig.discoveryRoots.isEmpty {
@@ -206,17 +217,33 @@ public final class AppModel {
     }
 
     private func rebuildSidebar() {
-        let previousSessionSelection = sidebar.selectedSessionID
-        let previousWorktreeSelection = sidebar.selectedWorktreePath
-        let previousActiveByWorktree = sidebar.activeSessionByWorktree
-        sidebar = SidebarViewModel(
+        // `rebuilt(...)` carries over all UI state (selection, per-worktree memory, filter)
+        // in one place; adding a new carried field must not require touching this call site.
+        sidebar = sidebar.rebuilt(
             repositories: repositories,
             worktrees: worktrees,
-            sessions: sessions,
-            selectedSessionID: previousSessionSelection,
-            selectedWorktreePath: previousWorktreeSelection,
-            activeSessionByWorktree: previousActiveByWorktree
+            sessions: sessions
         )
+    }
+
+    /// Update the sidebar's incremental filter text.
+    public func setSidebarFilter(_ text: String) {
+        sidebar.setFilterText(text)
+    }
+
+    /// Whether the display mode has been seeded from config (first successful load only).
+    private var hasSeededSidebarDisplayMode = false
+
+    /// Switch the sidebar body mode (tree / state lanes) and persist it to the global
+    /// config. A persistence failure keeps the in-memory switch and is surfaced via
+    /// `lastRefreshErrors` (same channel the UI already uses for toasts).
+    public func setSidebarDisplayMode(_ mode: SidebarDisplayMode) {
+        sidebar.setDisplayMode(mode)
+        do {
+            try sidebarPreferencePersister.persist(sidebarDisplayMode: mode)
+        } catch {
+            lastRefreshErrors.append("サイドバー表示モードの保存に失敗しました: \(error)")
+        }
     }
 
     // MARK: - PaletteAction dispatch

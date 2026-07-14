@@ -144,4 +144,23 @@ struct VitermConfigTests {
         let project = VitermConfigFile(discoveryRoots: ["~/project-only"])
         #expect(VitermConfig.merge(global: global, project: project).discoveryRoots == ["~/dev", "~/work"])
     }
+
+    @Test("sidebarDisplayModeはグローバルのみ有効で、不正値はtreeにフォールバックする")
+    func sidebarDisplayModeMergesFromGlobalOnly() {
+        #expect(VitermConfig.merge(global: nil, project: nil).sidebarDisplayMode == .tree)
+        #expect(VitermConfig.merge(
+            global: VitermConfigFile(sidebarDisplayMode: "state"),
+            project: nil
+        ).sidebarDisplayMode == .state)
+        // Unknown value falls back to the default.
+        #expect(VitermConfig.merge(
+            global: VitermConfigFile(sidebarDisplayMode: "kanban"),
+            project: nil
+        ).sidebarDisplayMode == .tree)
+        // Project-side values are ignored (global-only, like discoveryRoots).
+        #expect(VitermConfig.merge(
+            global: nil,
+            project: VitermConfigFile(sidebarDisplayMode: "state")
+        ).sidebarDisplayMode == .tree)
+    }
 }

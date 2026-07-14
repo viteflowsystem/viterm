@@ -6,3 +6,4 @@ vendor
 *.xcframework
 .DS_Store
 xcuserdata/
+docs/RELEASE.md

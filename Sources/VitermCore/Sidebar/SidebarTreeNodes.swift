@@ -49,6 +49,12 @@ public struct RepositoryNode: Sendable, Equatable, Identifiable {
             count + worktree.sessions.count { $0.session.state == .waitingInput }
         }
     }
+
+    /// Tally of busy/waitingInput/idle counts for all sessions underneath (across worktrees).
+    /// Used for the collapsed repository row's state badges.
+    public var stateSummary: SessionStateSummary {
+        SessionStateSummary(sessions: worktrees.flatMap { $0.sessions.map(\.session) })
+    }
 }
 
 /// Tally of busy / waitingInput / idle counts (for status bar display).

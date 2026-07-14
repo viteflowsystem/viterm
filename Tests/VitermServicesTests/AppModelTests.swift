@@ -30,6 +30,17 @@ final class FakeConfigStore: ConfigProviding, RepositoryConfigPersisting, @unche
     }
 }
 
+
+final class FakeSidebarPreferencePersister: SidebarPreferencePersisting, @unchecked Sendable {
+    var persistedModes: [SidebarDisplayMode] = []
+    var errorToThrow: Error?
+
+    func persist(sidebarDisplayMode: SidebarDisplayMode) throws {
+        if let errorToThrow { throw errorToThrow }
+        persistedModes.append(sidebarDisplayMode)
+    }
+}
+
 final class FakeRepositoryDiscovery: RepositoryDiscovering, @unchecked Sendable {
     /// Result returned per root directory (its `path`). Falls back to `defaultRepositoriesToReturn`.
     var repositoriesByRoot: [String: [Repository]] = [:]
@@ -190,6 +201,7 @@ struct AppModelTests {
 
     func makeModel(
         configStore: FakeConfigStore = FakeConfigStore(),
+        sidebarPersister: FakeSidebarPreferencePersister = FakeSidebarPreferencePersister(),
         discovery: FakeRepositoryDiscovery = FakeRepositoryDiscovery(),
         scanner: any WorktreeStatusScanning = FakeWorktreeStatusScanner(),
         provisioner: FakeWorktreeProvisioner = FakeWorktreeProvisioner(),
@@ -201,6 +213,7 @@ struct AppModelTests {
         AppModel(
             configProvider: configStore,
             repositoryConfigPersister: configStore,
+            sidebarPreferencePersister: sidebarPersister,
             repositoryDiscovery: discovery,
             worktreeStatusScanner: scanner,
             worktreeProvisioner: provisioner,
@@ -787,5 +800,65 @@ struct AppModelTests {
 
         #expect(model.sidebar.selectedWorktreePath == worktree.path, "worktreeの選択自体は維持される")
         #expect(model.sidebar.selectedSessionID == nil)
+    }
+
+    // MARK: sidebar display mode
+
+    @Test("setSidebarDisplayModeはモードを切り替えて永続化する")
+    func setSidebarDisplayModePersists() {
+        let persister = FakeSidebarPreferencePersister()
+        let model = makeModel(sidebarPersister: persister)
+
+        model.setSidebarDisplayMode(.state)
+
+        #expect(model.sidebar.displayMode == .state)
+        #expect(persister.persistedModes == [.state])
+    }
+
+    @Test("永続化に失敗してもメモリ上の切替は維持されエラーが記録される")
+    func setSidebarDisplayModeKeepsSwitchOnPersistFailure() {
+        let persister = FakeSidebarPreferencePersister()
+        persister.errorToThrow = NSError(domain: "test", code: 1)
+        let model = makeModel(sidebarPersister: persister)
+
+        model.setSidebarDisplayMode(.state)
+
+        #expect(model.sidebar.displayMode == .state)
+        #expect(model.lastRefreshErrors.count == 1)
+    }
+
+    @Test("初回refreshは設定のsidebarDisplayModeをシードし、以後のrefreshは上書きしない")
+    func refreshSeedsDisplayModeOnceFromConfig() async {
+        let configStore = FakeConfigStore(config: VitermConfig.merge(
+            global: VitermConfigFile(sidebarDisplayMode: "state"),
+            project: nil
+        ))
+        let model = makeModel(configStore: configStore)
+
+        await model.refresh()
+        #expect(model.sidebar.displayMode == .state)
+
+        // An in-session toggle must survive later refreshes even though the (stale)
+        // config still says "state".
+        model.setSidebarDisplayMode(.tree)
+        await model.refresh()
+        #expect(model.sidebar.displayMode == .tree)
+    }
+
+    @Test("rebuildSidebarはフィルタとdisplayModeを引き継ぐ")
+    func rebuildCarriesFilterAndDisplayMode() async {
+        let configStore = FakeConfigStore(config: VitermConfig.merge(
+            global: VitermConfigFile(repositories: [repository]),
+            project: nil
+        ))
+        let model = makeModel(configStore: configStore)
+        await model.refresh()
+
+        model.setSidebarFilter("vit")
+        model.setSidebarDisplayMode(.state)
+        await model.refresh() // rebuildSidebar() runs inside
+
+        #expect(model.sidebar.filterText == "vit")
+        #expect(model.sidebar.displayMode == .state)
     }
 }

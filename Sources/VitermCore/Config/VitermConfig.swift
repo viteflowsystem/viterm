@@ -32,6 +32,9 @@ public struct VitermConfigFile: Codable, Sendable, Equatable {
     /// Merging only uses the global config's value (writing it in `.viterm.json` currently
     /// has no effect; see §merge).
     public var discoveryRoots: [String]?
+    /// Sidebar body mode ("tree" / "state"). A UI preference written back by the app on
+    /// toggle. Global-only like `discoveryRoots` (`.viterm.json` is ignored; see §merge).
+    public var sidebarDisplayMode: String?
 
     public init(
         worktreePathTemplate: String? = nil,
@@ -41,7 +44,8 @@ public struct VitermConfigFile: Codable, Sendable, Equatable {
         copySessionDataByDefault: Bool? = nil,
         postCreationHook: String? = nil,
         statusHooks: StatusHooksFile? = nil,
-        discoveryRoots: [String]? = nil
+        discoveryRoots: [String]? = nil,
+        sidebarDisplayMode: String? = nil
     ) {
         self.worktreePathTemplate = worktreePathTemplate
         self.presets = presets
@@ -51,6 +55,7 @@ public struct VitermConfigFile: Codable, Sendable, Equatable {
         self.postCreationHook = postCreationHook
         self.statusHooks = statusHooks
         self.discoveryRoots = discoveryRoots
+        self.sidebarDisplayMode = sidebarDisplayMode
     }
 }
 
@@ -65,6 +70,8 @@ public struct VitermConfig: Sendable, Equatable {
     public var postCreationHook: String?
     public var statusHooks: StatusHooksFile
     public var discoveryRoots: [String]
+    /// Sidebar body mode. Unknown raw strings in the file fall back to `.tree`.
+    public var sidebarDisplayMode: SidebarDisplayMode
 
     public init(
         worktreePathTemplate: String,
@@ -74,7 +81,8 @@ public struct VitermConfig: Sendable, Equatable {
         copySessionDataByDefault: Bool,
         postCreationHook: String? = nil,
         statusHooks: StatusHooksFile = StatusHooksFile(),
-        discoveryRoots: [String] = []
+        discoveryRoots: [String] = [],
+        sidebarDisplayMode: SidebarDisplayMode = .tree
     ) {
         self.worktreePathTemplate = worktreePathTemplate
         self.presets = presets
@@ -84,6 +92,7 @@ public struct VitermConfig: Sendable, Equatable {
         self.postCreationHook = postCreationHook
         self.statusHooks = statusHooks
         self.discoveryRoots = discoveryRoots
+        self.sidebarDisplayMode = sidebarDisplayMode
     }
 
     /// The `WorktreePathTemplate` representing the current worktree path template setting.
@@ -144,6 +153,9 @@ public struct VitermConfig: Sendable, Equatable {
         )
 
         let discoveryRoots = global?.discoveryRoots ?? base.discoveryRoots
+        // Global-only, like discoveryRoots. Unknown strings fall back to the default.
+        let sidebarDisplayMode = global?.sidebarDisplayMode.flatMap(SidebarDisplayMode.init(rawValue:))
+            ?? base.sidebarDisplayMode
 
         let presets = mergeKeyed(
             base: base.presets,
@@ -166,7 +178,8 @@ public struct VitermConfig: Sendable, Equatable {
             copySessionDataByDefault: copySessionDataByDefault,
             postCreationHook: postCreationHook,
             statusHooks: statusHooks,
-            discoveryRoots: discoveryRoots
+            discoveryRoots: discoveryRoots,
+            sidebarDisplayMode: sidebarDisplayMode
         )
     }
 

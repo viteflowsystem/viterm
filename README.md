@@ -91,7 +91,7 @@ Known libghostty build issues and workarounds are documented in
 | `VitermApp` | The AppKit app: sidebar, libghostty surfaces, dialogs, palette |
 | `vendor/` | ghostty sources and build artifacts (not tracked; fetched by scripts) |
 
-Release process (signing, notarization, DMG): [docs/RELEASE.md](docs/RELEASE.md).
+Releases are built with `scripts/release.sh <version>` (signing, notarization, DMG).
 
 ## License
 

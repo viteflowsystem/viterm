@@ -75,6 +75,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionMenu.addItem(closeTab)
 
         sessionMenu.addItem(.separator())
+        let quickOpen = NSMenuItem(title: "クイックオープン…", action: #selector(MainWindowController.showQuickOpen(_:)), keyEquivalent: "p")
+        quickOpen.target = controller
+        sessionMenu.addItem(quickOpen)
+
+        sessionMenu.addItem(.separator())
         let jump = NSMenuItem(title: "最新の入力待ちへ", action: #selector(MainWindowController.jumpToWaiting(_:)), keyEquivalent: "u")
         jump.keyEquivalentModifierMask = [.command, .shift]
         jump.target = controller

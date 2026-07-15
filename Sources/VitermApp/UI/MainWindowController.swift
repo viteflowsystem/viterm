@@ -840,7 +840,30 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             alert.alertStyle = .warning
             alert.addButton(withTitle: worktree.isDirty ? "強制削除" : "削除")
             alert.addButton(withTitle: "キャンセル")
+
+            // Offer to also delete the local branch. Disable it when the same branch is
+            // checked out by another worktree in this repository (git can't delete it, and
+            // this also naturally covers the repository's default branch, which stays
+            // checked out in the main worktree).
+            let branchCheckedOutElsewhere = appModel.worktrees.contains {
+                $0.repositoryPath == worktree.repositoryPath
+                    && $0.path != worktree.path
+                    && $0.branch == worktree.branch
+            }
+            let deleteBranchCheckbox = NSButton(
+                checkboxWithTitle: "ブランチ \(worktree.branch) も削除",
+                target: nil,
+                action: nil
+            )
+            deleteBranchCheckbox.state = .off
+            if branchCheckedOutElsewhere {
+                deleteBranchCheckbox.isEnabled = false
+                deleteBranchCheckbox.toolTip = "このブランチは他の worktree でチェックアウトされているため削除できません"
+            }
+            alert.accessoryView = deleteBranchCheckbox
+
             guard await alert.beginSheetModal(for: window) == .alertFirstButtonReturn else { return }
+            let shouldDeleteBranch = deleteBranchCheckbox.state == .on && deleteBranchCheckbox.isEnabled
 
             do {
                 try await appModel.removeWorktree(
@@ -848,10 +871,22 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
                     in: worktree.repositoryPath,
                     force: worktree.isDirty
                 )
-                render()
             } catch {
                 Self.presentError(error, in: window)
+                return
             }
+
+            // The worktree is already gone; a branch-deletion failure (e.g. unmerged
+            // commits with `git branch -d`) is surfaced but not treated as a failure of
+            // the whole operation.
+            if shouldDeleteBranch {
+                do {
+                    try await appModel.deleteBranch(worktree.branch, in: worktree.repositoryPath)
+                } catch {
+                    Self.presentError(error, in: window)
+                }
+            }
+            render()
         }
     }
 

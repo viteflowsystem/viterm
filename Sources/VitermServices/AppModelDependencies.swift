@@ -42,6 +42,7 @@ public protocol WorktreeProvisioning: Sendable {
 /// Abstraction over standalone worktree removal (`git worktree remove` without merging; wrapper around `GitService`).
 public protocol WorktreeRemoving: Sendable {
     func removeWorktree(at path: URL, in repository: URL, force: Bool) async throws
+    func deleteBranch(_ name: String, in repository: URL, force: Bool) async throws
 }
 
 /// Abstraction over merge/rebase + cleanup (wrapper around `MergeCleanupCoordinator`).

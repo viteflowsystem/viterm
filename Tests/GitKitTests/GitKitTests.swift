@@ -215,6 +215,53 @@ import Testing
     }
 }
 
+// MARK: - deleteBranch
+
+@Test func deleteBranch_mergedBranch_isRemoved() async throws {
+    try await withTemporaryDirectory { dir in
+        let repo = dir.appendingPathComponent("repo")
+        try await Fixture.makeRepository(at: repo)
+        let service = GitService()
+
+        // Create a branch off the current tip (fully merged) via a worktree, then remove
+        // the worktree so the branch is no longer checked out.
+        let wtPath = dir.appendingPathComponent("worktrees/feature-x")
+        try await service.addWorktree(in: repo, path: wtPath, source: .newBranch(name: "feature-x"))
+        try await service.removeWorktree(at: wtPath, in: repo)
+
+        try await service.deleteBranch("feature-x", in: repo)
+
+        let localBranches = try await service.branches(in: repo).filter { $0.kind == .local }.map(\.name)
+        #expect(!localBranches.contains("feature-x"))
+    }
+}
+
+@Test func deleteBranch_unmergedBranch_throwsWithoutForce_succeedsWithForce() async throws {
+    try await withTemporaryDirectory { dir in
+        let repo = dir.appendingPathComponent("repo")
+        try await Fixture.makeRepository(at: repo)
+        let service = GitService()
+
+        // A branch with a commit not on main is "not fully merged".
+        let wtPath = dir.appendingPathComponent("worktrees/feature-x")
+        try await service.addWorktree(in: repo, path: wtPath, source: .newBranch(name: "feature-x"))
+        try await Fixture.commitFile(named: "extra.txt", content: "x\n", message: "extra", in: wtPath)
+        try await service.removeWorktree(at: wtPath, in: repo)
+
+        // `-d` refuses an unmerged branch.
+        await #expect(throws: (any Error).self) {
+            try await service.deleteBranch("feature-x", in: repo)
+        }
+        var localBranches = try await service.branches(in: repo).filter { $0.kind == .local }.map(\.name)
+        #expect(localBranches.contains("feature-x"))
+
+        // `-D` forces it.
+        try await service.deleteBranch("feature-x", in: repo, force: true)
+        localBranches = try await service.branches(in: repo).filter { $0.kind == .local }.map(\.name)
+        #expect(!localBranches.contains("feature-x"))
+    }
+}
+
 // MARK: - branches(in:)
 
 @Test func branches_listsLocalAndRemoteExcludingSymbolicHead() async throws {

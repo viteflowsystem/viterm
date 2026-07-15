@@ -116,7 +116,7 @@ public struct MergeCleanupCoordinator: Sendable {
 
         if request.deleteLocalBranchAfterMerge {
             do {
-                try await gitService.runner.run(["branch", "-d", request.source], in: request.targetWorktree)
+                try await gitService.deleteBranch(request.source, in: request.targetWorktree)
                 steps.append(MergeCleanupStepResult(step: .deleteBranch))
             } catch {
                 steps.append(MergeCleanupStepResult(step: .deleteBranch, error: "\(error)"))

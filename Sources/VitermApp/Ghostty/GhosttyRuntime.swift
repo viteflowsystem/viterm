@@ -139,7 +139,14 @@ final class GhosttyRuntime {
                   let surface = view.surface, let text else { return }
             ghostty_surface_complete_clipboard_request(surface, text, state, true)
         }
-        runtime.write_clipboard_cb = { _, _, content, count, _ in
+        runtime.write_clipboard_cb = { _, location, content, count, _ in
+            // Only the standard clipboard maps to NSPasteboard. Selection-clipboard writes
+            // (emitted on every text selection when copy-on-select is on — the macOS
+            // default) must NOT clobber the real clipboard: viterm has no selection
+            // clipboard (supports_selection_clipboard = false), so ⌘C stays the only way
+            // to copy. Without this guard, selecting text overwrites whatever the user had
+            // on the clipboard.
+            guard location == GHOSTTY_CLIPBOARD_STANDARD else { return }
             // content is an array of (mime, data) pairs. Prefer writing text/plain.
             guard let content, count > 0 else { return }
             let entries = UnsafeBufferPointer(start: content, count: Int(count))

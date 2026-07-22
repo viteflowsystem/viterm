@@ -352,6 +352,14 @@ final class GhosttySurfaceView: NSView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers == "c" {
+            if let surface, ghostty_surface_has_selection(surface) {
+                performBindingAction("copy_to_clipboard")
+            }
+            return true
+        }
+
         // ⌘V paste: send the text straight from NSPasteboard to the surface.
         // Plain ⌘V only — combos with extra modifiers (⌘⌥V etc.) are app shortcuts
         // and must not be swallowed as a paste.
@@ -463,14 +471,64 @@ final class GhosttySurfaceView: NSView {
 
     override func rightMouseDown(with event: NSEvent) {
         guard let surface else { return super.rightMouseDown(with: event) }
-        _ = ghostty_surface_mouse_button(
-            surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, Self.ghosttyMods(event.modifierFlags))
+        if ghostty_surface_mouse_button(
+            surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, Self.ghosttyMods(event.modifierFlags)) {
+            return
+        }
+        super.rightMouseDown(with: event)
     }
 
     override func rightMouseUp(with event: NSEvent) {
         guard let surface else { return super.rightMouseUp(with: event) }
         _ = ghostty_surface_mouse_button(
             surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, Self.ghosttyMods(event.modifierFlags))
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+        // Manual enabled state below; auto-enablement would override it.
+        menu.autoenablesItems = false
+
+        let copyItem = NSMenuItem(
+            title: "コピー", action: #selector(copySelection(_:)), keyEquivalent: "")
+        copyItem.target = self
+        copyItem.isEnabled = surface.map { ghostty_surface_has_selection($0) } ?? false
+        menu.addItem(copyItem)
+
+        let pasteItem = NSMenuItem(
+            title: "ペースト", action: #selector(pasteFromClipboard(_:)), keyEquivalent: "")
+        pasteItem.target = self
+        menu.addItem(pasteItem)
+
+        let selectAllItem = NSMenuItem(
+            title: "すべて選択", action: #selector(selectAllTerminalText(_:)), keyEquivalent: "")
+        selectAllItem.target = self
+        menu.addItem(selectAllItem)
+
+        menu.addItem(.separator())
+
+        let resetItem = NSMenuItem(
+            title: "ターミナルをリセット", action: #selector(resetTerminal(_:)), keyEquivalent: "")
+        resetItem.target = self
+        menu.addItem(resetItem)
+
+        return menu
+    }
+
+    @objc private func copySelection(_ sender: Any?) {
+        performBindingAction("copy_to_clipboard")
+    }
+
+    @objc private func pasteFromClipboard(_ sender: Any?) {
+        performBindingAction("paste_from_clipboard")
+    }
+
+    @objc private func selectAllTerminalText(_ sender: Any?) {
+        performBindingAction("select_all")
+    }
+
+    @objc private func resetTerminal(_ sender: Any?) {
+        performBindingAction("reset")
     }
 
     override func otherMouseDown(with event: NSEvent) {

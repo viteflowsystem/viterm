@@ -13,12 +13,25 @@ final class TabBarView: NSView {
     var onRenameTab: ((AgentSession.ID, String) -> Void)?
     /// The ＋ button (new session).
     var onAddTab: (() -> Void)?
-
+    /// Commits a tab move to an index within the selected worktree.
+    var onReorderTab: ((AgentSession.ID, Int) -> Void)?
     static let height: CGFloat = 34
 
     private let scrollView = NSScrollView()
     private let stack = NSStackView()
     private let bottomSeparator = NSBox()
+
+    private struct SessionDrag {
+        let sessionID: AgentSession.ID
+        let sourceIndex: Int
+        weak var item: TabItemView?
+        var insertionSlot: Int
+    }
+
+    private var activeSessionDrag: SessionDrag?
+    private var pendingViewModel: TabBarViewModel?
+    private var latestViewModel: TabBarViewModel?
+    private var displayedTabIDs: [AgentSession.ID] = []
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -63,6 +76,7 @@ final class TabBarView: NSView {
             stack.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
             stack.heightAnchor.constraint(equalTo: scrollView.heightAnchor),
         ])
+        registerForDraggedTypes([SessionDragPasteboard.type])
     }
 
     @available(*, unavailable)
@@ -70,15 +84,116 @@ final class TabBarView: NSView {
 
     /// Replace the whole tab row.
     func set(viewModel: TabBarViewModel) {
+        latestViewModel = viewModel
+        if activeSessionDrag != nil {
+            if viewModel.tabs.map(\.id) == displayedTabIDs {
+                pendingViewModel = viewModel
+                return
+            }
+            // Composition changed under the drag, so rebuild the frozen index space.
+            activeSessionDrag?.item?.alphaValue = 1
+            activeSessionDrag?.item?.isSessionDragSource = false
+            activeSessionDrag = nil
+            pendingViewModel = nil
+        }
+        rebuild(viewModel: viewModel)
+    }
+
+    private func rebuild(viewModel: TabBarViewModel) {
+        displayedTabIDs = viewModel.tabs.map(\.id)
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for tab in viewModel.tabs {
-            let item = TabItemView(tab: tab, isActive: tab.id == viewModel.activeTabID)
+            let item = TabItemView(
+                sessionID: tab.id,
+                tab: tab,
+                isActive: tab.id == viewModel.activeTabID
+            )
             item.onSelect = { [weak self] in self?.onSelectTab?(tab.id) }
             item.onClose = { [weak self] in self?.onCloseTab?(tab.id) }
             item.onRename = { [weak self] in self?.onRenameTab?(tab.id, tab.session.displayName) }
+            item.onDragEnded = { [weak self] in self?.endSessionDrag() }
             stack.addArrangedSubview(item)
         }
         stack.addArrangedSubview(makeAddButton())
+    }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        updateSessionDrag(sender)
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        updateSessionDrag(sender)
+    }
+
+    private func updateSessionDrag(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard let sessionID = SessionDragPasteboard.sessionID(from: sender.draggingPasteboard)
+        else { return [] }
+
+        if activeSessionDrag == nil {
+            guard let sourceIndex = displayedTabIDs.firstIndex(of: sessionID),
+                  let item = stack.subviews
+                    .compactMap({ $0 as? TabItemView })
+                    .first(where: { $0.sessionID == sessionID }) else { return [] }
+            item.isHidden = false
+            item.alphaValue = 0
+            item.isSessionDragSource = true
+            activeSessionDrag = SessionDrag(
+                sessionID: sessionID,
+                sourceIndex: sourceIndex,
+                item: item,
+                insertionSlot: sourceIndex
+            )
+        }
+        guard let drag = activeSessionDrag, drag.sessionID == sessionID, let item = drag.item
+        else { return [] }
+
+        stack.layoutSubtreeIfNeeded()
+        let others = stack.arrangedSubviews
+            .compactMap { $0 as? TabItemView }
+            .filter { $0 !== item }
+        let dragX = stack.convert(sender.draggingLocation, from: nil).x
+        let slot = TabReorderMath.insertionSlot(
+            forDragX: dragX,
+            tabMidXs: others.map(\.frame.midX)
+        )
+        guard slot != drag.insertionSlot else { return .move }
+        activeSessionDrag?.insertionSlot = slot
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            context.allowsImplicitAnimation = true
+            stack.removeArrangedSubview(item)
+            stack.insertArrangedSubview(item, at: min(slot, stack.arrangedSubviews.count))
+            stack.layoutSubtreeIfNeeded()
+        }
+        return .move
+    }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        activeSessionDrag?.item?.alphaValue = 1
+        activeSessionDrag?.item?.isSessionDragSource = false
+        activeSessionDrag?.item?.isHidden = true
+        activeSessionDrag = nil
+        pendingViewModel = nil
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard let drag = activeSessionDrag, drag.insertionSlot != drag.sourceIndex else {
+            return false
+        }
+        onReorderTab?(drag.sessionID, drag.insertionSlot)
+        return true
+    }
+
+    private func endSessionDrag() {
+        activeSessionDrag?.item?.alphaValue = 1
+        activeSessionDrag?.item?.isSessionDragSource = false
+        activeSessionDrag = nil
+        let viewModel = pendingViewModel ?? latestViewModel
+        pendingViewModel = nil
+        if let viewModel {
+            rebuild(viewModel: viewModel)
+        }
     }
 
     /// The ＋ (new session, ⌘T) button. Equivalent to the UI mock's `.tab.add`.
@@ -101,10 +216,13 @@ final class TabBarView: NSView {
 /// One tab: state dot + name + waitingInput badge + ⌘ number, with a close button on
 /// hover (equivalent to the UI mock's `.tab`). The active tab is emphasized with a
 /// background + a 2px accent bar at the top edge.
-private final class TabItemView: NSView {
+private final class TabItemView: NSView, NSDraggingSource {
+    let sessionID: AgentSession.ID
     var onSelect: (() -> Void)?
     var onClose: (() -> Void)?
     var onRename: (() -> Void)?
+    var onDragEnded: (() -> Void)?
+    var isSessionDragSource = false
 
     private let closeButton: NSButton = {
         let button = NSButton()
@@ -118,8 +236,11 @@ private final class TabItemView: NSView {
     }()
 
     private var trackingArea: NSTrackingArea?
+    private var mouseDownLocation: NSPoint?
+    private var draggingSession: NSDraggingSession?
 
-    init(tab: SessionNode, isActive: Bool) {
+    init(sessionID: AgentSession.ID, tab: SessionNode, isActive: Bool) {
+        self.sessionID = sessionID
         super.init(frame: .zero)
 
         wantsLayer = true
@@ -209,7 +330,63 @@ private final class TabItemView: NSView {
 
     override func mouseEntered(with event: NSEvent) { closeButton.isHidden = false }
     override func mouseExited(with event: NSEvent) { closeButton.isHidden = true }
-    override func mouseDown(with event: NSEvent) { onSelect?() }
+    override func mouseDown(with event: NSEvent) {
+        mouseDownLocation = convert(event.locationInWindow, from: nil)
+        draggingSession = nil
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard draggingSession == nil, let mouseDownLocation else { return }
+        let location = convert(event.locationInWindow, from: nil)
+        let distance = hypot(location.x - mouseDownLocation.x, location.y - mouseDownLocation.y)
+        guard distance > 4 else { return }
+
+        let pasteboardItem = NSPasteboardItem()
+        SessionDragPasteboard.write(sessionID, to: pasteboardItem)
+        let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
+        draggingItem.setDraggingFrame(bounds, contents: snapshot())
+        draggingSession = beginDraggingSession(with: [draggingItem], event: event, source: self)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        // Defer selection so dragging a tab does not replace the pane under its drop.
+        if draggingSession == nil {
+            onSelect?()
+        }
+        mouseDownLocation = nil
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        isSessionDragSource ? nil : super.hitTest(point)
+    }
+
+    private func snapshot() -> NSImage {
+        guard let representation = bitmapImageRepForCachingDisplay(in: bounds) else {
+            return NSImage(size: bounds.size)
+        }
+        cacheDisplay(in: bounds, to: representation)
+        let image = NSImage(size: bounds.size)
+        image.addRepresentation(representation)
+        return image
+    }
+
+    func draggingSession(
+        _ session: NSDraggingSession,
+        sourceOperationMaskFor context: NSDraggingContext
+    ) -> NSDragOperation {
+        context == .withinApplication ? .move : []
+    }
+
+    func draggingSession(
+        _ session: NSDraggingSession,
+        endedAt screenPoint: NSPoint,
+        operation: NSDragOperation
+    ) {
+        isHidden = false
+        draggingSession = nil
+        mouseDownLocation = nil
+        onDragEnded?()
+    }
 
     @objc private func didTapClose() { onClose?() }
     @objc private func didSelectRename() { onRename?() }

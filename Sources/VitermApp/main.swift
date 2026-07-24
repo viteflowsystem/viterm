@@ -82,10 +82,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         splitDown.keyEquivalentModifierMask = [.command, .shift]
         splitDown.target = controller
         sessionMenu.addItem(splitDown)
-        let closePane = NSMenuItem(title: "ペインを閉じる", action: #selector(MainWindowController.closePane(_:)), keyEquivalent: "w")
-        closePane.keyEquivalentModifierMask = [.command, .shift]
-        closePane.target = controller
-        sessionMenu.addItem(closePane)
         let nextPane = NSMenuItem(title: "次のペイン", action: #selector(MainWindowController.focusNextPane(_:)), keyEquivalent: "]")
         nextPane.target = controller
         sessionMenu.addItem(nextPane)

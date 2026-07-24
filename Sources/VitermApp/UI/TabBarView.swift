@@ -6,6 +6,7 @@ import VitermCore
 /// value type), replaced wholesale via `set(viewModel:)` (same convention as
 /// SidebarViewController).
 final class TabBarView: NSView {
+    let paneID: PaneID
     var onSelectTab: ((AgentSession.ID) -> Void)?
     /// From the tab's hover close button, or ⌘W.
     var onCloseTab: ((AgentSession.ID) -> Void)?
@@ -13,8 +14,8 @@ final class TabBarView: NSView {
     var onRenameTab: ((AgentSession.ID, String) -> Void)?
     /// The ＋ button (new session).
     var onAddTab: (() -> Void)?
-    /// Commits a tab move to an index within the selected worktree.
-    var onReorderTab: ((AgentSession.ID, Int) -> Void)?
+    /// Commits an in-pane reorder or cross-pane insertion.
+    var onDropTab: ((AgentSession.ID, Int) -> Void)?
     /// Fires whenever the native session drag ends, including cancellation.
     var onSessionDragEnded: (() -> Void)?
 
@@ -23,6 +24,16 @@ final class TabBarView: NSView {
     private let scrollView = NSScrollView()
     private let stack = NSStackView()
     private let bottomSeparator = NSBox()
+    private let insertionCaret: NSView = {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        view.alphaValue = 0
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.widthAnchor.constraint(equalToConstant: 2).isActive = true
+        view.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        return view
+    }()
 
     private struct SessionDrag {
         let sessionID: AgentSession.ID
@@ -32,12 +43,14 @@ final class TabBarView: NSView {
     }
 
     private var activeSessionDrag: SessionDrag?
+    private var foreignDrag: (sessionID: AgentSession.ID, insertionSlot: Int)?
     private var pendingViewModel: TabBarViewModel?
     private var latestViewModel: TabBarViewModel?
     private var displayedTabIDs: [AgentSession.ID] = []
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(paneID: PaneID) {
+        self.paneID = paneID
+        super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
@@ -117,6 +130,8 @@ final class TabBarView: NSView {
             item.onDragEnded = { [weak self] in self?.endSessionDrag() }
             stack.addArrangedSubview(item)
         }
+        insertionCaret.alphaValue = 0
+        stack.addArrangedSubview(insertionCaret)
         stack.addArrangedSubview(makeAddButton())
     }
 
@@ -133,10 +148,12 @@ final class TabBarView: NSView {
         else { return [] }
 
         if activeSessionDrag == nil {
-            guard let sourceIndex = displayedTabIDs.firstIndex(of: sessionID),
-                  let item = stack.subviews
-                    .compactMap({ $0 as? TabItemView })
-                    .first(where: { $0.sessionID == sessionID }) else { return [] }
+            guard let sourceIndex = displayedTabIDs.firstIndex(of: sessionID) else {
+                return updateForeignSessionDrag(sessionID, sender: sender)
+            }
+            guard let item = stack.subviews
+                .compactMap({ $0 as? TabItemView })
+                .first(where: { $0.sessionID == sessionID }) else { return [] }
             item.isHidden = false
             item.alphaValue = 0
             item.isSessionDragSource = true
@@ -172,19 +189,41 @@ final class TabBarView: NSView {
         return .move
     }
 
+    private func updateForeignSessionDrag(
+        _ sessionID: AgentSession.ID,
+        sender: any NSDraggingInfo
+    ) -> NSDragOperation {
+        stack.layoutSubtreeIfNeeded()
+        let tabs = stack.arrangedSubviews.compactMap { $0 as? TabItemView }
+        let dragX = stack.convert(sender.draggingLocation, from: nil).x
+        let slot = TabReorderMath.insertionSlot(
+            forDragX: dragX,
+            tabMidXs: tabs.map(\.frame.midX)
+        )
+        foreignDrag = (sessionID, slot)
+        insertionCaret.alphaValue = 1
+        stack.removeArrangedSubview(insertionCaret)
+        stack.insertArrangedSubview(insertionCaret, at: min(slot, stack.arrangedSubviews.count))
+        return .move
+    }
+
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
         activeSessionDrag?.item?.alphaValue = 1
         activeSessionDrag?.item?.isSessionDragSource = false
-        activeSessionDrag?.item?.isHidden = true
         activeSessionDrag = nil
+        foreignDrag = nil
+        insertionCaret.alphaValue = 0
         pendingViewModel = nil
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard let drag = activeSessionDrag, drag.insertionSlot != drag.sourceIndex else {
-            return false
+        if let drag = activeSessionDrag {
+            guard drag.insertionSlot != drag.sourceIndex else { return false }
+            onDropTab?(drag.sessionID, drag.insertionSlot)
+            return true
         }
-        onReorderTab?(drag.sessionID, drag.insertionSlot)
+        guard let drag = foreignDrag else { return false }
+        onDropTab?(drag.sessionID, drag.insertionSlot)
         return true
     }
 
@@ -193,6 +232,8 @@ final class TabBarView: NSView {
         activeSessionDrag?.item?.alphaValue = 1
         activeSessionDrag?.item?.isSessionDragSource = false
         activeSessionDrag = nil
+        foreignDrag = nil
+        insertionCaret.alphaValue = 0
         let viewModel = pendingViewModel ?? latestViewModel
         pendingViewModel = nil
         if let viewModel {

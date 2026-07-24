@@ -15,6 +15,9 @@ final class TabBarView: NSView {
     var onAddTab: (() -> Void)?
     /// Commits a tab move to an index within the selected worktree.
     var onReorderTab: ((AgentSession.ID, Int) -> Void)?
+    /// Fires whenever the native session drag ends, including cancellation.
+    var onSessionDragEnded: (() -> Void)?
+
     static let height: CGFloat = 34
 
     private let scrollView = NSScrollView()
@@ -186,6 +189,7 @@ final class TabBarView: NSView {
     }
 
     private func endSessionDrag() {
+        onSessionDragEnded?()
         activeSessionDrag?.item?.alphaValue = 1
         activeSessionDrag?.item?.isSessionDragSource = false
         activeSessionDrag = nil

@@ -1,4 +1,5 @@
 import AppKit
+import VitermCore
 
 /// Component hosting multiple panes (terminal surfaces, etc.) in a binary tree of
 /// `NSSplitView`s (T12).
@@ -18,6 +19,10 @@ final class SplitHostView: NSView {
     /// Called on every focus move (click, `focusNextPane()`, split, close).
     /// The argument is the new active pane's content (`nil` when no panes remain).
     var onActivePaneChanged: ((NSView?) -> Void)?
+    /// Called when an existing session tab is dropped onto a pane edge.
+    var onSessionDropped: ((AgentSession.ID, NSView, PaneDropMath.Edge) -> Void)?
+    /// Validates whether a session can be dropped onto a particular pane.
+    var canDropSession: ((AgentSession.ID, NSView) -> Bool)?
 
     /// Accent color for the focused pane's border. In dark mode, the accent value from
     /// docs/ui-mock.html; in light mode, a slightly darkened value to preserve contrast,
@@ -32,6 +37,9 @@ final class SplitHostView: NSView {
     private var activeNode: PaneNode?
     /// Reverse lookup `PaneContainerView` → `PaneNode` for click-based pane switching.
     private var nodesByContainer: [ObjectIdentifier: PaneNode] = [:]
+    private let paneDropHint = PaneDropHintOverlayView()
+    private var currentDropEdge: PaneDropMath.Edge?
+    private weak var currentDropContainer: PaneContainerView?
     // Marked unsafe so it can be released from deinit (nonisolated). Written only in
     // init/deinit (same reason as GhosttySurfaceView.surface).
     private nonisolated(unsafe) var mouseMonitor: Any?
@@ -40,6 +48,9 @@ final class SplitHostView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
+        paneDropHint.isHidden = true
+        addSubview(paneDropHint)
+        registerForDraggedTypes([SessionDragPasteboard.type])
         installMouseMonitor()
     }
 
@@ -78,7 +89,48 @@ final class SplitHostView: NSView {
             showRoot(newView)
             return
         }
+        _ = performSplit(target: target, newView: newView, vertically: vertically, newViewFirst: false)
+    }
 
+    /// Split the pane containing `targetContent` and place `newView` at the requested edge.
+    @discardableResult
+    func split(
+        containing targetContent: NSView,
+        with newView: NSView,
+        edge: PaneDropMath.Edge
+    ) -> Bool {
+        guard let target = leaf(containing: targetContent) else {
+            showRoot(newView)
+            return false
+        }
+        let configuration: (vertically: Bool, newViewFirst: Bool) = switch edge {
+        case .right: (true, false)
+        case .left: (true, true)
+        case .down: (false, false)
+        case .up: (false, true)
+        }
+        _ = performSplit(
+            target: target,
+            newView: newView,
+            vertically: configuration.vertically,
+            newViewFirst: configuration.newViewFirst
+        )
+        return true
+    }
+
+    /// Hide any directional session-drop affordance left by a cancelled native drag.
+    func clearSessionDropHint() {
+        paneDropHint.isHidden = true
+        currentDropEdge = nil
+        currentDropContainer = nil
+    }
+
+    private func performSplit(
+        target: PaneNode,
+        newView: NSView,
+        vertically: Bool,
+        newViewFirst: Bool
+    ) -> PaneNode {
         let newLeaf = makeLeafNode(content: newView)
         let splitView = NSSplitView()
         splitView.isVertical = vertically
@@ -87,17 +139,23 @@ final class SplitHostView: NSView {
         let targetView = containerView(for: target)
         let oldParent = target.parent
 
-        let splitNode = PaneNode(kind: .split(splitView, target, newLeaf))
+        let childA = newViewFirst ? newLeaf : target
+        let childB = newViewFirst ? target : newLeaf
+        let splitNode = PaneNode(kind: .split(splitView, childA, childB))
         splitNode.parent = oldParent
         target.parent = splitNode
         newLeaf.parent = splitNode
 
-        if let oldParent, case .split(let parentSplitView, let childA, let childB) = oldParent.kind {
-            let replacingA = (childA === target)
+        if let oldParent, case .split(let parentSplitView, let oldChildA, let oldChildB) = oldParent.kind {
+            let replacingA = (oldChildA === target)
             let insertIndex = parentSplitView.arrangedSubviews.firstIndex(of: targetView)
                 ?? parentSplitView.arrangedSubviews.count
             targetView.removeFromSuperview()
-            oldParent.kind = .split(parentSplitView, replacingA ? splitNode : childA, replacingA ? childB : splitNode)
+            oldParent.kind = .split(
+                parentSplitView,
+                replacingA ? splitNode : oldChildA,
+                replacingA ? oldChildB : splitNode
+            )
             parentSplitView.insertArrangedSubview(
                 splitView, at: min(insertIndex, parentSplitView.arrangedSubviews.count)
             )
@@ -107,10 +165,27 @@ final class SplitHostView: NSView {
             embedAsRoot(splitView)
         }
 
-        splitView.addArrangedSubview(targetView)
-        splitView.addArrangedSubview(containerView(for: newLeaf))
+        splitView.addArrangedSubview(containerView(for: childA))
+        splitView.addArrangedSubview(containerView(for: childB))
+
+        // A fresh NSSplitView has no divider position; without one the new arranged subview
+        // gets zero size (the sidebar split needs the same treatment, see setUpContent()).
+        // Layout may not have run yet, so try synchronously and fall back to the next runloop turn.
+        layoutSubtreeIfNeeded()
+        let position: () -> Void = { [weak splitView] in
+            guard let splitView else { return }
+            let total = splitView.isVertical ? splitView.bounds.width : splitView.bounds.height
+            guard total > 0 else { return }
+            splitView.setPosition(total / 2, ofDividerAt: 0)
+        }
+        if (vertically ? splitView.bounds.width : splitView.bounds.height) > 0 {
+            position()
+        } else {
+            DispatchQueue.main.async(execute: position)
+        }
 
         setActive(newLeaf, notify: true)
+        return newLeaf
     }
 
     /// Close the focused pane, detach the view it contained, and return it (not
@@ -179,17 +254,11 @@ final class SplitHostView: NSView {
     /// If a pane contains `view`, focus it and return true.
     @discardableResult
     func focusPane(containing view: NSView) -> Bool {
-        var leaves: [PaneNode] = []
-        collectLeaves(root, into: &leaves)
-        for node in leaves {
-            if case .leaf(let container) = node.kind, container.content === view {
-                if node !== activeNode {
-                    setActive(node, notify: true)
-                }
-                return true
-            }
+        guard let node = leaf(containing: view) else { return false }
+        if node !== activeNode {
+            setActive(node, notify: true)
         }
-        return false
+        return true
     }
 
     /// Close the pane containing `view`, detach the view, and return it (not destroyed).
@@ -197,12 +266,7 @@ final class SplitHostView: NSView {
     /// whose process exited.
     @discardableResult
     func closePane(containing view: NSView) -> NSView? {
-        var leaves: [PaneNode] = []
-        collectLeaves(root, into: &leaves)
-        guard let node = leaves.first(where: { node in
-            if case .leaf(let container) = node.kind { return container.content === view }
-            return false
-        }) else { return nil }
+        guard let node = leaf(containing: view) else { return nil }
         let previousActive = activeNode
         activeNode = node
         let removed = closeActivePane()
@@ -278,6 +342,30 @@ final class SplitHostView: NSView {
         }
     }
 
+    private func leaf(containing view: NSView) -> PaneNode? {
+        var leaves: [PaneNode] = []
+        collectLeaves(root, into: &leaves)
+        return leaves.first { node in
+            if case .leaf(let container) = node.kind {
+                return container.content === view
+            }
+            return false
+        }
+    }
+
+    private func leaf(at pointInSelf: NSPoint) -> (PaneContainerView, PaneNode)? {
+        guard bounds.contains(pointInSelf), let hitView = hitTest(pointInSelf) else { return nil }
+        var view: NSView? = hitView
+        while let current = view {
+            if let container = current as? PaneContainerView,
+               let node = nodesByContainer[ObjectIdentifier(container)] {
+                return (container, node)
+            }
+            view = current.superview
+        }
+        return nil
+    }
+
     /// Detach the entire current tree (each leaf's content view also gets `removeFromSuperview`; nothing is destroyed).
     private func detachAll() {
         if let root {
@@ -308,6 +396,7 @@ final class SplitHostView: NSView {
             view.leadingAnchor.constraint(equalTo: leadingAnchor),
             view.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
+        addSubview(paneDropHint, positioned: .above, relativeTo: nil)
     }
 
     // MARK: - Focus management
@@ -354,19 +443,78 @@ final class SplitHostView: NSView {
     private func handleLeftMouseDown(_ event: NSEvent) {
         guard event.window === window else { return }
         let pointInSelf = convert(event.locationInWindow, from: nil)
-        guard bounds.contains(pointInSelf), let hitView = hitTest(pointInSelf) else { return }
-
-        var view: NSView? = hitView
-        while let current = view {
-            if let container = current as? PaneContainerView,
-               let node = nodesByContainer[ObjectIdentifier(container)] {
-                if node !== activeNode {
-                    setActive(node, notify: true)
-                }
-                return
-            }
-            view = current.superview
+        guard let (_, node) = leaf(at: pointInSelf) else { return }
+        if node !== activeNode {
+            setActive(node, notify: true)
         }
+    }
+
+    // MARK: - Session drag destination
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        updatePaneDropHint(sender)
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        updatePaneDropHint(sender)
+    }
+
+    private func updatePaneDropHint(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard let sessionID = SessionDragPasteboard.sessionID(from: sender.draggingPasteboard) else {
+            paneDropHint.isHidden = true
+            return []
+        }
+        let point = convert(sender.draggingLocation, from: nil)
+        guard let (container, _) = leaf(at: point) else {
+            paneDropHint.isHidden = true
+            return []
+        }
+        guard let content = container.content else {
+            paneDropHint.isHidden = true
+            return []
+        }
+        guard canDropSession?(sessionID, content) != false else {
+            paneDropHint.isHidden = true
+            return []
+        }
+        if container !== currentDropContainer {
+            currentDropContainer = container
+            currentDropEdge = nil
+        }
+        let containerRect = convert(container.bounds, from: container)
+        guard let edge = PaneDropMath.edge(
+            for: point,
+            in: containerRect,
+            current: currentDropEdge
+        ) else {
+            paneDropHint.isHidden = true
+            return []
+        }
+        currentDropEdge = edge
+        paneDropHint.frame = PaneDropMath.halfRect(for: edge, in: containerRect)
+        paneDropHint.isHidden = false
+        addSubview(paneDropHint, positioned: .above, relativeTo: nil)
+        return .move
+    }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        clearSessionDropHint()
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        defer { clearSessionDropHint() }
+        guard let sessionID = SessionDragPasteboard.sessionID(from: sender.draggingPasteboard)
+        else { return false }
+        let point = convert(sender.draggingLocation, from: nil)
+        guard let (container, _) = leaf(at: point),
+              let content = container.content,
+              canDropSession?(sessionID, content) != false else { return false }
+        let containerRect = convert(container.bounds, from: container)
+        let current = container === currentDropContainer ? currentDropEdge : nil
+        guard let edge = PaneDropMath.edge(for: point, in: containerRect, current: current)
+        else { return false }
+        onSessionDropped?(sessionID, content, edge)
+        return true
     }
 }
 
@@ -478,5 +626,27 @@ private final class PaneBorderOverlayView: NSView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         if isActive { needsDisplay = true }
+    }
+}
+
+/// Click-through overlay showing the half-pane that will receive a dropped session.
+private final class PaneDropHintOverlayView: NSView {
+    private static let borderWidth: CGFloat = 2
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        SplitHostView.accentColor.withAlphaComponent(0.25).setFill()
+        bounds.fill()
+        let inset = Self.borderWidth / 2
+        let path = NSBezierPath(rect: bounds.insetBy(dx: inset, dy: inset))
+        path.lineWidth = Self.borderWidth
+        SplitHostView.accentColor.setStroke()
+        path.stroke()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }

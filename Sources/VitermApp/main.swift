@@ -75,6 +75,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionMenu.addItem(closeTab)
 
         sessionMenu.addItem(.separator())
+        let splitRight = NSMenuItem(title: "右に分割", action: #selector(MainWindowController.splitPaneRight(_:)), keyEquivalent: "d")
+        splitRight.target = controller
+        sessionMenu.addItem(splitRight)
+        let splitDown = NSMenuItem(title: "下に分割", action: #selector(MainWindowController.splitPaneDown(_:)), keyEquivalent: "d")
+        splitDown.keyEquivalentModifierMask = [.command, .shift]
+        splitDown.target = controller
+        sessionMenu.addItem(splitDown)
+        let nextPane = NSMenuItem(title: "次のペイン", action: #selector(MainWindowController.focusNextPane(_:)), keyEquivalent: "]")
+        nextPane.target = controller
+        sessionMenu.addItem(nextPane)
+
+        sessionMenu.addItem(.separator())
         let quickOpen = NSMenuItem(title: "クイックオープン…", action: #selector(MainWindowController.showQuickOpen(_:)), keyEquivalent: "p")
         quickOpen.target = controller
         sessionMenu.addItem(quickOpen)

@@ -226,7 +226,7 @@ final class SidebarViewController: NSViewController {
     @objc private func didTapNewSession() { onNewSession?() }
     @objc private func didTapShowPalette() { onShowPalette?() }
 
-    func set(viewModel: SidebarViewModel) {
+    func set(viewModel: SidebarViewModel, selectedSessionID: AgentSession.ID?) {
         // Write the model's filter text back into the field, but never clobber live
         // editing: skip when the values already match, and skip while the field is
         // composing text with an IME (marked text) — this method also runs on the
@@ -252,7 +252,7 @@ final class SidebarViewController: NSViewController {
         scrollView.isHidden = isStateMode
         stateListView.isHidden = !isStateMode
         modeControl.selectedSegment = isStateMode ? 1 : 0
-        stateListView.set(lanes: viewModel.stateLanes, selectedSessionID: viewModel.selectedSessionID)
+        stateListView.set(lanes: viewModel.stateLanes, selectedSessionID: selectedSessionID)
 
         updateEmptyState(filtered: filtered)
         if treeUnchanged {

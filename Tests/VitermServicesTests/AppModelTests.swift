@@ -721,10 +721,10 @@ struct AppModelTests {
         #expect(notifier.calls.isEmpty)
     }
 
-    // MARK: Selection delegation
+    // MARK: Pane selection
 
-    @Test("選択系メソッドはSidebarViewModelへ委譲される")
-    func selectionMethodsDelegateToSidebar() async {
+    @Test("selectSessionはworktreeと所有paneをfocusする")
+    func selectSessionFocusesOwningPaneAndWorktree() async throws {
         let configStore = FakeConfigStore(config: VitermConfig.merge(
             global: VitermConfigFile(repositories: [repository]),
             project: nil
@@ -735,20 +735,22 @@ struct AppModelTests {
 
         let model = makeModel(configStore: configStore, scanner: scanner)
         await model.refresh()
-        _ = try! await model.startSession(worktreePath: worktree.path, presetName: "claude")
-        _ = try! await model.startSession(worktreePath: worktree.path, presetName: "codex")
+        let first = try await model.startSession(worktreePath: worktree.path, presetName: "claude")
+        let second = try await model.startSession(worktreePath: worktree.path, presetName: "codex")
+        model.selectSession(first.id)
+        let firstPane = model.paneLayouts[worktree.path]!.focusedPaneID!
+        model.splitPane(firstPane, edge: .right, with: second.id, in: worktree.path)
 
-        model.selectNextSession()
-        let first = model.sidebar.selectedSessionID
-        #expect(first != nil)
+        model.selectSession(first.id)
 
-        model.selectNextSession()
-        #expect(model.sidebar.selectedSessionID != first)
+        #expect(model.sidebar.selectedWorktreePath == worktree.path)
+        #expect(model.selectedSessionID == first.id)
+        #expect(model.selectedSessionNode?.id == first.id)
+        #expect(model.focusedPaneID == firstPane)
 
-        model.selectPreviousSession()
-        #expect(model.sidebar.selectedSessionID == first)
-
-        #expect(model.jumpToLatestWaitingSession() == false, "waitingInputのセッションが無いのでfalse")
+        let original = model.selectedSessionID
+        model.selectSession(UUID())
+        #expect(model.selectedSessionID == original)
     }
 
     @Test("worktree選択系メソッドはSidebarViewModelへ委譲される")
@@ -807,7 +809,7 @@ struct AppModelTests {
         model.removeSession(first.id)
 
         #expect(model.sidebar.selectedWorktreePath == worktree.path, "worktreeの選択は維持される")
-        #expect(model.sidebar.selectedSessionID == second.id, "残った別タブに自動的に切り替わる")
+        #expect(model.selectedSessionID == second.id, "残った別タブに自動的に切り替わる")
     }
 
     @Test("removeSessionで非選択タブを閉じても現在の選択には影響しない")
@@ -820,7 +822,7 @@ struct AppModelTests {
 
         model.removeSession(second.id)
 
-        #expect(model.sidebar.selectedSessionID == first.id)
+        #expect(model.selectedSessionID == first.id)
     }
 
     @Test("removeSessionでworktree内最後のタブを閉じるとセッション選択は解除される")
@@ -833,73 +835,79 @@ struct AppModelTests {
         model.removeSession(only.id)
 
         #expect(model.sidebar.selectedWorktreePath == worktree.path, "worktreeの選択自体は維持される")
-        #expect(model.sidebar.selectedSessionID == nil)
+        #expect(model.selectedSessionID == nil)
+        #expect(model.currentPaneLayout?.isEmpty == true)
     }
 
-    // MARK: moveSession
+    // MARK: Pane layout operations
 
-    @Test("moveSessionは他worktreeのflat-array位置を変えずに並べ替える")
-    func moveSessionPreservesInterleavedWorktreePositions() async throws {
-        let model = makeModel()
-        let a1 = try await model.startSession(worktreePath: "/wt/a", presetName: "a1")
-        let b1 = try await model.startSession(worktreePath: "/wt/b", presetName: "b1")
-        let a2 = try await model.startSession(worktreePath: "/wt/a", presetName: "a2")
-        let b2 = try await model.startSession(worktreePath: "/wt/b", presetName: "b2")
-        let a3 = try await model.startSession(worktreePath: "/wt/a", presetName: "a3")
-
-        model.moveSession(a3.id, toTabIndex: 0)
-
-        #expect(model.sessions.map(\.id) == [a3.id, b1.id, a1.id, b2.id, a2.id])
-    }
-
-    @Test("moveSessionは先頭末尾間の移動とdestinationのclampを行う")
-    func moveSessionMovesAcrossBoundsAndClamps() async throws {
-        let model = makeModel()
-        let first = try await model.startSession(worktreePath: "/wt/a", presetName: "first")
-        let middle = try await model.startSession(worktreePath: "/wt/a", presetName: "middle")
-        let last = try await model.startSession(worktreePath: "/wt/a", presetName: "last")
-
-        model.moveSession(first.id, toTabIndex: .max)
-        #expect(model.sessions.map(\.id) == [middle.id, last.id, first.id])
-
-        model.moveSession(first.id, toTabIndex: 0)
-        #expect(model.sessions.map(\.id) == [first.id, middle.id, last.id])
-
-        model.moveSession(last.id, toTabIndex: -100)
-        #expect(model.sessions.map(\.id) == [last.id, first.id, middle.id])
-    }
-
-    @Test("moveSessionは不明IDと同順序になる移動では変更しない")
-    func moveSessionUnknownAndNoOp() async throws {
-        let model = makeModel()
-        let first = try await model.startSession(worktreePath: "/wt/a", presetName: "first")
-        let second = try await model.startSession(worktreePath: "/wt/a", presetName: "second")
-        let original = model.sessions
-
-        model.moveSession(UUID(), toTabIndex: 0)
-        #expect(model.sessions == original)
-
-        model.moveSession(first.id, toTabIndex: 0)
-        #expect(model.sessions == original)
-        #expect(model.sessions.map(\.id) == [first.id, second.id])
-    }
-
-    @Test("moveSession後も選択を維持しショートカット番号を新順序に振る")
-    func moveSessionPreservesSelectionAndRenumbersShortcuts() async throws {
+    @Test("startSessionはtarget paneへtabを追加しsessions配列順序はstore順のまま")
+    func startSessionAddsTabToTargetPane() async throws {
         let (model, worktree) = await makeModelWithRegisteredWorktree()
         let first = try await model.startSession(worktreePath: worktree.path, presetName: "first")
         let second = try await model.startSession(worktreePath: worktree.path, presetName: "second")
-        let third = try await model.startSession(worktreePath: worktree.path, presetName: "third")
-        model.selectSession(second.id)
+        model.selectWorktree(worktree.path)
+        let pane = model.focusedPaneID!
+        let third = try await model.startSession(
+            worktreePath: worktree.path,
+            presetName: "third",
+            targetPaneID: pane
+        )
 
-        model.moveSession(third.id, toTabIndex: 0)
+        #expect(model.sessions.map(\.id) == [first.id, second.id, third.id])
+        #expect(model.paneLayouts[worktree.path]?.tabs(of: pane)?.tabIDs == [first.id, second.id, third.id])
+        #expect(model.selectedSessionID == third.id)
+    }
 
-        #expect(model.sidebar.selectedSessionID == second.id)
-        let tabs = TabBarViewModel(
-            sessions: model.sidebar.selectedWorktree?.sessions.map(\.session) ?? []
-        ).tabs
-        #expect(tabs.map(\.id) == [third.id, first.id, second.id])
-        #expect(tabs.map(\.shortcutNumber) == [1, 2, 3])
+    @Test("split/move/focus/shortcut/divider APIはPaneLayoutを更新する")
+    func paneLayoutAPIs() async throws {
+        let (model, worktree) = await makeModelWithRegisteredWorktree()
+        let first = try await model.startSession(worktreePath: worktree.path, presetName: "first")
+        let second = try await model.startSession(worktreePath: worktree.path, presetName: "second")
+        model.selectWorktree(worktree.path)
+        let sourcePane = model.focusedPaneID!
+        model.splitPane(sourcePane, edge: .right, with: second.id, in: worktree.path)
+        let destinationPane = model.focusedPaneID!
+
+        model.focusPane(sourcePane)
+        #expect(model.focusedPaneID == sourcePane)
+        model.focusNextPane()
+        #expect(model.focusedPaneID == destinationPane)
+
+        model.moveTab(
+            first.id,
+            to: .tabBar(paneID: destinationPane, insertIndex: 0),
+            in: worktree.path
+        )
+        #expect(model.currentPaneLayout?.paneIDs == [destinationPane])
+        #expect(model.currentPaneLayout?.focusedTabs?.tabIDs == [first.id, second.id])
+        #expect(model.selectedSessionID == first.id)
+        #expect(model.selectShortcutTab(2))
+        #expect(model.selectedSessionID == second.id)
+        #expect(!model.selectShortcutTab(10))
+
+        let pane = model.focusedPaneID!
+        model.splitPane(pane, edge: .down, with: UUID(), in: worktree.path)
+        let splitID = model.currentPaneLayout!.splitIDs[0]
+        model.updateDividerPosition(0.8, forSplit: splitID, in: worktree.path)
+        guard case .split(let split) = model.currentPaneLayout?.root else {
+            Issue.record("Expected split root")
+            return
+        }
+        #expect(split.dividerPosition == 0.8)
+    }
+
+    @Test("jumpToLatestWaitingSessionはpure sidebar queryからpane selectionへ移る")
+    func jumpToLatestWaitingFocusesSession() async throws {
+        let (model, worktree) = await makeModelWithRegisteredWorktree()
+        let first = try await model.startSession(worktreePath: worktree.path, presetName: "first")
+        let second = try await model.startSession(worktreePath: worktree.path, presetName: "second")
+        model.sessionStateChanged(sessionID: first.id, newState: .waitingInput, at: Date(timeIntervalSince1970: 10))
+        model.sessionStateChanged(sessionID: second.id, newState: .waitingInput, at: Date(timeIntervalSince1970: 20))
+        model.selectSession(first.id)
+
+        #expect(model.jumpToLatestWaitingSession())
+        #expect(model.selectedSessionID == second.id)
     }
 
     // MARK: sidebar display mode

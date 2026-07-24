@@ -14,23 +14,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     let sessionManager: SessionManager
 
     private let sidebar = SidebarViewController()
-    private let tabBar = TabBarView()
     private let splitHost = SplitHostView()
-    /// Placeholder shown when there are no panes.
-    private let placeholderView: NSView = {
-        let view = NSView()
-        view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
-        let label = NSTextField(labelWithString: "⌘T でセッションを起動 / ⌘N で worktree を作成")
-        label.textColor = .secondaryLabelColor
-        label.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-        ])
-        return view
-    }()
     private let statusBar = StatusBarView()
     private let splitView = NSSplitView()
     private let stateMonitor = SessionStateMonitor()
@@ -154,7 +138,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             )
         }
         surfaceView.onBell = { [weak self] in
-            guard let self, self.appModel.sidebar.selectedSessionID != sessionID else { return }
+            guard let self, self.appModel.selectedSessionID != sessionID else { return }
             self.appModel.sessionStateChanged(sessionID: sessionID, newState: .waitingInput)
             self.render()
             NSApp.requestUserAttention(.informationalRequest)
@@ -177,14 +161,12 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    /// Session cleanup: unwatch → detach from the pane → destroy the surface → remove from the list.
+    /// Session cleanup: unwatch → remove from the model (auto-collapsing empty panes) →
+    /// terminate the surface → render → persist.
     private func cleanUpSession(_ sessionID: AgentSession.ID) {
         stateMonitor.unwatch(sessionID: sessionID)
-        if let surface = sessionManager.surface(for: sessionID) {
-            splitHost.closePane(containing: surface)
-        }
-        sessionManager.terminate(sessionID: sessionID)
         appModel.removeSession(sessionID)
+        sessionManager.terminate(sessionID: sessionID)
         render()
         persistSessions()
     }
@@ -213,7 +195,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
         // Notify only for non-selected sessions that transitioned to waiting-input (cmux style).
         guard newState == .waitingInput,
-              appModel.sidebar.selectedSessionID != sessionID,
+              appModel.selectedSessionID != sessionID,
               let session = appModel.sessions.first(where: { $0.id == sessionID }) else { return }
         NSApp.requestUserAttention(.informationalRequest)
         if notificationsAvailable {
@@ -239,24 +221,10 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
         let sidebarView = sidebar.view
 
-        // Terminal side: stack the tab bar (top) and splitHost (bottom) vertically.
-        let termContainer = NSView()
-        tabBar.translatesAutoresizingMaskIntoConstraints = false
         splitHost.translatesAutoresizingMaskIntoConstraints = false
-        termContainer.addSubview(tabBar)
-        termContainer.addSubview(splitHost)
-        NSLayoutConstraint.activate([
-            tabBar.topAnchor.constraint(equalTo: termContainer.topAnchor),
-            tabBar.leadingAnchor.constraint(equalTo: termContainer.leadingAnchor),
-            tabBar.trailingAnchor.constraint(equalTo: termContainer.trailingAnchor),
-            splitHost.topAnchor.constraint(equalTo: tabBar.bottomAnchor),
-            splitHost.leadingAnchor.constraint(equalTo: termContainer.leadingAnchor),
-            splitHost.trailingAnchor.constraint(equalTo: termContainer.trailingAnchor),
-            splitHost.bottomAnchor.constraint(equalTo: termContainer.bottomAnchor),
-        ])
 
         splitView.addArrangedSubview(sidebarView)
-        splitView.addArrangedSubview(termContainer)
+        splitView.addArrangedSubview(splitHost)
         // Preferentially preserve the sidebar's width while keeping the divider draggable.
         // Min/max widths are managed by the delegate (constrainMin/MaxCoordinate)
         // (an external width constraint on an arranged subview is treated as required and
@@ -265,26 +233,32 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         splitView.delegate = self
         splitView.autosaveName = "viterm.sidebar"
 
-        tabBar.onSelectTab = { [weak self] sessionID in self?.select(sessionID: sessionID) }
-        tabBar.onCloseTab = { [weak self] sessionID in self?.terminateSession(sessionID) }
-        tabBar.onRenameTab = { [weak self] sessionID, currentName in
+        splitHost.onSelectTab = { [weak self] sessionID in self?.select(sessionID: sessionID) }
+        splitHost.onCloseTab = { [weak self] sessionID in self?.terminateSession(sessionID) }
+        splitHost.onRenameTab = { [weak self] sessionID, currentName in
             self?.renameSession(sessionID, currentName: currentName)
         }
-        tabBar.onAddTab = { [weak self] in self?.newSession(nil) }
-        tabBar.onReorderTab = { [weak self] sessionID, tabIndex in
+        splitHost.onAddTab = { [weak self] paneID in
+            guard let self, let worktreePath = self.appModel.sidebar.selectedWorktreePath else { return }
+            self.startDefaultSession(in: worktreePath, targetPaneID: paneID)
+        }
+        splitHost.onDropTab = { [weak self] sessionID, target in
             guard let self else { return }
-            self.appModel.moveSession(sessionID, toTabIndex: tabIndex)
+            guard let session = self.appModel.sessions.first(where: { $0.id == sessionID }) else { return }
+            self.appModel.selectWorktree(session.worktreePath)
+            self.appModel.moveTab(sessionID, to: target, in: session.worktreePath)
             self.render()
             self.persistSessions()
         }
-
-        // Sync pane focus movement to the sidebar selection (kept for when pane splitting is re-enabled).
-        splitHost.onActivePaneChanged = { [weak self] contentView in
-            guard let self, let contentView,
-                  let sessionID = self.sessionManager.sessionID(for: contentView),
-                  self.appModel.sidebar.selectedSessionID != sessionID else { return }
-            self.appModel.selectSession(sessionID)
+        splitHost.onRequestFocusPane = { [weak self] paneID in
+            guard let self else { return }
+            self.appModel.focusPane(paneID)
             self.render()
+        }
+        splitHost.onDividerMoved = { [weak self] splitID, position in
+            guard let self, let worktreePath = self.appModel.sidebar.selectedWorktreePath else { return }
+            // Model-only write: render is intentionally omitted to avoid a divider feedback loop.
+            self.appModel.updateDividerPosition(position, forSplit: splitID, in: worktreePath)
         }
 
         let root = NSView()
@@ -309,31 +283,21 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
     // MARK: - State sync
 
-    /// Reflect AppModel's current state into the UI. Called on every state change.
-    /// Applies in order: worktree selection → tab bar update → showRoot on the selected
-    /// session's surface (pane splitting is sealed off for now, so treating everything as
-    /// a single-pane display is fine).
+    /// Reflect AppModel's pane-owned state into the UI.
     func render() {
-        sidebar.set(viewModel: appModel.sidebar)
-        statusBar.update(sidebar: appModel.sidebar)
-
-        let tabs = appModel.sidebar.selectedWorktree?.sessions.map(\.session) ?? []
-        tabBar.set(viewModel: TabBarViewModel(sessions: tabs, activeTabID: appModel.sidebar.selectedSessionID))
-
-        let selectedID = appModel.sidebar.selectedSessionID
-        let surface = selectedID.flatMap { sessionManager.surface(for: $0) }
-        if let surface {
-            if splitHost.hostedViews != [surface] {
-                splitHost.showRoot(surface)
-            }
-        } else if splitHost.hostedViews != [placeholderView] {
-            splitHost.showRoot(placeholderView)
-        }
-        // Monitor the visible session at high frequency, hidden ones throttled (P1).
-        stateMonitor.setVisibleSession(selectedID)
+        sidebar.set(viewModel: appModel.sidebar, selectedSessionID: appModel.selectedSessionID)
+        statusBar.update(sidebar: appModel.sidebar, selectedSession: appModel.selectedSessionNode)
+        let sessionsByID = Dictionary(uniqueKeysWithValues: appModel.sessions.map { ($0.id, $0) })
+        splitHost.render(
+            appModel.currentPaneLayout ?? PaneLayout(),
+            sessions: sessionsByID,
+            surface: { [sessionManager] in sessionManager.surface(for: $0) }
+        )
+        // Monitor every pane's active tab at high frequency; background tabs stay throttled.
+        stateMonitor.setVisibleSessions(appModel.currentPaneLayout?.activeTabIDs ?? [])
 
         // Reflect the current context in the title (mock: "viterm — feat/sidebar · claude #1").
-        if let selected = appModel.sidebar.selectedSession {
+        if let selected = appModel.selectedSessionNode {
             let branch = appModel.worktrees.first { $0.path == selected.session.worktreePath }?.branch
             let parts = [branch, selected.session.displayName].compactMap { $0 }
             window?.title = "viterm — " + parts.joined(separator: " · ")
@@ -368,7 +332,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     }
 
     private func select(sessionID: AgentSession.ID) {
-        guard appModel.sidebar.selectedSessionID != sessionID else { return }
+        guard appModel.selectedSessionID != sessionID else { return }
         appModel.selectSession(sessionID)
         render()
     }
@@ -382,12 +346,13 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
     }
 
     /// Launch the default preset in the given worktree, from the tree's "＋ add session" row / ⌘T.
-    func startDefaultSession(in worktreePath: String) {
+    func startDefaultSession(in worktreePath: String, targetPaneID: PaneID? = nil) {
         Task { @MainActor in
             do {
                 let session = try await appModel.startSession(
                     worktreePath: worktreePath,
-                    presetName: appModel.config.defaultPreset ?? "shell"
+                    presetName: appModel.config.defaultPreset ?? "shell",
+                    targetPaneID: targetPaneID
                 )
                 watchSession(session)
                 appModel.selectSession(session.id)
@@ -409,11 +374,14 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         // layout. There was an incident where a test launch saved the shrunken list from a
         // half-finished restore and lost real data.
         guard ProcessInfo.processInfo.environment["VITERM_AUTOSTART_SESSION"] == nil else { return }
+        let activeSessionByWorktree = appModel.paneLayouts.compactMapValues {
+            $0.focusedTabs?.activeTabID
+        }
         restoreStore.save(
             sessions: appModel.sessions,
-            selectedSessionID: appModel.sidebar.selectedSessionID,
+            selectedSessionID: appModel.selectedSessionID,
             selectedWorktreePath: appModel.sidebar.selectedWorktreePath,
-            activeSessionByWorktree: appModel.sidebar.activeSessionByWorktree
+            activeSessionByWorktree: activeSessionByWorktree
         )
     }
 
@@ -438,20 +406,20 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             }
         }
 
-        // Restore each worktree's last active session first (select(sessionID:)
-        // automatically remembers the session's own worktree, so the key's worktreePath
-        // itself is unnecessary). This lets the subsequent selectWorktree / selectSession
-        // resolve "restore if remembered" correctly.
+        // startSession appends into the worktree's focused pane, so restoration naturally
+        // produces one pane per worktree containing all of that worktree's sessions.
+        // Focus each persisted active session before restoring the globally selected one.
         for index in (state.activeSessionIndexByWorktree ?? [:]).values {
             guard let session = restoredByOriginalIndex[index] else { continue }
             appModel.selectSession(session.id)
         }
 
-        if let worktreePath = state.selectedWorktreePath, knownWorktrees.contains(worktreePath) {
-            appModel.selectWorktree(worktreePath)
-        } else if let selectedIndex = state.selectedIndex, let session = restoredByOriginalIndex[selectedIndex] {
-            // Backward compatibility with the old format (no selectedWorktreePath).
+        if let selectedIndex = state.selectedIndex,
+           let session = restoredByOriginalIndex[selectedIndex] {
             appModel.selectSession(session.id)
+        } else if let worktreePath = state.selectedWorktreePath,
+                  knownWorktrees.contains(worktreePath) {
+            appModel.selectWorktree(worktreePath)
         }
         render()
     }
@@ -470,16 +438,11 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
     /// ⌘1..9 tab switching within the selected worktree (number in sender.tag; numbering is tab-local).
     @objc func selectShortcutTab(_ sender: Any?) {
-        guard let item = sender as? NSMenuItem, let worktree = appModel.sidebar.selectedWorktree else {
+        guard let item = sender as? NSMenuItem else {
             NSSound.beep()
             return
         }
-        var tabBarViewModel = TabBarViewModel(
-            sessions: worktree.sessions.map(\.session),
-            activeTabID: appModel.sidebar.selectedSessionID
-        )
-        if tabBarViewModel.selectShortcut(item.tag), let activeTabID = tabBarViewModel.activeTabID {
-            appModel.selectSession(activeTabID)
+        if appModel.selectShortcutTab(item.tag) {
             render()
         } else {
             NSSound.beep()
@@ -509,7 +472,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
     /// ⌘W close the active tab (session). With no tabs, close the window (standard behavior).
     @objc func closeTab(_ sender: Any?) {
-        guard let sessionID = appModel.sidebar.selectedSessionID else {
+        guard let sessionID = appModel.currentPaneLayout?.focusedTabs?.activeTabID else {
             window?.performClose(sender)
             return
         }
@@ -560,24 +523,34 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
     private func splitPane(vertically: Bool) {
         let worktreePath = appModel.sidebar.selectedWorktreePath ?? appModel.worktrees.first?.path
-        guard let worktreePath else {
+        guard let worktreePath,
+              let targetPaneID = appModel.paneLayouts[worktreePath]?.focusedPaneID else {
             NSSound.beep()
             return
         }
+        let edge: PaneDropMath.Edge = vertically ? .right : .down
         Task { @MainActor in
             do {
                 let session = try await appModel.startSession(
                     worktreePath: worktreePath,
-                    presetName: appModel.config.defaultPreset ?? "shell"
+                    presetName: appModel.config.defaultPreset ?? "shell",
+                    targetPaneID: targetPaneID
                 )
                 watchSession(session)
-                guard let surface = sessionManager.surface(for: session.id) else { return }
-                if splitHost.hostedViews.isEmpty || splitHost.hostedViews == [placeholderView] {
-                    splitHost.showRoot(surface)
-                } else {
-                    splitHost.splitActive(surface, vertically: vertically)
+                // The user may switch worktrees or close the target pane while launch is suspended.
+                // In either case the newly-created session remains a normal background tab.
+                guard appModel.sidebar.selectedWorktreePath == worktreePath,
+                      appModel.paneLayouts[worktreePath]?.paneIDs.contains(targetPaneID) == true else {
+                    render()
+                    persistSessions()
+                    return
                 }
-                appModel.selectSession(session.id)
+                appModel.splitPane(
+                    targetPaneID,
+                    edge: edge,
+                    with: session.id,
+                    in: worktreePath
+                )
                 render()
                 persistSessions()
             } catch {
@@ -586,18 +559,10 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    /// ⌘⇧W close the pane (the session stays alive in the background, reachable from the sidebar).
-    @objc func closePane(_ sender: Any?) {
-        guard splitHost.closeActivePane() != nil else {
-            NSSound.beep()
-            return
-        }
-        render()
-    }
-
     /// ⌘] move focus to the next pane.
     @objc func focusNextPane(_ sender: Any?) {
-        splitHost.focusNextPane()
+        appModel.focusNextPane()
+        render()
     }
 
     /// ⌘K command palette (T12b).
@@ -637,6 +602,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
                 render()
             } else {
                 Task { @MainActor in
+                    appModel.selectWorktree(worktreeID)
                     await appModel.switchToWorktree(worktreeID)
                     self.newSession(nil)
                 }

@@ -106,6 +106,13 @@ public struct PaneLayout: Sendable, Equatable, Codable {
     public mutating func dropTab(_ sessionID: AgentSession.ID, on target: PaneDropTarget) {
         let original = self
         let sourcePaneID = paneID(containing: sessionID)
+        if case .tabBar(let paneID, let insertIndex) = target,
+           sourcePaneID == paneID {
+            _ = Self.updatePane(paneID, in: &root) { tabs in
+                tabs.moveWithinPane(sessionID, to: insertIndex)
+            }
+            return
+        }
         if let sourcePaneID,
            sourcePaneID == target.paneID,
            tabs(of: sourcePaneID)?.tabIDs.count == 1 {

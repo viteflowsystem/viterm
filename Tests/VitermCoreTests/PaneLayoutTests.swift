@@ -152,6 +152,30 @@ struct PaneLayoutTests {
         #expect(layout.focusedPaneID == left)
     }
 
+    @Test("同一paneのbackground tab並べ替えはactive tabとpane focusを維持する")
+    func samePaneReorderPreservesActivationAndFocus() {
+        var (layout, left, right, _) = twoPaneLayout()
+        layout.focusPane(right)
+
+        layout.dropTab(a, on: .tabBar(paneID: left, insertIndex: 1))
+
+        #expect(layout.tabs(of: left)?.tabIDs == [b, a])
+        #expect(layout.tabs(of: left)?.activeTabID == b)
+        #expect(layout.focusedPaneID == right)
+    }
+
+    @Test("pane間tab dropは移動tabをactivateして移動先paneをfocusする")
+    func crossPaneDropActivatesMovedTabAndDestination() {
+        var (layout, left, right, _) = twoPaneLayout()
+
+        layout.dropTab(a, on: .tabBar(paneID: right, insertIndex: 0))
+
+        #expect(layout.tabs(of: left)?.tabIDs == [b])
+        #expect(layout.tabs(of: right)?.tabIDs == [a, c])
+        #expect(layout.tabs(of: right)?.activeTabID == a)
+        #expect(layout.focusedPaneID == right)
+    }
+
     @Test("dropの往復で元のlayoutへ完全に戻る")
     func dropRoundTripIsReversible() {
         var (layout, left, right, _) = twoPaneLayout()

@@ -161,11 +161,12 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
-    /// Session cleanup: unwatch → detach from the pane → destroy the surface → remove from the list.
+    /// Session cleanup: unwatch → remove from the model (auto-collapsing empty panes) →
+    /// terminate the surface → render → persist.
     private func cleanUpSession(_ sessionID: AgentSession.ID) {
         stateMonitor.unwatch(sessionID: sessionID)
-        sessionManager.terminate(sessionID: sessionID)
         appModel.removeSession(sessionID)
+        sessionManager.terminate(sessionID: sessionID)
         render()
         persistSessions()
     }

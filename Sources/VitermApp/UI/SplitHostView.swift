@@ -23,6 +23,8 @@ final class SplitHostView: NSView {
     private var splitIDsByView: [ObjectIdentifier: SplitID] = [:]
     private var lastTopology: PaneTopology?
     private var rootView: NSView?
+    private var lastFocusedPaneID: PaneID?
+    private weak var lastFocusedSurface: NSView?
     private var isApplyingDividerPosition = false
     private nonisolated(unsafe) var mouseMonitor: Any?
 
@@ -67,6 +69,7 @@ final class SplitHostView: NSView {
         } else {
             patch(layout, sessions: sessions, surface: surface)
         }
+        updateFirstResponder(for: layout)
     }
 
     private func rebuild(
@@ -151,13 +154,27 @@ final class SplitHostView: NSView {
     }
 
     private func wire(_ pane: PaneView) {
+        let paneID = pane.paneID
         pane.onDropTab = { [weak self] sessionID, target in self?.onDropTab?(sessionID, target) }
         pane.tabBar.onSelectTab = { [weak self] sessionID in self?.onSelectTab?(sessionID) }
         pane.tabBar.onCloseTab = { [weak self] sessionID in self?.onCloseTab?(sessionID) }
         pane.tabBar.onRenameTab = { [weak self] sessionID, name in self?.onRenameTab?(sessionID, name) }
-        pane.tabBar.onAddTab = { [weak self] in self?.onAddTab?(pane.paneID) }
+        pane.tabBar.onAddTab = { [weak self] in self?.onAddTab?(paneID) }
         pane.tabBar.onDropTab = { [weak self] sessionID, index in
-            self?.onDropTab?(sessionID, .tabBar(paneID: pane.paneID, insertIndex: index))
+            self?.onDropTab?(sessionID, .tabBar(paneID: paneID, insertIndex: index))
+        }
+    }
+
+    private func updateFirstResponder(for layout: PaneLayout) {
+        let focusedPaneID = layout.focusedPaneID
+        let focusedSurface = focusedPaneID.flatMap { paneViews[$0]?.activeSurface }
+        guard focusedPaneID != lastFocusedPaneID || focusedSurface !== lastFocusedSurface else {
+            return
+        }
+        lastFocusedPaneID = focusedPaneID
+        lastFocusedSurface = focusedSurface
+        if let focusedSurface {
+            window?.makeFirstResponder(focusedSurface)
         }
     }
 
@@ -299,6 +316,8 @@ private final class PaneView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    var activeSurface: NSView? { hostedSurface }
 
     func patch(
         tabs: PaneTabs,

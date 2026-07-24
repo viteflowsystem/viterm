@@ -19,6 +19,42 @@ public enum PaneDropMath {
         }
     }
 
+    public enum DropZone: Sendable, Equatable {
+        case center
+        case edge(Edge)
+    }
+
+    /// Width of the directional edge band used by pane-body drops.
+    public static func edgeBandWidth(in rect: CGRect) -> CGFloat {
+        max(80, 0.25 * min(rect.width, rect.height))
+    }
+
+    /// Returns one of four edge zones or the center zone for a point inside `rect`.
+    public static func zone(
+        for point: CGPoint,
+        in rect: CGRect,
+        current: DropZone? = nil
+    ) -> DropZone? {
+        guard rect.width > 0, rect.height > 0, rect.contains(point) else { return nil }
+        let distances: [(Edge, CGFloat)] = [
+            (.left, point.x - rect.minX),
+            (.right, rect.maxX - point.x),
+            (.up, rect.maxY - point.y),
+            (.down, point.y - rect.minY),
+        ]
+        let band = edgeBandWidth(in: rect)
+        let hysteresis = max(8, 0.05 * min(rect.width, rect.height))
+        if case .edge(let edge) = current,
+           let distance = distances.first(where: { $0.0 == edge })?.1,
+           distance <= band + hysteresis {
+            return .edge(edge)
+        }
+        guard let nearest = distances.min(by: { $0.1 < $1.1 }), nearest.1 <= band else {
+            return .center
+        }
+        return .edge(nearest.0)
+    }
+
     /// Returns the nearest edge, retaining `current` within a small hysteresis zone.
     public static func edge(
         for point: CGPoint,

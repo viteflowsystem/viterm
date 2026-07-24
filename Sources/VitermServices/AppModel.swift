@@ -59,6 +59,20 @@ public final class AppModel {
     public private(set) var worktrees: [VitermCore.Worktree]
     public private(set) var sessions: [AgentSession]
     public private(set) var sidebar: SidebarViewModel
+    public private(set) var paneLayouts: [String: PaneLayout]
+    public var selectedSessionID: AgentSession.ID? {
+        currentPaneLayout?.focusedTabs?.activeTabID
+    }
+    public var currentPaneLayout: PaneLayout? {
+        sidebar.selectedWorktreePath.flatMap { paneLayouts[$0] }
+    }
+    public var focusedPaneID: PaneID? {
+        currentPaneLayout?.focusedPaneID
+    }
+    public var selectedSessionNode: SessionNode? {
+        guard let selectedSessionID else { return nil }
+        return sidebar.flattenedSessions.first { $0.id == selectedSessionID }
+    }
     /// The worktree currently shown in the terminal pane (= target of `dispatch`'s `startSession`/`switchToWorktree`).
     public private(set) var currentWorktreeID: String?
     /// Non-fatal error messages from the most recent `refresh()`. Used for UI toasts and the like.
@@ -110,6 +124,7 @@ public final class AppModel {
         worktrees = []
         sessions = []
         sidebar = SidebarViewModel(repositories: [], worktrees: [], sessions: [])
+        paneLayouts = [:]
         currentWorktreeID = nil
         lastRefreshErrors = []
     }
@@ -371,9 +386,14 @@ public final class AppModel {
 
     /// Launch a session via `SessionLaunching` and add it to the list.
     @discardableResult
-    public func startSession(worktreePath: String, presetName: String) async throws -> AgentSession {
+    public func startSession(
+        worktreePath: String,
+        presetName: String,
+        targetPaneID: PaneID? = nil
+    ) async throws -> AgentSession {
         let session = try await sessionLauncher.startSession(worktreePath: worktreePath, presetName: presetName)
         sessions.append(session)
+        paneLayouts[worktreePath, default: PaneLayout()].newTab(session.id, in: targetPaneID)
         rebuildSidebar()
         return session
     }
@@ -395,38 +415,10 @@ public final class AppModel {
     /// Remove a session from the list (destroying the PTY/surface is the caller's —
     /// SessionManager's — responsibility).
     ///
-    /// If the closed session was the active tab (the selected session), the selected
-    /// worktree stays and selection automatically moves to another tab of the same
-    /// worktree (delegated to `selectWorktree`'s remembered-selection logic). If no tabs
-    /// remain in the worktree, the selection is cleared.
     public func removeSession(_ sessionID: AgentSession.ID) {
-        sessions.removeAll { $0.id == sessionID }
-        let worktreePathToReselect = sidebar.selectedSessionID == sessionID ? sidebar.selectedWorktreePath : nil
-        rebuildSidebar()
-        if let worktreePathToReselect {
-            sidebar.selectWorktree(worktreePathToReselect)
-        }
-    }
-
-    /// Move a session to a new position among its own worktree's tabs.
-    ///
-    /// `tabIndex` is clamped to the valid destination range. Sessions belonging to
-    /// other worktrees retain their positions in the flat session array.
-    public func moveSession(_ sessionID: AgentSession.ID, toTabIndex tabIndex: Int) {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
-        let flatIndices = sessions.indices.filter { sessions[$0].worktreePath == session.worktreePath }
-        var reordered = flatIndices.map { sessions[$0] }
-        guard let sourceIndex = reordered.firstIndex(where: { $0.id == sessionID }) else { return }
-
-        let moved = reordered.remove(at: sourceIndex)
-        reordered.insert(moved, at: min(max(tabIndex, 0), reordered.count))
-        guard reordered.map(\.id) != flatIndices.map({ sessions[$0].id }) else { return }
-
-        var updated = sessions
-        for (flatIndex, reorderedSession) in zip(flatIndices, reordered) {
-            updated[flatIndex] = reorderedSession
-        }
-        sessions = updated
+        sessions.removeAll { $0.id == sessionID }
+        paneLayouts[session.worktreePath]?.closeTab(sessionID)
         rebuildSidebar()
     }
 
@@ -451,23 +443,73 @@ public final class AppModel {
         rebuildSidebar()
     }
 
-    // MARK: - Sidebar selection (thin delegation to SidebarViewModel)
+    // MARK: - Pane and worktree selection
 
-    public func selectSession(_ sessionID: AgentSession.ID?) {
-        sidebar.select(sessionID: sessionID)
-    }
-
-    public func selectNextSession() {
-        sidebar.selectNext()
-    }
-
-    public func selectPreviousSession() {
-        sidebar.selectPrevious()
+    public func selectSession(_ sessionID: AgentSession.ID) {
+        guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
+        sidebar.selectWorktree(session.worktreePath)
+        paneLayouts[session.worktreePath]?.focusSession(sessionID)
     }
 
     @discardableResult
     public func jumpToLatestWaitingSession() -> Bool {
-        sidebar.jumpToLatestWaiting()
+        guard let session = sidebar.latestWaitingSession() else { return false }
+        selectSession(session.id)
+        return true
+    }
+
+    public func splitPane(
+        _ paneID: PaneID?,
+        edge: PaneDropMath.Edge,
+        with newSessionID: AgentSession.ID,
+        in worktreePath: String
+    ) {
+        var layout = paneLayouts[worktreePath, default: PaneLayout()]
+        if layout.paneID(containing: newSessionID) != nil,
+           let targetPaneID = paneID ?? layout.focusedPaneID {
+            layout.dropTab(
+                newSessionID,
+                on: .paneBody(paneID: targetPaneID, zone: .edge(edge))
+            )
+        } else {
+            layout.splitPane(paneID, edge: edge, with: newSessionID)
+        }
+        paneLayouts[worktreePath] = layout
+    }
+
+    public func moveTab(
+        _ sessionID: AgentSession.ID,
+        to target: PaneDropTarget,
+        in worktreePath: String
+    ) {
+        paneLayouts[worktreePath]?.dropTab(sessionID, on: target)
+    }
+
+    public func focusPane(_ paneID: PaneID) {
+        guard let worktreePath = sidebar.selectedWorktreePath else { return }
+        paneLayouts[worktreePath]?.focusPane(paneID)
+    }
+
+    public func focusNextPane() {
+        guard let worktreePath = sidebar.selectedWorktreePath else { return }
+        paneLayouts[worktreePath]?.focusNextPane()
+    }
+
+    @discardableResult
+    public func selectShortcutTab(_ number: Int) -> Bool {
+        guard (1...9).contains(number),
+              let worktreePath = sidebar.selectedWorktreePath,
+              let tabs = paneLayouts[worktreePath]?.focusedTabs,
+              tabs.tabIDs.indices.contains(number - 1) else { return false }
+        return paneLayouts[worktreePath]?.focusSession(tabs.tabIDs[number - 1]) == true
+    }
+
+    public func updateDividerPosition(
+        _ position: Double,
+        forSplit splitID: SplitID,
+        in worktreePath: String
+    ) {
+        paneLayouts[worktreePath]?.setDividerPosition(position, forSplit: splitID)
     }
 
     /// Select a worktree (switches what the selection refers to). `nil` clears the selection.

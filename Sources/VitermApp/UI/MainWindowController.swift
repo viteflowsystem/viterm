@@ -271,6 +271,12 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             self?.renameSession(sessionID, currentName: currentName)
         }
         tabBar.onAddTab = { [weak self] in self?.newSession(nil) }
+        tabBar.onReorderTab = { [weak self] sessionID, tabIndex in
+            guard let self else { return }
+            self.appModel.moveSession(sessionID, toTabIndex: tabIndex)
+            self.render()
+            self.persistSessions()
+        }
 
         // Sync pane focus movement to the sidebar selection (kept for when pane splitting is re-enabled).
         splitHost.onActivePaneChanged = { [weak self] contentView in

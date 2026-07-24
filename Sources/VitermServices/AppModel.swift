@@ -408,6 +408,28 @@ public final class AppModel {
         }
     }
 
+    /// Move a session to a new position among its own worktree's tabs.
+    ///
+    /// `tabIndex` is clamped to the valid destination range. Sessions belonging to
+    /// other worktrees retain their positions in the flat session array.
+    public func moveSession(_ sessionID: AgentSession.ID, toTabIndex tabIndex: Int) {
+        guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
+        let flatIndices = sessions.indices.filter { sessions[$0].worktreePath == session.worktreePath }
+        var reordered = flatIndices.map { sessions[$0] }
+        guard let sourceIndex = reordered.firstIndex(where: { $0.id == sessionID }) else { return }
+
+        let moved = reordered.remove(at: sourceIndex)
+        reordered.insert(moved, at: min(max(tabIndex, 0), reordered.count))
+        guard reordered.map(\.id) != flatIndices.map({ sessions[$0].id }) else { return }
+
+        var updated = sessions
+        for (flatIndex, reorderedSession) in zip(flatIndices, reordered) {
+            updated[flatIndex] = reorderedSession
+        }
+        sessions = updated
+        rebuildSidebar()
+    }
+
     /// Entry point for session state changes. Pass the new state finalized by
     /// `SessionStateMachine` or similar. If the state actually changed, updates the
     /// `AgentSession` and fires the `StatusChangeHookRunner`.

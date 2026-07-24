@@ -836,6 +836,72 @@ struct AppModelTests {
         #expect(model.sidebar.selectedSessionID == nil)
     }
 
+    // MARK: moveSession
+
+    @Test("moveSessionは他worktreeのflat-array位置を変えずに並べ替える")
+    func moveSessionPreservesInterleavedWorktreePositions() async throws {
+        let model = makeModel()
+        let a1 = try await model.startSession(worktreePath: "/wt/a", presetName: "a1")
+        let b1 = try await model.startSession(worktreePath: "/wt/b", presetName: "b1")
+        let a2 = try await model.startSession(worktreePath: "/wt/a", presetName: "a2")
+        let b2 = try await model.startSession(worktreePath: "/wt/b", presetName: "b2")
+        let a3 = try await model.startSession(worktreePath: "/wt/a", presetName: "a3")
+
+        model.moveSession(a3.id, toTabIndex: 0)
+
+        #expect(model.sessions.map(\.id) == [a3.id, b1.id, a1.id, b2.id, a2.id])
+    }
+
+    @Test("moveSessionは先頭末尾間の移動とdestinationのclampを行う")
+    func moveSessionMovesAcrossBoundsAndClamps() async throws {
+        let model = makeModel()
+        let first = try await model.startSession(worktreePath: "/wt/a", presetName: "first")
+        let middle = try await model.startSession(worktreePath: "/wt/a", presetName: "middle")
+        let last = try await model.startSession(worktreePath: "/wt/a", presetName: "last")
+
+        model.moveSession(first.id, toTabIndex: .max)
+        #expect(model.sessions.map(\.id) == [middle.id, last.id, first.id])
+
+        model.moveSession(first.id, toTabIndex: 0)
+        #expect(model.sessions.map(\.id) == [first.id, middle.id, last.id])
+
+        model.moveSession(last.id, toTabIndex: -100)
+        #expect(model.sessions.map(\.id) == [last.id, first.id, middle.id])
+    }
+
+    @Test("moveSessionは不明IDと同順序になる移動では変更しない")
+    func moveSessionUnknownAndNoOp() async throws {
+        let model = makeModel()
+        let first = try await model.startSession(worktreePath: "/wt/a", presetName: "first")
+        let second = try await model.startSession(worktreePath: "/wt/a", presetName: "second")
+        let original = model.sessions
+
+        model.moveSession(UUID(), toTabIndex: 0)
+        #expect(model.sessions == original)
+
+        model.moveSession(first.id, toTabIndex: 0)
+        #expect(model.sessions == original)
+        #expect(model.sessions.map(\.id) == [first.id, second.id])
+    }
+
+    @Test("moveSession後も選択を維持しショートカット番号を新順序に振る")
+    func moveSessionPreservesSelectionAndRenumbersShortcuts() async throws {
+        let (model, worktree) = await makeModelWithRegisteredWorktree()
+        let first = try await model.startSession(worktreePath: worktree.path, presetName: "first")
+        let second = try await model.startSession(worktreePath: worktree.path, presetName: "second")
+        let third = try await model.startSession(worktreePath: worktree.path, presetName: "third")
+        model.selectSession(second.id)
+
+        model.moveSession(third.id, toTabIndex: 0)
+
+        #expect(model.sidebar.selectedSessionID == second.id)
+        let tabs = TabBarViewModel(
+            sessions: model.sidebar.selectedWorktree?.sessions.map(\.session) ?? []
+        ).tabs
+        #expect(tabs.map(\.id) == [third.id, first.id, second.id])
+        #expect(tabs.map(\.shortcutNumber) == [1, 2, 3])
+    }
+
     // MARK: sidebar display mode
 
     @Test("setSidebarDisplayModeはモードを切り替えて永続化する")

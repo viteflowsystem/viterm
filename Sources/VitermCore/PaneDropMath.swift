@@ -7,16 +7,6 @@ public enum PaneDropMath {
         case right
         case up
         case down
-
-        /// The edge opposite this edge.
-        public var opposite: Edge {
-            switch self {
-            case .left: .right
-            case .right: .left
-            case .up: .down
-            case .down: .up
-            }
-        }
     }
 
     public enum DropZone: Sendable, Equatable {

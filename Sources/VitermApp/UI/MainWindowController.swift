@@ -292,8 +292,8 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             sessions: sessionsByID,
             surface: { [sessionManager] in sessionManager.surface(for: $0) }
         )
-        // Monitor the visible session at high frequency, hidden ones throttled (P1).
-        stateMonitor.setVisibleSession(appModel.selectedSessionID)
+        // Monitor every pane's active tab at high frequency; background tabs stay throttled.
+        stateMonitor.setVisibleSessions(appModel.currentPaneLayout?.activeTabIDs ?? [])
 
         // Reflect the current context in the title (mock: "viterm — feat/sidebar · claude #1").
         if let selected = appModel.selectedSessionNode {
@@ -405,10 +405,9 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             }
         }
 
-        // Restore each worktree's last active session first (select(sessionID:)
-        // automatically remembers the session's own worktree, so the key's worktreePath
-        // itself is unnecessary). This lets the subsequent selectWorktree / selectSession
-        // resolve "restore if remembered" correctly.
+        // startSession appends into the worktree's focused pane, so restoration naturally
+        // produces one pane per worktree containing all of that worktree's sessions.
+        // Focus each persisted active session before restoring the globally selected one.
         for index in (state.activeSessionIndexByWorktree ?? [:]).values {
             guard let session = restoredByOriginalIndex[index] else { continue }
             appModel.selectSession(session.id)

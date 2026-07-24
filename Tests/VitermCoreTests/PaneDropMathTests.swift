@@ -62,13 +62,4 @@ struct PaneDropMathTests {
         #expect(PaneDropMath.halfRect(for: .up, in: rect) == CGRect(x: 10, y: 60, width: 100, height: 40))
         #expect(PaneDropMath.halfRect(for: .down, in: rect) == CGRect(x: 10, y: 20, width: 100, height: 40))
     }
-
-    @Test("oppositeは各方向の反対側を返す")
-    func oppositeEdges() {
-        #expect(PaneDropMath.Edge.left.opposite == .right)
-        #expect(PaneDropMath.Edge.right.opposite == .left)
-        #expect(PaneDropMath.Edge.up.opposite == .down)
-        #expect(PaneDropMath.Edge.down.opposite == .up)
-    }
-
 }

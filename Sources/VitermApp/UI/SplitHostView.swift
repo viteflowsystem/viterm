@@ -81,7 +81,11 @@ final class SplitHostView: NSView {
         sessions: [AgentSession.ID: AgentSession],
         surface: (AgentSession.ID) -> NSView?
     ) {
-        if lastTopology != layout.topology {
+        let topologyChanged = lastTopology != layout.topology
+        if topologyChanged {
+            let wasApplyingDividerPosition = isApplyingDividerPosition
+            isApplyingDividerPosition = true
+            defer { isApplyingDividerPosition = wasApplyingDividerPosition }
             rebuild(layout, sessions: sessions, surface: surface)
         } else {
             patch(layout, sessions: sessions, surface: surface)
@@ -258,9 +262,10 @@ final class SplitHostView: NSView {
             ? splitView.arrangedSubviews.first?.frame.maxX
             : splitView.arrangedSubviews.first?.frame.maxY
         guard let current, abs(current - desired) > 0.5 else { return }
+        let wasApplyingDividerPosition = isApplyingDividerPosition
         isApplyingDividerPosition = true
+        defer { isApplyingDividerPosition = wasApplyingDividerPosition }
         splitView.setPosition(desired, ofDividerAt: 0)
-        isApplyingDividerPosition = false
     }
 
     private func installMouseMonitor() {
@@ -287,6 +292,7 @@ final class SplitHostView: NSView {
 extension SplitHostView: NSSplitViewDelegate {
     func splitViewDidResizeSubviews(_ notification: Notification) {
         guard notification.userInfo?["NSSplitViewDividerIndex"] != nil,
+              NSEvent.pressedMouseButtons & 1 != 0,
               !isApplyingDividerPosition,
               let splitView = notification.object as? NSSplitView,
               pendingDividerFractions[ObjectIdentifier(splitView)] == nil,
@@ -295,7 +301,8 @@ extension SplitHostView: NSSplitViewDelegate {
         guard total > 0 else { return }
         guard let first = splitView.arrangedSubviews.first else { return }
         let position = splitView.isVertical ? first.frame.maxX : first.frame.maxY
-        onDividerMoved?(splitID, Double(position / total))
+        let fraction = Double(position / total)
+        onDividerMoved?(splitID, fraction)
     }
 }
 
@@ -441,3 +448,4 @@ private final class PaneDropHintOverlayView: NSView {
         path.stroke()
     }
 }
+

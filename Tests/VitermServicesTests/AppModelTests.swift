@@ -145,6 +145,40 @@ final class FakeSessionLauncher: SessionLaunching, @unchecked Sendable {
     }
 }
 
+actor GatedSessionLauncher: SessionLaunching {
+    private var shouldSuspendNextStart = false
+    private var suspendedContinuation: CheckedContinuation<Void, Never>?
+
+    func suspendNextStart() {
+        shouldSuspendNextStart = true
+    }
+
+    func startSession(worktreePath: String, presetName: String) async -> AgentSession {
+        if shouldSuspendNextStart {
+            shouldSuspendNextStart = false
+            await withCheckedContinuation { suspendedContinuation = $0 }
+        }
+        return AgentSession(
+            worktreePath: worktreePath,
+            presetName: presetName,
+            displayName: presetName
+        )
+    }
+
+    func switchToWorktree(_ worktreePath: String) async {}
+
+    func waitUntilSuspended() async {
+        while suspendedContinuation == nil {
+            await Task<Never, Never>.yield()
+        }
+    }
+
+    func resumeStart() {
+        suspendedContinuation?.resume()
+        suspendedContinuation = nil
+    }
+}
+
 /// Immediately-firing test clock. Returns from `sleep(for:)` right away without waiting
 /// real time. Used to skip `startAutoRefresh`'s polling-interval wait and produce ticks
 /// immediately.
@@ -215,7 +249,7 @@ struct AppModelTests {
         remover: FakeWorktreeRemover = FakeWorktreeRemover(),
         merger: FakeMergeCleanupCoordinator = FakeMergeCleanupCoordinator(),
         notifier: FakeStatusChangeNotifier = FakeStatusChangeNotifier(),
-        launcher: FakeSessionLauncher = FakeSessionLauncher()
+        launcher: any SessionLaunching = FakeSessionLauncher()
     ) -> AppModel {
         AppModel(
             configProvider: configStore,
@@ -857,6 +891,57 @@ struct AppModelTests {
         #expect(model.sessions.map(\.id) == [first.id, second.id, third.id])
         #expect(model.paneLayouts[worktree.path]?.tabs(of: pane)?.tabIDs == [first.id, second.id, third.id])
         #expect(model.selectedSessionID == third.id)
+    }
+
+    @Test("startSessionInSplitは起動したsessionを指定paneから分割する")
+    func startSessionInSplitPlacesSessionInNewPane() async throws {
+        let (model, worktree) = await makeModelWithRegisteredWorktree()
+        let first = try await model.startSession(worktreePath: worktree.path, presetName: "first")
+        model.selectWorktree(worktree.path)
+        let targetPane = model.focusedPaneID!
+
+        let second = try await model.startSessionInSplit(
+            worktreePath: worktree.path,
+            presetName: "second",
+            targetPaneID: targetPane,
+            edge: .right
+        )
+
+        #expect(model.sessions.map(\.id) == [first.id, second.id])
+        #expect(model.currentPaneLayout?.paneIDs.count == 2)
+        #expect(model.currentPaneLayout?.paneID(containing: first.id) == targetPane)
+        #expect(model.currentPaneLayout?.focusedTabs == .single(second.id))
+    }
+
+    @Test("startSessionInSplit中にworktreeが切り替わると通常tabのまま残る")
+    func startSessionInSplitLeavesPlainTabAfterWorktreeSwitch() async throws {
+        let launcher = GatedSessionLauncher()
+        let model = makeModel(launcher: launcher)
+        let worktreePath = "/wt/feat"
+        let first = try await model.startSession(
+            worktreePath: worktreePath,
+            presetName: "first"
+        )
+        model.selectWorktree(worktreePath)
+        let targetPane = model.focusedPaneID!
+        await launcher.suspendNextStart()
+
+        let startTask = Task { @MainActor in
+            try await model.startSessionInSplit(
+                worktreePath: worktreePath,
+                presetName: "second",
+                targetPaneID: targetPane,
+                edge: .right
+            )
+        }
+        await launcher.waitUntilSuspended()
+        model.selectWorktree("/wt/other")
+        await launcher.resumeStart()
+        let second = try await startTask.value
+
+        let layout = model.paneLayouts[worktreePath]
+        #expect(layout?.paneIDs == [targetPane])
+        #expect(layout?.tabs(of: targetPane)?.tabIDs == [first.id, second.id])
     }
 
     @Test("split/move/focus/shortcut/divider APIはPaneLayoutを更新する")

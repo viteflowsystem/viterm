@@ -398,6 +398,25 @@ public final class AppModel {
         return session
     }
 
+    /// Launch a session as a normal tab, then split it from the requested pane if the
+    /// originating worktree is still selected when launching completes.
+    @discardableResult
+    public func startSessionInSplit(
+        worktreePath: String,
+        presetName: String,
+        targetPaneID: PaneID?,
+        edge: PaneDropMath.Edge
+    ) async throws -> AgentSession {
+        let session = try await startSession(
+            worktreePath: worktreePath,
+            presetName: presetName,
+            targetPaneID: targetPaneID
+        )
+        guard sidebar.selectedWorktreePath == worktreePath else { return session }
+        splitPane(targetPaneID, edge: edge, with: session.id, in: worktreePath)
+        return session
+    }
+
     /// Switch the displayed worktree.
     public func switchToWorktree(_ worktreePath: String) async {
         currentWorktreeID = worktreePath
@@ -486,22 +505,16 @@ public final class AppModel {
     }
 
     public func focusPane(_ paneID: PaneID) {
-        guard let worktreePath = sidebar.selectedWorktreePath else { return }
-        paneLayouts[worktreePath]?.focusPane(paneID)
+        _ = mutatingCurrentPaneLayout { $0.focusPane(paneID) }
     }
 
     public func focusNextPane() {
-        guard let worktreePath = sidebar.selectedWorktreePath else { return }
-        paneLayouts[worktreePath]?.focusNextPane()
+        _ = mutatingCurrentPaneLayout { $0.focusNextPane() }
     }
 
     @discardableResult
     public func selectShortcutTab(_ number: Int) -> Bool {
-        guard (1...9).contains(number),
-              let worktreePath = sidebar.selectedWorktreePath,
-              let tabs = paneLayouts[worktreePath]?.focusedTabs,
-              tabs.tabIDs.indices.contains(number - 1) else { return false }
-        return paneLayouts[worktreePath]?.focusSession(tabs.tabIDs[number - 1]) == true
+        mutatingCurrentPaneLayout { $0.selectShortcut(number) } ?? false
     }
 
     public func updateDividerPosition(
@@ -515,6 +528,16 @@ public final class AppModel {
     /// Select a worktree (switches what the selection refers to). `nil` clears the selection.
     public func selectWorktree(_ path: String?) {
         sidebar.selectWorktree(path)
+    }
+
+    private func mutatingCurrentPaneLayout<T>(
+        _ body: (inout PaneLayout) -> T
+    ) -> T? {
+        guard let worktreePath = sidebar.selectedWorktreePath,
+              var layout = paneLayouts[worktreePath] else { return nil }
+        let result = body(&layout)
+        paneLayouts[worktreePath] = layout
+        return result
     }
 
     /// Equivalent to ⌘⌥↓: select the next worktree in display order (across repositories, wrapping).

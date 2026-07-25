@@ -41,8 +41,11 @@ struct PaneLayoutTests {
     @Test("depth-first pane/split IDsとstructure-only topologyを返す")
     func traversalAndTopology() {
         let (layout, left, right, split) = twoPaneLayout()
+        #expect(layout.panes.map(\.id) == [left, right])
+        #expect(layout.panes.map(\.tabs.tabIDs) == [[a, b], [c]])
         #expect(layout.paneIDs == [left, right])
         #expect(layout.splitIDs == [split])
+        #expect(layout.dividerPositions == [split: 0.4])
         #expect(layout.topology == PaneTopology(root: .split(
             id: split,
             orientation: .sideBySide,
@@ -69,6 +72,17 @@ struct PaneLayoutTests {
         #expect(layout.focusedPaneID == left)
         layout.focusPane(PaneID())
         #expect(layout.focusedPaneID == left)
+
+        let selectedSecond = layout.selectShortcut(2)
+        #expect(selectedSecond)
+        #expect(layout.focusedTabs?.activeTabID == b)
+        let selectedMissing = layout.selectShortcut(9)
+        #expect(!selectedMissing)
+        #expect(layout.focusedTabs?.activeTabID == b)
+
+        var empty = PaneLayout()
+        let selectedWithoutFocus = empty.selectShortcut(1)
+        #expect(!selectedWithoutFocus)
     }
 
     @Test("closeTabは空paneをcollapseしpromoted siblingへfocusする")

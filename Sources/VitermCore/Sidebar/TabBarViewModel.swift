@@ -5,10 +5,9 @@ public struct TabBarViewModel: Sendable, Equatable {
     public private(set) var tabs: [SessionNode]
     public private(set) var activeTabID: AgentSession.ID?
 
-    public init(paneTabs: PaneTabs, sessions: [AgentSession]) {
-        let sessionsByID = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+    public init(paneTabs: PaneTabs, sessions: [AgentSession.ID: AgentSession]) {
         tabs = paneTabs.tabIDs.compactMap { id in
-            sessionsByID[id].map {
+            sessions[id].map {
                 SessionNode(session: $0, shortcutNumber: paneTabs.shortcutNumber(for: id))
             }
         }

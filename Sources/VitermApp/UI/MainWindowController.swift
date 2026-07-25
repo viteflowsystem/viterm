@@ -285,8 +285,10 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
 
     /// Reflect AppModel's pane-owned state into the UI.
     func render() {
-        sidebar.set(viewModel: appModel.sidebar, selectedSessionID: appModel.selectedSessionID)
-        statusBar.update(sidebar: appModel.sidebar, selectedSession: appModel.selectedSessionNode)
+        let selectedID = appModel.selectedSessionID
+        let selectedNode = appModel.selectedSessionNode
+        sidebar.set(viewModel: appModel.sidebar, selectedSessionID: selectedID)
+        statusBar.update(sidebar: appModel.sidebar, selectedSession: selectedNode)
         let sessionsByID = Dictionary(uniqueKeysWithValues: appModel.sessions.map { ($0.id, $0) })
         splitHost.render(
             appModel.currentPaneLayout ?? PaneLayout(),
@@ -297,7 +299,7 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
         stateMonitor.setVisibleSessions(appModel.currentPaneLayout?.activeTabIDs ?? [])
 
         // Reflect the current context in the title (mock: "viterm — feat/sidebar · claude #1").
-        if let selected = appModel.selectedSessionNode {
+        if let selected = selectedNode {
             let branch = appModel.worktrees.first { $0.path == selected.session.worktreePath }?.branch
             let parts = [branch, selected.session.displayName].compactMap { $0 }
             window?.title = "viterm — " + parts.joined(separator: " · ")
@@ -529,28 +531,16 @@ final class MainWindowController: NSWindowController, NSSplitViewDelegate {
             return
         }
         let edge: PaneDropMath.Edge = vertically ? .right : .down
+        let presetName = appModel.config.defaultPreset ?? "shell"
         Task { @MainActor in
             do {
-                let session = try await appModel.startSession(
+                let session = try await appModel.startSessionInSplit(
                     worktreePath: worktreePath,
-                    presetName: appModel.config.defaultPreset ?? "shell",
-                    targetPaneID: targetPaneID
+                    presetName: presetName,
+                    targetPaneID: targetPaneID,
+                    edge: edge
                 )
                 watchSession(session)
-                // The user may switch worktrees or close the target pane while launch is suspended.
-                // In either case the newly-created session remains a normal background tab.
-                guard appModel.sidebar.selectedWorktreePath == worktreePath,
-                      appModel.paneLayouts[worktreePath]?.paneIDs.contains(targetPaneID) == true else {
-                    render()
-                    persistSessions()
-                    return
-                }
-                appModel.splitPane(
-                    targetPaneID,
-                    edge: edge,
-                    with: session.id,
-                    in: worktreePath
-                )
                 render()
                 persistSessions()
             } catch {

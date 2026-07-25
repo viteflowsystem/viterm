@@ -17,7 +17,7 @@ public struct PaneLayout: Sendable, Equatable, Codable {
 
     public init(root: PaneLayoutNode?, focusedPaneID: PaneID?) {
         self.root = root
-        let ids = Self.paneIDs(in: root)
+        let ids = Self.panes(in: root).map(\.id)
         self.focusedPaneID = focusedPaneID.flatMap { ids.contains($0) ? $0 : nil }
             ?? ids.first
     }
@@ -35,15 +35,17 @@ public struct PaneLayout: Sendable, Equatable, Codable {
     }
 
     public var isEmpty: Bool { root == nil }
-    public var paneIDs: [PaneID] { Self.paneIDs(in: root) }
+    public var panes: [(id: PaneID, tabs: PaneTabs)] { Self.panes(in: root) }
+    public var paneIDs: [PaneID] { panes.map(\.id) }
     public var splitIDs: [SplitID] { Self.splitIDs(in: root) }
+    public var dividerPositions: [SplitID: Double] { Self.dividerPositions(in: root) }
 
     public func tabs(of paneID: PaneID) -> PaneTabs? {
         Self.tabs(of: paneID, in: root)
     }
 
     public func paneID(containing sessionID: AgentSession.ID) -> PaneID? {
-        Self.paneID(containing: sessionID, in: root)
+        panes.first { $0.tabs.tabIDs.contains(sessionID) }?.id
     }
 
     public var focusedTabs: PaneTabs? {
@@ -51,7 +53,7 @@ public struct PaneLayout: Sendable, Equatable, Codable {
     }
 
     public var activeTabIDs: Set<AgentSession.ID> {
-        Set(paneIDs.compactMap { tabs(of: $0)?.activeTabID })
+        Set(panes.compactMap(\.tabs.activeTabID))
     }
 
     public var topology: PaneTopology {
@@ -113,12 +115,6 @@ public struct PaneLayout: Sendable, Equatable, Codable {
             }
             return
         }
-        if let sourcePaneID,
-           sourcePaneID == target.paneID,
-           tabs(of: sourcePaneID)?.tabIDs.count == 1 {
-            return
-        }
-
         let removal = Self.removing(sessionID, from: root)
         root = removal.node
         if focusedPaneID.map({ !paneIDs.contains($0) }) == true {
@@ -204,6 +200,16 @@ public struct PaneLayout: Sendable, Equatable, Codable {
         focusedPaneID = ids[(index + 1 + ids.count) % ids.count]
     }
 
+    @discardableResult
+    public mutating func selectShortcut(_ number: Int) -> Bool {
+        guard let focusedPaneID else { return false }
+        var didSelect = false
+        _ = Self.updatePane(focusedPaneID, in: &root) {
+            didSelect = $0.selectShortcut(number)
+        }
+        return didSelect
+    }
+
     public mutating func setDividerPosition(_ position: Double, forSplit splitID: SplitID) {
         _ = Self.updateSplit(splitID, in: &root) { split in
             split.dividerPosition = min(max(position, 0.05), 0.95)
@@ -221,13 +227,13 @@ private extension PaneDropTarget {
 }
 
 private extension PaneLayout {
-    static func paneIDs(in node: PaneLayoutNode?) -> [PaneID] {
+    static func panes(in node: PaneLayoutNode?) -> [(id: PaneID, tabs: PaneTabs)] {
         guard let node else { return [] }
         switch node {
-        case .pane(let id, _):
-            return [id]
+        case .pane(let id, let tabs):
+            return [(id, tabs)]
         case .split(let split):
-            return paneIDs(in: split.first) + paneIDs(in: split.second)
+            return panes(in: split.first) + panes(in: split.second)
         }
     }
 
@@ -241,6 +247,18 @@ private extension PaneLayout {
         }
     }
 
+    static func dividerPositions(in node: PaneLayoutNode?) -> [SplitID: Double] {
+        guard let node else { return [:] }
+        switch node {
+        case .pane:
+            return [:]
+        case .split(let split):
+            return dividerPositions(in: split.first)
+                .merging(dividerPositions(in: split.second)) { first, _ in first }
+                .merging([split.id: split.dividerPosition]) { first, _ in first }
+        }
+    }
+
     static func tabs(of paneID: PaneID, in node: PaneLayoutNode?) -> PaneTabs? {
         guard let node else { return nil }
         switch node {
@@ -248,20 +266,6 @@ private extension PaneLayout {
             return id == paneID ? tabs : nil
         case .split(let split):
             return tabs(of: paneID, in: split.first) ?? tabs(of: paneID, in: split.second)
-        }
-    }
-
-    static func paneID(
-        containing sessionID: AgentSession.ID,
-        in node: PaneLayoutNode?
-    ) -> PaneID? {
-        guard let node else { return nil }
-        switch node {
-        case .pane(let id, let tabs):
-            return tabs.tabIDs.contains(sessionID) ? id : nil
-        case .split(let split):
-            return paneID(containing: sessionID, in: split.first)
-                ?? paneID(containing: sessionID, in: split.second)
         }
     }
 
@@ -285,10 +289,7 @@ private extension PaneLayout {
         in node: inout PaneLayoutNode?,
         update: (inout PaneTabs) -> Void
     ) -> Bool {
-        guard var current = node else { return false }
-        let found = updatePane(paneID, in: &current, update: update)
-        node = current
-        return found
+        withNode(&node) { updatePane(paneID, in: &$0, update: update) } ?? false
     }
 
     static func updatePane(
@@ -317,10 +318,7 @@ private extension PaneLayout {
         in node: inout PaneLayoutNode?,
         replacement: (PaneLayoutNode) -> PaneLayoutNode
     ) -> Bool {
-        guard var current = node else { return false }
-        let found = replacePane(paneID, in: &current, replacement: replacement)
-        node = current
-        return found
+        withNode(&node) { replacePane(paneID, in: &$0, replacement: replacement) } ?? false
     }
 
     static func replacePane(
@@ -348,10 +346,17 @@ private extension PaneLayout {
         in node: inout PaneLayoutNode?,
         update: (inout PaneLayoutNode.Split) -> Void
     ) -> Bool {
-        guard var current = node else { return false }
-        let found = updateSplit(splitID, in: &current, update: update)
+        withNode(&node) { updateSplit(splitID, in: &$0, update: update) } ?? false
+    }
+
+    static func withNode<Result>(
+        _ node: inout PaneLayoutNode?,
+        body: (inout PaneLayoutNode) -> Result
+    ) -> Result? {
+        guard var current = node else { return nil }
+        let result = body(&current)
         node = current
-        return found
+        return result
     }
 
     static func updateSplit(

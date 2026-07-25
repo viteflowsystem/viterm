@@ -44,9 +44,12 @@ final class TabBarView: NSView {
 
     private var activeSessionDrag: SessionDrag?
     private var foreignDrag: (sessionID: AgentSession.ID, insertionSlot: Int)?
-    private var pendingViewModel: TabBarViewModel?
     private var latestViewModel: TabBarViewModel?
+    private var lastRenderedViewModel: TabBarViewModel?
     private var displayedTabIDs: [AgentSession.ID] = []
+    private var isDragInProgress: Bool {
+        activeSessionDrag != nil || foreignDrag != nil
+    }
 
     init(paneID: PaneID) {
         self.paneID = paneID
@@ -101,21 +104,23 @@ final class TabBarView: NSView {
     /// Replace the whole tab row.
     func set(viewModel: TabBarViewModel) {
         latestViewModel = viewModel
-        if activeSessionDrag != nil {
+        if isDragInProgress {
             if viewModel.tabs.map(\.id) == displayedTabIDs {
-                pendingViewModel = viewModel
                 return
             }
             // Composition changed under the drag, so rebuild the frozen index space.
             activeSessionDrag?.item?.alphaValue = 1
             activeSessionDrag?.item?.isSessionDragSource = false
             activeSessionDrag = nil
-            pendingViewModel = nil
+            foreignDrag = nil
+            insertionCaret.alphaValue = 0
         }
+        if viewModel == lastRenderedViewModel { return }
         rebuild(viewModel: viewModel)
     }
 
     private func rebuild(viewModel: TabBarViewModel) {
+        lastRenderedViewModel = viewModel
         displayedTabIDs = viewModel.tabs.map(\.id)
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for tab in viewModel.tabs {
@@ -167,15 +172,7 @@ final class TabBarView: NSView {
         guard let drag = activeSessionDrag, drag.sessionID == sessionID, let item = drag.item
         else { return [] }
 
-        stack.layoutSubtreeIfNeeded()
-        let others = stack.arrangedSubviews
-            .compactMap { $0 as? TabItemView }
-            .filter { $0 !== item }
-        let dragX = stack.convert(sender.draggingLocation, from: nil).x
-        let slot = TabReorderMath.insertionSlot(
-            forDragX: dragX,
-            tabMidXs: others.map(\.frame.midX)
-        )
+        let slot = insertionSlot(for: sender, excluding: item)
         guard slot != drag.insertionSlot else { return .move }
         activeSessionDrag?.insertionSlot = slot
 
@@ -193,13 +190,7 @@ final class TabBarView: NSView {
         _ sessionID: AgentSession.ID,
         sender: any NSDraggingInfo
     ) -> NSDragOperation {
-        stack.layoutSubtreeIfNeeded()
-        let tabs = stack.arrangedSubviews.compactMap { $0 as? TabItemView }
-        let dragX = stack.convert(sender.draggingLocation, from: nil).x
-        let slot = TabReorderMath.insertionSlot(
-            forDragX: dragX,
-            tabMidXs: tabs.map(\.frame.midX)
-        )
+        let slot = insertionSlot(for: sender, excluding: nil)
         foreignDrag = (sessionID, slot)
         insertionCaret.alphaValue = 1
         stack.removeArrangedSubview(insertionCaret)
@@ -213,7 +204,9 @@ final class TabBarView: NSView {
         activeSessionDrag = nil
         foreignDrag = nil
         insertionCaret.alphaValue = 0
-        pendingViewModel = nil
+        if let latestViewModel {
+            rebuild(viewModel: latestViewModel)
+        }
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
@@ -234,11 +227,24 @@ final class TabBarView: NSView {
         activeSessionDrag = nil
         foreignDrag = nil
         insertionCaret.alphaValue = 0
-        let viewModel = pendingViewModel ?? latestViewModel
-        pendingViewModel = nil
-        if let viewModel {
-            rebuild(viewModel: viewModel)
+        if let latestViewModel {
+            rebuild(viewModel: latestViewModel)
         }
+    }
+
+    private func insertionSlot(
+        for sender: any NSDraggingInfo,
+        excluding excludedItem: TabItemView?
+    ) -> Int {
+        stack.layoutSubtreeIfNeeded()
+        let tabs = stack.arrangedSubviews
+            .compactMap { $0 as? TabItemView }
+            .filter { $0 !== excludedItem }
+        let dragX = stack.convert(sender.draggingLocation, from: nil).x
+        return TabReorderMath.insertionSlot(
+            forDragX: dragX,
+            tabMidXs: tabs.map(\.frame.midX)
+        )
     }
 
     /// The ＋ (new session, ⌘T) button. Equivalent to the UI mock's `.tab.add`.

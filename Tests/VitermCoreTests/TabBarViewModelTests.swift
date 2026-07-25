@@ -10,6 +10,12 @@ struct TabBarViewModelTests {
         }
     }
 
+    private func indexed<S: Sequence>(
+        _ sessions: S
+    ) -> [AgentSession.ID: AgentSession] where S.Element == AgentSession {
+        Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+    }
+
     @Test("paneのtab順序でsessionをdisplay projectionする")
     func projectsPaneOrder() {
         let sessions = makeSessions(count: 3)
@@ -17,7 +23,7 @@ struct TabBarViewModelTests {
             tabIDs: [sessions[2].id, sessions[0].id, sessions[1].id],
             activeTabID: sessions[0].id
         )
-        let viewModel = TabBarViewModel(paneTabs: paneTabs, sessions: sessions)
+        let viewModel = TabBarViewModel(paneTabs: paneTabs, sessions: indexed(sessions))
 
         #expect(viewModel.tabs.map(\.id) == [sessions[2].id, sessions[0].id, sessions[1].id])
         #expect(viewModel.activeTabID == sessions[0].id)
@@ -28,7 +34,7 @@ struct TabBarViewModelTests {
     func projectsShortcutNumbers() {
         let sessions = makeSessions(count: 11)
         let paneTabs = PaneTabs(tabIDs: sessions.map(\.id), activeTabID: sessions[9].id)
-        let viewModel = TabBarViewModel(paneTabs: paneTabs, sessions: sessions.reversed())
+        let viewModel = TabBarViewModel(paneTabs: paneTabs, sessions: indexed(sessions.reversed()))
 
         #expect(viewModel.tabs.prefix(9).map(\.shortcutNumber) == Array(1...9))
         #expect(viewModel.tabs[9].shortcutNumber == nil)
@@ -40,7 +46,7 @@ struct TabBarViewModelTests {
         let sessions = makeSessions(count: 2)
         let missing = UUID()
         let paneTabs = PaneTabs(tabIDs: [sessions[0].id, missing], activeTabID: missing)
-        let viewModel = TabBarViewModel(paneTabs: paneTabs, sessions: sessions)
+        let viewModel = TabBarViewModel(paneTabs: paneTabs, sessions: indexed(sessions))
 
         #expect(viewModel.tabs.map(\.id) == [sessions[0].id])
         #expect(viewModel.activeTabID == missing)

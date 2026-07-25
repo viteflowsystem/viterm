@@ -25,8 +25,8 @@ final class SplitHostView: NSView {
     private var rootView: NSView?
     private var lastFocusedPaneID: PaneID?
     private weak var lastFocusedSurface: NSView?
-    private var isApplyingDividerPosition = false
     private var pendingDividerFractions: [ObjectIdentifier: Double] = [:]
+    private var lastAppliedDividerFractions: [SplitID: Double] = [:]
     private nonisolated(unsafe) var mouseMonitor: Any?
 
     private let emptyView: NSView = {
@@ -83,9 +83,6 @@ final class SplitHostView: NSView {
     ) {
         let topologyChanged = lastTopology != layout.topology
         if topologyChanged {
-            let wasApplyingDividerPosition = isApplyingDividerPosition
-            isApplyingDividerPosition = true
-            defer { isApplyingDividerPosition = wasApplyingDividerPosition }
             rebuild(layout, sessions: sessions, surface: surface)
         } else {
             patch(layout, sessions: sessions, surface: surface)
@@ -103,6 +100,7 @@ final class SplitHostView: NSView {
         paneViews.removeAll()
         splitViews.removeAll()
         splitIDsByView.removeAll()
+        lastAppliedDividerFractions.removeAll()
 
         let multiPane = layout.paneIDs.count > 1
         let renderedRoot = layout.root.map {
@@ -141,7 +139,7 @@ final class SplitHostView: NSView {
             )
             return pane
         case .split(let split):
-            let splitView = NSSplitView()
+            let splitView = DividerTrackingSplitView()
             splitView.isVertical = split.orientation == .sideBySide
             splitView.dividerStyle = .thin
             splitView.delegate = self
@@ -172,9 +170,10 @@ final class SplitHostView: NSView {
         sessions: [AgentSession.ID: AgentSession],
         surface: (AgentSession.ID) -> NSView?
     ) {
-        let multiPane = layout.paneIDs.count > 1
-        for paneID in layout.paneIDs {
-            guard let pane = paneViews[paneID], let tabs = layout.tabs(of: paneID) else { continue }
+        let paneIDs = layout.paneIDs
+        let multiPane = paneIDs.count > 1
+        for (paneID, tabs) in layout.panes {
+            guard let pane = paneViews[paneID] else { continue }
             pane.patch(
                 tabs: tabs,
                 sessions: sessions,
@@ -224,20 +223,11 @@ final class SplitHostView: NSView {
     }
 
     private func applyDividerPositions(from layout: PaneLayout) {
-        guard let root = layout.root else { return }
-        applyDividerPositions(in: root)
-    }
-
-    private func applyDividerPositions(in node: PaneLayoutNode) {
-        switch node {
-        case .pane:
-            return
-        case .split(let split):
-            if let splitView = splitViews[split.id] {
-                setDivider(split.dividerPosition, in: splitView)
-            }
-            applyDividerPositions(in: split.first)
-            applyDividerPositions(in: split.second)
+        for (splitID, fraction) in layout.dividerPositions
+        where lastAppliedDividerFractions[splitID] != fraction {
+            guard let splitView = splitViews[splitID] else { continue }
+            setDivider(fraction, in: splitView)
+            lastAppliedDividerFractions[splitID] = fraction
         }
     }
 
@@ -262,9 +252,6 @@ final class SplitHostView: NSView {
             ? splitView.arrangedSubviews.first?.frame.maxX
             : splitView.arrangedSubviews.first?.frame.maxY
         guard let current, abs(current - desired) > 0.5 else { return }
-        let wasApplyingDividerPosition = isApplyingDividerPosition
-        isApplyingDividerPosition = true
-        defer { isApplyingDividerPosition = wasApplyingDividerPosition }
         splitView.setPosition(desired, ofDividerAt: 0)
     }
 
@@ -291,10 +278,8 @@ final class SplitHostView: NSView {
 
 extension SplitHostView: NSSplitViewDelegate {
     func splitViewDidResizeSubviews(_ notification: Notification) {
-        guard notification.userInfo?["NSSplitViewDividerIndex"] != nil,
-              NSEvent.pressedMouseButtons & 1 != 0,
-              !isApplyingDividerPosition,
-              let splitView = notification.object as? NSSplitView,
+        guard let splitView = notification.object as? DividerTrackingSplitView,
+              splitView.isUserDraggingDivider,
               pendingDividerFractions[ObjectIdentifier(splitView)] == nil,
               let splitID = splitIDsByView[ObjectIdentifier(splitView)] else { return }
         let total = splitView.isVertical ? splitView.bounds.width : splitView.bounds.height
@@ -358,7 +343,7 @@ private final class PaneView: NSView {
         multiPane: Bool,
         surface: (AgentSession.ID) -> NSView?
     ) {
-        tabBar.set(viewModel: TabBarViewModel(paneTabs: tabs, sessions: Array(sessions.values)))
+        tabBar.set(viewModel: TabBarViewModel(paneTabs: tabs, sessions: sessions))
         tabBar.alphaValue = (isFocused || !multiPane) ? 1.0 : 0.55
         let nextSurface = tabs.activeTabID.flatMap(surface)
         guard hostedSurface !== nextSurface else { return }
@@ -420,12 +405,7 @@ private final class PaneView: NSView {
         guard let sessionID = SessionDragPasteboard.sessionID(from: sender.draggingPasteboard) else {
             return false
         }
-        let point = contentView.convert(sender.draggingLocation, from: nil)
-        guard let zone = PaneDropMath.zone(
-            for: point,
-            in: contentView.bounds,
-            current: currentDropZone
-        ) else { return false }
+        guard let zone = currentDropZone else { return false }
         onDropTab?(sessionID, .paneBody(paneID: paneID, zone: zone))
         return true
     }
@@ -433,6 +413,16 @@ private final class PaneView: NSView {
     private func clearDropHint() {
         currentDropZone = nil
         dropHint.alphaValue = 0
+    }
+}
+
+final class DividerTrackingSplitView: NSSplitView {
+    private(set) var isUserDraggingDivider = false
+
+    override func mouseDown(with event: NSEvent) {
+        isUserDraggingDivider = true
+        defer { isUserDraggingDivider = false }
+        super.mouseDown(with: event)
     }
 }
 
@@ -448,4 +438,3 @@ private final class PaneDropHintOverlayView: NSView {
         path.stroke()
     }
 }
-

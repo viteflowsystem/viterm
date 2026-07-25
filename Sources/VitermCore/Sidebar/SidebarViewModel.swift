@@ -4,25 +4,15 @@ import Foundation
 ///
 /// Builds the tree from flat arrays of `Repository` / `Worktree` / `AgentSession`, and
 /// provides waiting-badge aggregation for collapsed repositories, state tallies
-/// (busy/waiting/idle), and selected-session management (next/previous movement, the
-/// ⌘⇧U jump). The ⌘1..9 shortcut numbers are tab-local (`TabBarViewModel`'s role), so
-/// they are not assigned here.
-///
-/// Selection is keyed on the worktree (`selectedWorktreePath`). So that leaving a
-/// worktree and coming back restores the same tab, the last active session per worktree
-/// is remembered in `activeSessionByWorktree`. `selectedSessionID` points at the session
-/// actually active within that worktree (still kept and exposed as a first-class value
-/// for backward compatibility).
+/// (busy/waiting/idle), and worktree selection. Session selection belongs to
+/// `PaneLayout`; the sidebar only exposes session queries.
 ///
 /// A pure value type; it does no observation or incremental updates internally. Callers
-/// are expected to re-call `init` each time the source data changes (carrying over the
-/// previous `selectedSessionID` / `selectedWorktreePath` / `activeSessionByWorktree`).
+/// are expected to re-call `init` each time the source data changes, carrying over
+/// `selectedWorktreePath`, filter text, and display mode.
 public struct SidebarViewModel: Sendable, Equatable {
     public private(set) var repositories: [RepositoryNode]
-    public private(set) var selectedSessionID: AgentSession.ID?
     public private(set) var selectedWorktreePath: String?
-    /// Last active session per worktree. Remembered so returning to a worktree restores the same tab.
-    public private(set) var activeSessionByWorktree: [String: AgentSession.ID]
     /// Incremental filter over the tree (repo / branch / session names). Empty = no filtering.
     /// Ephemeral UI state: carried across rebuilds via `rebuilt(...)`, never persisted.
     public private(set) var filterText: String
@@ -36,33 +26,26 @@ public struct SidebarViewModel: Sendable, Equatable {
     ///     A worktree matching no repository does not appear in the tree.
     ///   - sessions: Sessions for all worktrees, tied to their worktree via `worktreePath`.
     ///     A session matching no worktree does not appear in the tree.
-    ///   - selectedSessionID: Initially selected session. Passing an ID not in the tree is
-    ///     fine (`selectedSession` returns `nil`).
     ///   - selectedWorktreePath: Initially selected worktree. Passing a path not in the tree
     ///     is fine (`selectedWorktree` returns `nil`).
-    ///   - activeSessionByWorktree: The per-worktree last-active-session memory from before the rebuild.
     ///   - filterText: The incremental filter text from before the rebuild.
     ///   - displayMode: The sidebar body mode (tree / state lanes) from before the rebuild.
     public init(
         repositories: [Repository],
         worktrees: [Worktree],
         sessions: [AgentSession],
-        selectedSessionID: AgentSession.ID? = nil,
         selectedWorktreePath: String? = nil,
-        activeSessionByWorktree: [String: AgentSession.ID] = [:],
         filterText: String = "",
         displayMode: SidebarDisplayMode = .tree
     ) {
         self.repositories = Self.buildTree(repositories: repositories, worktrees: worktrees, sessions: sessions)
-        self.selectedSessionID = selectedSessionID
         self.selectedWorktreePath = selectedWorktreePath
-        self.activeSessionByWorktree = activeSessionByWorktree
         self.filterText = filterText
         self.displayMode = displayMode
     }
 
-    /// Rebuild the tree from fresh source data, carrying over every piece of UI state
-    /// (selection, per-worktree memory, filter). `AppModel.rebuildSidebar()` must use this
+    /// Rebuild the tree from fresh source data, carrying over every piece of sidebar UI
+    /// state. `AppModel.rebuildSidebar()` must use this
     /// instead of `init` so that newly added UI-state fields have exactly one carry-over spot.
     public func rebuilt(
         repositories: [Repository],
@@ -73,9 +56,7 @@ public struct SidebarViewModel: Sendable, Equatable {
             repositories: repositories,
             worktrees: worktrees,
             sessions: sessions,
-            selectedSessionID: selectedSessionID,
             selectedWorktreePath: selectedWorktreePath,
-            activeSessionByWorktree: activeSessionByWorktree,
             filterText: filterText,
             displayMode: displayMode
         )
@@ -181,12 +162,6 @@ public struct SidebarViewModel: Sendable, Equatable {
         repositories.flatMap { $0.worktrees.flatMap(\.sessions) }
     }
 
-    /// The currently selected session row. `nil` if `selectedSessionID` is not in the tree.
-    public var selectedSession: SessionNode? {
-        guard let selectedSessionID else { return nil }
-        return flattenedSessions.first { $0.id == selectedSessionID }
-    }
-
     /// Worktrees across all repositories, in display order.
     public var flattenedWorktrees: [WorktreeNode] {
         repositories.flatMap(\.worktrees)
@@ -208,87 +183,23 @@ public struct SidebarViewModel: Sendable, Equatable {
         SessionStateSummary(sessions: sessions)
     }
 
-    // MARK: - Selection management
-
-    /// Select a session directly. Passing `nil` clears the selection.
-    ///
-    /// If the session exists in the tree, its worktree is also remembered as
-    /// `selectedWorktreePath` and recorded in `activeSessionByWorktree` (for restoring
-    /// when switching away from and back to the worktree).
-    public mutating func select(sessionID: AgentSession.ID?) {
-        selectedSessionID = sessionID
-        guard let sessionID, let node = flattenedSessions.first(where: { $0.id == sessionID }) else {
-            return
-        }
-        selectedWorktreePath = node.session.worktreePath
-        activeSessionByWorktree[node.session.worktreePath] = sessionID
-    }
-
-    /// Select the next session in display order (wrapping from last to first).
-    /// If the current selection is not in the tree, selects the first session. Does
-    /// nothing if there are no sessions.
-    public mutating func selectNext() {
-        let flat = flattenedSessions
-        guard !flat.isEmpty else { return }
-        guard let currentID = selectedSessionID, let index = flat.firstIndex(where: { $0.id == currentID }) else {
-            select(sessionID: flat.first?.id)
-            return
-        }
-        select(sessionID: flat[(index + 1) % flat.count].id)
-    }
-
-    /// Select the previous session in display order (wrapping from first to last).
-    public mutating func selectPrevious() {
-        let flat = flattenedSessions
-        guard !flat.isEmpty else { return }
-        guard let currentID = selectedSessionID, let index = flat.firstIndex(where: { $0.id == currentID }) else {
-            select(sessionID: flat.last?.id)
-            return
-        }
-        select(sessionID: flat[(index - 1 + flat.count) % flat.count].id)
-    }
-
-    /// Equivalent to ⌘⇧U: jump to the most recent waitingInput session.
+    /// Returns the most recent waiting-input session without changing selection.
     /// "Most recent" means the newest `AgentSession.stateChangedAt` (across repositories).
     /// Sessions without `stateChangedAt` are treated as the oldest. On a tie, the one later
-    /// in display order wins. The session's worktree is also selected as
-    /// `selectedWorktreePath` (worktree selection and session selection switch together).
-    /// If no session is waitingInput, does nothing and returns `false`.
-    @discardableResult
-    public mutating func jumpToLatestWaiting() -> Bool {
+    /// in display order wins.
+    public func latestWaitingSession() -> SessionNode? {
         let waiting = flattenedSessions.enumerated().filter { $0.element.session.state == .waitingInput }
-        guard let latest = waiting.max(by: { lhs, rhs in
+        return waiting.max(by: { lhs, rhs in
             let lhsTime = lhs.element.session.stateChangedAt ?? .distantPast
             let rhsTime = rhs.element.session.stateChangedAt ?? .distantPast
             if lhsTime != rhsTime { return lhsTime < rhsTime }
             return lhs.offset < rhs.offset
-        }) else {
-            return false
-        }
-        select(sessionID: latest.element.id)
-        return true
+        })?.element
     }
 
-    /// Select a worktree (switches what the selection refers to).
-    ///
-    /// If `activeSessionByWorktree` has a memory for the target worktree, that session is
-    /// restored; otherwise the first session is selected (for a worktree with no sessions,
-    /// or a nonexistent worktree path, the session selection is cleared). Passing `nil`
-    /// clears both the worktree and session selections.
+    /// Select a worktree path. Pane-owned tab state is managed outside the sidebar.
     public mutating func selectWorktree(_ path: String?) {
         selectedWorktreePath = path
-        guard let path, let node = flattenedWorktrees.first(where: { $0.id == path }) else {
-            selectedSessionID = nil
-            return
-        }
-        if let remembered = activeSessionByWorktree[path], node.sessions.contains(where: { $0.id == remembered }) {
-            selectedSessionID = remembered
-        } else {
-            selectedSessionID = node.sessions.first?.id
-            if let selectedSessionID {
-                activeSessionByWorktree[path] = selectedSessionID
-            }
-        }
     }
 
     /// Select the next worktree in display order (across repositories, wrapping).

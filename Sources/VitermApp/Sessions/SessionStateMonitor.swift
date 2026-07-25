@@ -8,8 +8,8 @@ private struct WatchEntry {
     var stateMachine: SessionStateMachine
     var lastEmittedState: AgentSession.State
     var lastFrameSize: CGSize
-    /// The next time `ghostty_surface_read_text` may be called. Every tick for the visible
-    /// session; throttled to `backgroundReadInterval` for hidden ones.
+    /// The next time `ghostty_surface_read_text` may be called. Every tick for visible
+    /// sessions; throttled to `backgroundReadInterval` for hidden ones.
     var nextReadDue: Date
 }
 
@@ -19,7 +19,7 @@ private struct WatchEntry {
 ///
 /// `ghostty_surface_read_text` costs on every full-viewport fetch
 /// (`docs/ghostty-integration.md` explicitly says "expensive, cache and throttle"), so
-/// only the visible (selected) session is read at the high `pollInterval` frequency
+/// only visible (active-tab) sessions are read at the high `pollInterval` frequency
 /// (100ms); hidden sessions are throttled to `backgroundReadInterval` (default 600ms).
 /// Hidden sessions get a random initial offset at registration so reads don't pile up on
 /// the same tick.
@@ -31,7 +31,7 @@ final class SessionStateMonitor {
     /// The timer's own tick interval. Kept at 100ms to preserve resize-detection
     /// granularity (read_text call frequency is controlled separately by `readInterval(for:)`).
     static let pollInterval: TimeInterval = 0.1
-    /// read_text interval for the visible session (= every tick).
+    /// read_text interval for visible sessions (= every tick).
     static let visibleReadInterval: TimeInterval = pollInterval
     /// read_text interval for hidden sessions. Trades detection latency (busy→waitingInput
     /// etc.) for a lower call frequency (requirement: 500ms-1s).
@@ -44,16 +44,20 @@ final class SessionStateMonitor {
     private var entries: [UUID: WatchEntry] = [:]
     private var frameChangeObservers: [UUID: NSObjectProtocol] = [:]
     private var timer: Timer?
-    /// The session currently shown in the foreground. Communicated from outside (selected tab, etc.) via `setVisibleSession`.
-    private var visibleSessionID: UUID?
+    /// Sessions currently shown in pane foregrounds.
+    private var visibleSessionIDs: Set<UUID> = []
 
-    /// Communicate the visible session from outside. After a switch, high-frequency reading resumes immediately on the next tick.
-    func setVisibleSession(_ sessionID: UUID?) {
-        guard visibleSessionID != sessionID else { return }
-        visibleSessionID = sessionID
-        guard let sessionID, var entry = entries[sessionID] else { return }
-        entry.nextReadDue = Date()
-        entries[sessionID] = entry
+    /// Communicate all visible sessions. Newly-visible surfaces resume reading on the next tick.
+    func setVisibleSessions(_ sessionIDs: Set<UUID>) {
+        guard visibleSessionIDs != sessionIDs else { return }
+        let newlyVisible = sessionIDs.subtracting(visibleSessionIDs)
+        visibleSessionIDs = sessionIDs
+        let now = Date()
+        for sessionID in newlyVisible {
+            guard var entry = entries[sessionID] else { continue }
+            entry.nextReadDue = now
+            entries[sessionID] = entry
+        }
     }
 
     /// Register a session for monitoring. Calling again with the same `sessionID` replaces the existing watch.
@@ -68,7 +72,7 @@ final class SessionStateMonitor {
             lastEmittedState: .idle,
             lastFrameSize: surfaceView.frame.size,
             // Read immediately if visible; if hidden, randomize within the interval to spread out initial reads.
-            nextReadDue: sessionID == visibleSessionID
+            nextReadDue: visibleSessionIDs.contains(sessionID)
                 ? now
                 : now.addingTimeInterval(.random(in: 0..<Self.backgroundReadInterval))
         )
@@ -98,18 +102,18 @@ final class SessionStateMonitor {
         if let observer = frameChangeObservers.removeValue(forKey: sessionID) {
             NotificationCenter.default.removeObserver(observer)
         }
-        if visibleSessionID == sessionID {
-            visibleSessionID = nil
-        }
+        visibleSessionIDs.remove(sessionID)
         if entries.isEmpty {
             timer?.invalidate()
             timer = nil
         }
     }
 
-    /// The read_text interval currently applicable to `sessionID`. High frequency only for the visible session.
+    /// The read_text interval currently applicable to `sessionID`.
     private func readInterval(for sessionID: UUID) -> TimeInterval {
-        sessionID == visibleSessionID ? Self.visibleReadInterval : Self.backgroundReadInterval
+        visibleSessionIDs.contains(sessionID)
+            ? Self.visibleReadInterval
+            : Self.backgroundReadInterval
     }
 
     private func startTimerIfNeeded() {
@@ -148,7 +152,7 @@ final class SessionStateMonitor {
                 entry.stateMachine.recordResize(at: now)
             }
 
-            // Throttle read_text: every tick for the visible session, only at
+            // Throttle read_text: every tick for visible sessions, only at
             // backgroundReadInterval for hidden ones (on non-reading ticks the state
             // machine's currentState is still evaluated, so the idle-debounce elapsed check
             // advances every tick).

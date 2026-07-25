@@ -6,6 +6,7 @@ import VitermCore
 /// value type), replaced wholesale via `set(viewModel:)` (same convention as
 /// SidebarViewController).
 final class TabBarView: NSView {
+    let paneID: PaneID
     var onSelectTab: ((AgentSession.ID) -> Void)?
     /// From the tab's hover close button, or ⌘W.
     var onCloseTab: ((AgentSession.ID) -> Void)?
@@ -13,13 +14,26 @@ final class TabBarView: NSView {
     var onRenameTab: ((AgentSession.ID, String) -> Void)?
     /// The ＋ button (new session).
     var onAddTab: (() -> Void)?
-    /// Commits a tab move to an index within the selected worktree.
-    var onReorderTab: ((AgentSession.ID, Int) -> Void)?
+    /// Commits an in-pane reorder or cross-pane insertion.
+    var onDropTab: ((AgentSession.ID, Int) -> Void)?
+    /// Fires whenever the native session drag ends, including cancellation.
+    var onSessionDragEnded: (() -> Void)?
+
     static let height: CGFloat = 34
 
     private let scrollView = NSScrollView()
     private let stack = NSStackView()
     private let bottomSeparator = NSBox()
+    private let insertionCaret: NSView = {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        view.alphaValue = 0
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.widthAnchor.constraint(equalToConstant: 2).isActive = true
+        view.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        return view
+    }()
 
     private struct SessionDrag {
         let sessionID: AgentSession.ID
@@ -29,12 +43,17 @@ final class TabBarView: NSView {
     }
 
     private var activeSessionDrag: SessionDrag?
-    private var pendingViewModel: TabBarViewModel?
+    private var foreignDrag: (sessionID: AgentSession.ID, insertionSlot: Int)?
     private var latestViewModel: TabBarViewModel?
+    private var lastRenderedViewModel: TabBarViewModel?
     private var displayedTabIDs: [AgentSession.ID] = []
+    private var isDragInProgress: Bool {
+        activeSessionDrag != nil || foreignDrag != nil
+    }
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(paneID: PaneID) {
+        self.paneID = paneID
+        super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
@@ -85,21 +104,23 @@ final class TabBarView: NSView {
     /// Replace the whole tab row.
     func set(viewModel: TabBarViewModel) {
         latestViewModel = viewModel
-        if activeSessionDrag != nil {
+        if isDragInProgress {
             if viewModel.tabs.map(\.id) == displayedTabIDs {
-                pendingViewModel = viewModel
                 return
             }
             // Composition changed under the drag, so rebuild the frozen index space.
             activeSessionDrag?.item?.alphaValue = 1
             activeSessionDrag?.item?.isSessionDragSource = false
             activeSessionDrag = nil
-            pendingViewModel = nil
+            foreignDrag = nil
+            insertionCaret.alphaValue = 0
         }
+        if viewModel == lastRenderedViewModel { return }
         rebuild(viewModel: viewModel)
     }
 
     private func rebuild(viewModel: TabBarViewModel) {
+        lastRenderedViewModel = viewModel
         displayedTabIDs = viewModel.tabs.map(\.id)
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for tab in viewModel.tabs {
@@ -114,6 +135,8 @@ final class TabBarView: NSView {
             item.onDragEnded = { [weak self] in self?.endSessionDrag() }
             stack.addArrangedSubview(item)
         }
+        insertionCaret.alphaValue = 0
+        stack.addArrangedSubview(insertionCaret)
         stack.addArrangedSubview(makeAddButton())
     }
 
@@ -130,10 +153,12 @@ final class TabBarView: NSView {
         else { return [] }
 
         if activeSessionDrag == nil {
-            guard let sourceIndex = displayedTabIDs.firstIndex(of: sessionID),
-                  let item = stack.subviews
-                    .compactMap({ $0 as? TabItemView })
-                    .first(where: { $0.sessionID == sessionID }) else { return [] }
+            guard let sourceIndex = displayedTabIDs.firstIndex(of: sessionID) else {
+                return updateForeignSessionDrag(sessionID, sender: sender)
+            }
+            guard let item = stack.subviews
+                .compactMap({ $0 as? TabItemView })
+                .first(where: { $0.sessionID == sessionID }) else { return [] }
             item.isHidden = false
             item.alphaValue = 0
             item.isSessionDragSource = true
@@ -147,15 +172,7 @@ final class TabBarView: NSView {
         guard let drag = activeSessionDrag, drag.sessionID == sessionID, let item = drag.item
         else { return [] }
 
-        stack.layoutSubtreeIfNeeded()
-        let others = stack.arrangedSubviews
-            .compactMap { $0 as? TabItemView }
-            .filter { $0 !== item }
-        let dragX = stack.convert(sender.draggingLocation, from: nil).x
-        let slot = TabReorderMath.insertionSlot(
-            forDragX: dragX,
-            tabMidXs: others.map(\.frame.midX)
-        )
+        let slot = insertionSlot(for: sender, excluding: item)
         guard slot != drag.insertionSlot else { return .move }
         activeSessionDrag?.insertionSlot = slot
 
@@ -169,31 +186,65 @@ final class TabBarView: NSView {
         return .move
     }
 
+    private func updateForeignSessionDrag(
+        _ sessionID: AgentSession.ID,
+        sender: any NSDraggingInfo
+    ) -> NSDragOperation {
+        let slot = insertionSlot(for: sender, excluding: nil)
+        foreignDrag = (sessionID, slot)
+        insertionCaret.alphaValue = 1
+        stack.removeArrangedSubview(insertionCaret)
+        stack.insertArrangedSubview(insertionCaret, at: min(slot, stack.arrangedSubviews.count))
+        return .move
+    }
+
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
         activeSessionDrag?.item?.alphaValue = 1
         activeSessionDrag?.item?.isSessionDragSource = false
-        activeSessionDrag?.item?.isHidden = true
         activeSessionDrag = nil
-        pendingViewModel = nil
+        foreignDrag = nil
+        insertionCaret.alphaValue = 0
+        if let latestViewModel {
+            rebuild(viewModel: latestViewModel)
+        }
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard let drag = activeSessionDrag, drag.insertionSlot != drag.sourceIndex else {
-            return false
+        if let drag = activeSessionDrag {
+            guard drag.insertionSlot != drag.sourceIndex else { return false }
+            onDropTab?(drag.sessionID, drag.insertionSlot)
+            return true
         }
-        onReorderTab?(drag.sessionID, drag.insertionSlot)
+        guard let drag = foreignDrag else { return false }
+        onDropTab?(drag.sessionID, drag.insertionSlot)
         return true
     }
 
     private func endSessionDrag() {
+        onSessionDragEnded?()
         activeSessionDrag?.item?.alphaValue = 1
         activeSessionDrag?.item?.isSessionDragSource = false
         activeSessionDrag = nil
-        let viewModel = pendingViewModel ?? latestViewModel
-        pendingViewModel = nil
-        if let viewModel {
-            rebuild(viewModel: viewModel)
+        foreignDrag = nil
+        insertionCaret.alphaValue = 0
+        if let latestViewModel {
+            rebuild(viewModel: latestViewModel)
         }
+    }
+
+    private func insertionSlot(
+        for sender: any NSDraggingInfo,
+        excluding excludedItem: TabItemView?
+    ) -> Int {
+        stack.layoutSubtreeIfNeeded()
+        let tabs = stack.arrangedSubviews
+            .compactMap { $0 as? TabItemView }
+            .filter { $0 !== excludedItem }
+        let dragX = stack.convert(sender.draggingLocation, from: nil).x
+        return TabReorderMath.insertionSlot(
+            forDragX: dragX,
+            tabMidXs: tabs.map(\.frame.midX)
+        )
     }
 
     /// The ＋ (new session, ⌘T) button. Equivalent to the UI mock's `.tab.add`.

@@ -33,8 +33,8 @@ final class StatusBarView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    func update(sidebar: SidebarViewModel) {
-        if let selected = sidebar.selectedSession {
+    func update(sidebar: SidebarViewModel, selectedSession: SessionNode?) {
+        if let selected = selectedSession {
             let repoName = sidebar.repositories
                 .first { $0.worktrees.contains { $0.id == selected.session.worktreePath } }?
                 .repository.name

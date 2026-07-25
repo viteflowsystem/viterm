@@ -157,6 +157,8 @@ final class SplitHostView: NSView {
                 sessions: sessions,
                 surface: surface
             ))
+            splitView.setHoldingPriority(NSLayoutConstraint.Priority(250), forSubviewAt: 0)
+            splitView.setHoldingPriority(NSLayoutConstraint.Priority(250), forSubviewAt: 1)
             return splitView
         }
     }
@@ -270,22 +272,22 @@ final class SplitHostView: NSView {
 
     private func handleLeftMouseDown(_ event: NSEvent) {
         guard event.window === window else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        guard let hit = hitTest(point) else { return }
-        var candidate: NSView? = hit
-        while let view = candidate {
-            if let pane = view as? PaneView {
+        let pointInSelf = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(pointInSelf) else { return }
+        for pane in paneViews.values {
+            let pointInPane = pane.convert(event.locationInWindow, from: nil)
+            if pane.bounds.contains(pointInPane) {
                 onRequestFocusPane?(pane.paneID)
                 return
             }
-            candidate = view.superview
         }
     }
 }
 
 extension SplitHostView: NSSplitViewDelegate {
     func splitViewDidResizeSubviews(_ notification: Notification) {
-        guard !isApplyingDividerPosition,
+        guard notification.userInfo?["NSSplitViewDividerIndex"] != nil,
+              !isApplyingDividerPosition,
               let splitView = notification.object as? NSSplitView,
               pendingDividerFractions[ObjectIdentifier(splitView)] == nil,
               let splitID = splitIDsByView[ObjectIdentifier(splitView)] else { return }
@@ -316,6 +318,7 @@ private final class PaneView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
 
+        tabBar.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         tabBar.translatesAutoresizingMaskIntoConstraints = false
         contentView.translatesAutoresizingMaskIntoConstraints = false
         dropHint.translatesAutoresizingMaskIntoConstraints = true

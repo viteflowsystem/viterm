@@ -1,0 +1,19 @@
+Fix ghostty_surface_free_text ABI to match include/ghostty.h.
+
+The header declares ghostty_surface_free_text(ghostty_surface_t,
+ghostty_text_s*), but the Zig export took only the text pointer. Callers
+following the header pass the surface first, so the export received the
+surface as its argument and the text buffer was never freed — leaking on
+every text read (selection reads, state-detection polls, etc.).
+
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -1675,7 +1675,7 @@
+         return true;
+     }
+
+-    export fn ghostty_surface_free_text(ptr: *Text) void {
++    export fn ghostty_surface_free_text(_: *Surface, ptr: *Text) void {
+         ptr.deinit();
+     }
+

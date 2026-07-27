@@ -355,7 +355,11 @@ final class GhosttySurfaceView: NSView {
         // ⌘V paste: send the text straight from NSPasteboard to the surface.
         // Plain ⌘V only — combos with extra modifiers (⌘⌥V etc.) are app shortcuts
         // and must not be swallowed as a paste.
-        if event.modifierFlags.contains(.command),
+        // Key equivalents visit every view in the window, not just the focused
+        // one — only the first responder may act, or an unfocused pane would
+        // swallow the paste.
+        if window?.firstResponder === self,
+           event.modifierFlags.contains(.command),
            event.modifierFlags.intersection([.option, .control]).isEmpty,
            event.charactersIgnoringModifiers == "v",
            let surface,
